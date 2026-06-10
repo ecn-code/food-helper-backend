@@ -33,6 +33,7 @@ Function definition:
 ## Swagger / OpenAPI
 - OpenAPI JSON: `/v3/api-docs`
 - Swagger UI: `/swagger`
+- Snapshot estatico offline: `docs/openapi.yaml`
 
 Every new endpoint, and every change to request or response data in an existing endpoint, must be documented in Swagger/OpenAPI within the same change.
 

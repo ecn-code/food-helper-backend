@@ -1,0 +1,298 @@
+openapi: 3.1.0
+info:
+  title: FoodHelper API
+  version: v1
+  description: API para gestionar productos y sus valores nutricionales.
+servers:
+  - url: /
+    description: Servidor actual
+tags:
+  - name: Products
+    description: Operaciones de alta, actualizacion y borrado de productos
+  - name: Health
+    description: Estado basico de la API
+paths:
+  /api/v1/products:
+    post:
+      tags:
+        - Products
+      summary: Crear producto
+      description: Crea un producto con nombre, descripcion y valores nutricionales.
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+            examples:
+              default:
+                value:
+                  name: Apple
+                  description: Fresh apple
+                  calories: 52
+                  carbohydrates: 14
+                  proteins: 0.3
+                  fats: 0.2
+      responses:
+        '201':
+          description: Producto creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          description: Peticion invalida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Conflicto al crear el producto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/products/{id}:
+    put:
+      tags:
+        - Products
+      summary: Actualizar producto
+      description: Actualiza un producto existente y reemplaza sus datos nutricionales.
+      operationId: updateProduct
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+            examples:
+              default:
+                value:
+                  name: Green Apple
+                  description: Green apple
+                  calories: 48
+                  carbohydrates: 13
+                  proteins: 0.4
+                  fats: 0.1
+      responses:
+        '200':
+          description: Producto actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '400':
+          description: Peticion invalida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Producto no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Conflicto al actualizar el producto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      tags:
+        - Products
+      summary: Eliminar producto
+      description: Elimina un producto por identificador.
+      operationId: deleteProduct
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Producto eliminado
+        '404':
+          description: Producto no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/health:
+    get:
+      tags:
+        - Health
+      summary: Estado de la API
+      description: Devuelve un indicador simple de disponibilidad.
+      operationId: health
+      responses:
+        '200':
+          description: API disponible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                default:
+                  value:
+                    status: UP
+components:
+  schemas:
+    CreateProductRequest:
+      type: object
+      required:
+        - name
+        - description
+        - calories
+        - carbohydrates
+        - proteins
+        - fats
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Nombre del producto
+          example: Apple
+        description:
+          type: string
+          minLength: 1
+          description: Descripcion del producto
+          example: Fresh apple
+        calories:
+          type: number
+          description: Calorias por porcion
+          example: 52
+          minimum: 0
+        carbohydrates:
+          type: number
+          description: Carbohidratos por porcion
+          example: 14
+          minimum: 0
+        proteins:
+          type: number
+          description: Proteinas por porcion
+          example: 0.3
+          minimum: 0
+        fats:
+          type: number
+          description: Grasas por porcion
+          example: 0.2
+          minimum: 0
+    UpdateProductRequest:
+      type: object
+      required:
+        - name
+        - description
+        - calories
+        - carbohydrates
+        - proteins
+        - fats
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Nombre del producto
+          example: Green Apple
+        description:
+          type: string
+          minLength: 1
+          description: Descripcion del producto
+          example: Green apple
+        calories:
+          type: number
+          description: Calorias por porcion
+          example: 48
+          minimum: 0
+        carbohydrates:
+          type: number
+          description: Carbohidratos por porcion
+          example: 13
+          minimum: 0
+        proteins:
+          type: number
+          description: Proteinas por porcion
+          example: 0.4
+          minimum: 0
+        fats:
+          type: number
+          description: Grasas por porcion
+          example: 0.1
+          minimum: 0
+    ProductResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Identificador del producto
+          example: 1
+        name:
+          type: string
+          description: Nombre del producto
+          example: Apple
+        description:
+          type: string
+          description: Descripcion del producto
+          example: Fresh apple
+        nutritionalValues:
+          $ref: '#/components/schemas/NutritionalValuesResponse'
+    NutritionalValuesResponse:
+      type: object
+      properties:
+        calories:
+          type: number
+          description: Calorias
+          example: 52
+        carbohydrates:
+          type: number
+          description: Carbohidratos
+          example: 14
+        proteins:
+          type: number
+          description: Proteinas
+          example: 0.3
+        fats:
+          type: number
+          description: Grasas
+          example: 0.2
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Estado de la API
+          example: UP
+    ApiError:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: Momento en el que se produjo el error
+        status:
+          type: integer
+          description: Codigo HTTP
+          example: 400
+        error:
+          type: string
+          description: Nombre corto del error HTTP
+          example: Bad Request
+        message:
+          type: string
+          description: Detalle funcional del error
+          example: name must not be blank
+        path:
+          type: string
+          description: Ruta donde ocurrio el error
+          example: /api/v1/products
