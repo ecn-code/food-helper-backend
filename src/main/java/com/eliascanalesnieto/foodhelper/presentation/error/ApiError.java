@@ -3,17 +3,17 @@ package com.eliascanalesnieto.foodhelper.presentation.error;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 
-@Schema(name = "ApiError", description = "Error estandar de la API")
+@Schema(name = "ApiError", description = "Standard API error")
 public record ApiError(
-        @Schema(description = "Momento en el que se produjo el error")
+        @Schema(description = "Time when the error occurred")
         Instant timestamp,
-        @Schema(description = "Codigo HTTP", example = "400")
+        @Schema(description = "HTTP status code", example = "400")
         int status,
-        @Schema(description = "Nombre corto del error HTTP", example = "Bad Request")
+        @Schema(description = "Short HTTP error name", example = "Bad Request")
         String error,
-        @Schema(description = "Detalle funcional del error", example = "name must not be blank")
+        @Schema(description = "Functional error detail", example = "name must not be blank")
         String message,
-        @Schema(description = "Ruta donde ocurrio el error", example = "/api/v1/products")
+        @Schema(description = "Request path where the error occurred", example = "/api/v1/products")
         String path
 ) {
 }

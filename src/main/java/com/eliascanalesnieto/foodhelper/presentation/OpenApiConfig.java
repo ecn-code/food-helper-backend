@@ -10,12 +10,12 @@ import io.swagger.v3.oas.annotations.servers.Server;
         info = @Info(
                 title = "FoodHelper API",
                 version = "v1",
-                description = "API para gestionar productos y sus valores nutricionales.",
+                description = "API for managing products and their nutritional values.",
                 contact = @Contact(name = "FoodHelper"),
                 license = @License(name = "Proprietary")
         ),
         servers = {
-                @Server(url = "/", description = "Servidor actual")
+                @Server(url = "/", description = "Current server")
         }
 )
 public class OpenApiConfig {

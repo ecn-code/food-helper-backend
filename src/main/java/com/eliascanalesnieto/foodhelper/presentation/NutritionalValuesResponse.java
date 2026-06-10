@@ -3,15 +3,15 @@ package com.eliascanalesnieto.foodhelper.presentation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 
-@Schema(name = "NutritionalValuesResponse", description = "Valores nutricionales por porcion")
+@Schema(name = "NutritionalValuesResponse", description = "Nutritional values per serving")
 public record NutritionalValuesResponse(
-        @Schema(description = "Calorias", example = "52")
+        @Schema(description = "Calories", example = "52")
         BigDecimal calories,
-        @Schema(description = "Carbohidratos", example = "14")
+        @Schema(description = "Carbohydrates", example = "14")
         BigDecimal carbohydrates,
-        @Schema(description = "Proteinas", example = "0.3")
+        @Schema(description = "Proteins", example = "0.3")
         BigDecimal proteins,
-        @Schema(description = "Grasas", example = "0.2")
+        @Schema(description = "Fats", example = "0.2")
         BigDecimal fats
 ) {
 }

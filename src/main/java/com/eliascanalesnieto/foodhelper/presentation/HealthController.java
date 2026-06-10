@@ -12,13 +12,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/health")
-@Tag(name = "Health", description = "Estado basico de la API")
+@Tag(name = "Health", description = "Basic API status")
 public class HealthController {
 
     @GetMapping
-    @Operation(summary = "Estado de la API", description = "Devuelve un indicador simple de disponibilidad.")
+    @Operation(summary = "API status", description = "Returns a simple availability indicator.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "API disponible",
+            @ApiResponse(responseCode = "200", description = "API available",
                     content = @Content(schema = @Schema(implementation = HealthResponse.class)))
     })
     public HealthResponse health() {

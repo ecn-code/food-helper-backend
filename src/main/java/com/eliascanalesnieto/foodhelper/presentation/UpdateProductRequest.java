@@ -6,19 +6,19 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.math.BigDecimal;
 
-@Schema(name = "UpdateProductRequest", description = "Payload para actualizar un producto")
+@Schema(name = "UpdateProductRequest", description = "Payload for updating a product")
 public record UpdateProductRequest(
-        @Schema(description = "Nombre del producto", example = "Green Apple")
+        @Schema(description = "Product name", example = "Green Apple")
         @NotBlank String name,
-        @Schema(description = "Descripcion del producto", example = "Green apple")
+        @Schema(description = "Product description", example = "Green apple")
         @NotBlank String description,
-        @Schema(description = "Calorias por porcion", example = "48")
+        @Schema(description = "Calories per serving", example = "48")
         @NotNull @PositiveOrZero BigDecimal calories,
-        @Schema(description = "Carbohidratos por porcion", example = "13")
+        @Schema(description = "Carbohydrates per serving", example = "13")
         @NotNull @PositiveOrZero BigDecimal carbohydrates,
-        @Schema(description = "Proteinas por porcion", example = "0.4")
+        @Schema(description = "Proteins per serving", example = "0.4")
         @NotNull @PositiveOrZero BigDecimal proteins,
-        @Schema(description = "Grasas por porcion", example = "0.1")
+        @Schema(description = "Fats per serving", example = "0.1")
         @NotNull @PositiveOrZero BigDecimal fats
 ) {
 }

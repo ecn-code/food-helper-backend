@@ -2,22 +2,22 @@ openapi: 3.1.0
 info:
   title: FoodHelper API
   version: v1
-  description: API para gestionar productos y sus valores nutricionales.
+  description: API for managing products and their nutritional values.
 servers:
   - url: /
-    description: Servidor actual
+    description: Current server
 tags:
   - name: Products
-    description: Operaciones de alta, actualizacion y borrado de productos
+    description: Create, update, and delete product operations
   - name: Health
-    description: Estado basico de la API
+    description: Basic API status
 paths:
   /api/v1/products:
     post:
       tags:
         - Products
-      summary: Crear producto
-      description: Crea un producto con nombre, descripcion y valores nutricionales.
+      summary: Create product
+      description: Creates a product with name, description, and nutritional values.
       operationId: createProduct
       requestBody:
         required: true
@@ -36,19 +36,19 @@ paths:
                   fats: 0.2
       responses:
         '201':
-          description: Producto creado
+          description: Product created
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProductResponse'
         '400':
-          description: Peticion invalida
+          description: Invalid request
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '409':
-          description: Conflicto al crear el producto
+          description: Conflict while creating the product
           content:
             application/json:
               schema:
@@ -57,8 +57,8 @@ paths:
     put:
       tags:
         - Products
-      summary: Actualizar producto
-      description: Actualiza un producto existente y reemplaza sus datos nutricionales.
+      summary: Update product
+      description: Updates an existing product and replaces its nutritional data.
       operationId: updateProduct
       parameters:
         - name: id
@@ -84,25 +84,25 @@ paths:
                   fats: 0.1
       responses:
         '200':
-          description: Producto actualizado
+          description: Product updated
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProductResponse'
         '400':
-          description: Peticion invalida
+          description: Invalid request
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '404':
-          description: Producto no encontrado
+          description: Product not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '409':
-          description: Conflicto al actualizar el producto
+          description: Conflict while updating the product
           content:
             application/json:
               schema:
@@ -110,8 +110,8 @@ paths:
     delete:
       tags:
         - Products
-      summary: Eliminar producto
-      description: Elimina un producto por identificador.
+      summary: Delete product
+      description: Deletes a product by identifier.
       operationId: deleteProduct
       parameters:
         - name: id
@@ -122,9 +122,9 @@ paths:
             format: int64
       responses:
         '204':
-          description: Producto eliminado
+          description: Product deleted
         '404':
-          description: Producto no encontrado
+          description: Product not found
           content:
             application/json:
               schema:
@@ -133,12 +133,12 @@ paths:
     get:
       tags:
         - Health
-      summary: Estado de la API
-      description: Devuelve un indicador simple de disponibilidad.
+      summary: API status
+      description: Returns a simple availability indicator.
       operationId: health
       responses:
         '200':
-          description: API disponible
+          description: API available
           content:
             application/json:
               schema:
@@ -162,31 +162,31 @@ components:
         name:
           type: string
           minLength: 1
-          description: Nombre del producto
+          description: Product name
           example: Apple
         description:
           type: string
           minLength: 1
-          description: Descripcion del producto
+          description: Product description
           example: Fresh apple
         calories:
           type: number
-          description: Calorias por porcion
+          description: Calories per serving
           example: 52
           minimum: 0
         carbohydrates:
           type: number
-          description: Carbohidratos por porcion
+          description: Carbohydrates per serving
           example: 14
           minimum: 0
         proteins:
           type: number
-          description: Proteinas por porcion
+          description: Proteins per serving
           example: 0.3
           minimum: 0
         fats:
           type: number
-          description: Grasas por porcion
+          description: Fats per serving
           example: 0.2
           minimum: 0
     UpdateProductRequest:
@@ -202,31 +202,31 @@ components:
         name:
           type: string
           minLength: 1
-          description: Nombre del producto
+          description: Product name
           example: Green Apple
         description:
           type: string
           minLength: 1
-          description: Descripcion del producto
+          description: Product description
           example: Green apple
         calories:
           type: number
-          description: Calorias por porcion
+          description: Calories per serving
           example: 48
           minimum: 0
         carbohydrates:
           type: number
-          description: Carbohidratos por porcion
+          description: Carbohydrates per serving
           example: 13
           minimum: 0
         proteins:
           type: number
-          description: Proteinas por porcion
+          description: Proteins per serving
           example: 0.4
           minimum: 0
         fats:
           type: number
-          description: Grasas por porcion
+          description: Fats per serving
           example: 0.1
           minimum: 0
     ProductResponse:
@@ -235,15 +235,15 @@ components:
         id:
           type: integer
           format: int64
-          description: Identificador del producto
+          description: Product identifier
           example: 1
         name:
           type: string
-          description: Nombre del producto
+          description: Product name
           example: Apple
         description:
           type: string
-          description: Descripcion del producto
+          description: Product description
           example: Fresh apple
         nutritionalValues:
           $ref: '#/components/schemas/NutritionalValuesResponse'
@@ -252,26 +252,26 @@ components:
       properties:
         calories:
           type: number
-          description: Calorias
+          description: Calories
           example: 52
         carbohydrates:
           type: number
-          description: Carbohidratos
+          description: Carbohydrates
           example: 14
         proteins:
           type: number
-          description: Proteinas
+          description: Proteins
           example: 0.3
         fats:
           type: number
-          description: Grasas
+          description: Fats
           example: 0.2
     HealthResponse:
       type: object
       properties:
         status:
           type: string
-          description: Estado de la API
+          description: API status
           example: UP
     ApiError:
       type: object
@@ -279,20 +279,20 @@ components:
         timestamp:
           type: string
           format: date-time
-          description: Momento en el que se produjo el error
+          description: Time when the error occurred
         status:
           type: integer
-          description: Codigo HTTP
+          description: HTTP status code
           example: 400
         error:
           type: string
-          description: Nombre corto del error HTTP
+          description: Short HTTP error name
           example: Bad Request
         message:
           type: string
-          description: Detalle funcional del error
+          description: Functional error detail
           example: name must not be blank
         path:
           type: string
-          description: Ruta donde ocurrio el error
+          description: Request path where the error occurred
           example: /api/v1/products

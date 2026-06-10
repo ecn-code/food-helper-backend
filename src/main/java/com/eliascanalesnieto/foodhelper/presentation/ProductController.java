@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/products")
 @RequiredArgsConstructor
-@Tag(name = "Products", description = "Operaciones de alta, actualizacion y borrado de productos")
+@Tag(name = "Products", description = "Create, update, and delete product operations")
 public class ProductController {
     private final ProductService service;
     private final ProductApiMapper mapper;
@@ -31,15 +31,15 @@ public class ProductController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
-            summary = "Crear producto",
-            description = "Crea un producto con nombre, descripcion y valores nutricionales."
+            summary = "Create product",
+            description = "Creates a product with name, description, and nutritional values."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Producto creado",
+            @ApiResponse(responseCode = "201", description = "Product created",
                     content = @Content(schema = @Schema(implementation = ProductResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Peticion invalida",
+            @ApiResponse(responseCode = "400", description = "Invalid request",
                     content = @Content(schema = @Schema(implementation = ApiError.class))),
-            @ApiResponse(responseCode = "409", description = "Conflicto al crear el producto",
+            @ApiResponse(responseCode = "409", description = "Conflict while creating the product",
                     content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
     public ProductResponse create(@Valid @RequestBody CreateProductRequest request) {
@@ -55,17 +55,17 @@ public class ProductController {
 
     @PutMapping("/{id}")
     @Operation(
-            summary = "Actualizar producto",
-            description = "Actualiza un producto existente y reemplaza sus datos nutricionales."
+            summary = "Update product",
+            description = "Updates an existing product and replaces its nutritional data."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Producto actualizado",
+            @ApiResponse(responseCode = "200", description = "Product updated",
                     content = @Content(schema = @Schema(implementation = ProductResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Peticion invalida",
+            @ApiResponse(responseCode = "400", description = "Invalid request",
                     content = @Content(schema = @Schema(implementation = ApiError.class))),
-            @ApiResponse(responseCode = "404", description = "Producto no encontrado",
+            @ApiResponse(responseCode = "404", description = "Product not found",
                     content = @Content(schema = @Schema(implementation = ApiError.class))),
-            @ApiResponse(responseCode = "409", description = "Conflicto al actualizar el producto",
+            @ApiResponse(responseCode = "409", description = "Conflict while updating the product",
                     content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
     public ProductResponse update(@PathVariable Long id, @Valid @RequestBody UpdateProductRequest request) {
@@ -83,12 +83,12 @@ public class ProductController {
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(
-            summary = "Eliminar producto",
-            description = "Elimina un producto por identificador."
+            summary = "Delete product",
+            description = "Deletes a product by identifier."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "Producto eliminado"),
-            @ApiResponse(responseCode = "404", description = "Producto no encontrado",
+            @ApiResponse(responseCode = "204", description = "Product deleted"),
+            @ApiResponse(responseCode = "404", description = "Product not found",
                     content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
     public void delete(@PathVariable Long id) {

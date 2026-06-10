@@ -2,15 +2,15 @@ package com.eliascanalesnieto.foodhelper.presentation;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-@Schema(name = "ProductResponse", description = "Representacion API de un producto")
+@Schema(name = "ProductResponse", description = "API representation of a product")
 public record ProductResponse(
-        @Schema(description = "Identificador del producto", example = "1")
+        @Schema(description = "Product identifier", example = "1")
         Long id,
-        @Schema(description = "Nombre del producto", example = "Apple")
+        @Schema(description = "Product name", example = "Apple")
         String name,
-        @Schema(description = "Descripcion del producto", example = "Fresh apple")
+        @Schema(description = "Product description", example = "Fresh apple")
         String description,
-        @Schema(description = "Valores nutricionales del producto")
+        @Schema(description = "Product nutritional values")
         NutritionalValuesResponse nutritionalValues
 ) {
 }
