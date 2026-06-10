@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: foodhelper-api
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/foodhelper}
+    username: ${SPRING_DATASOURCE_USERNAME:foodhelper}
+    password: ${SPRING_DATASOURCE_PASSWORD:foodhelper}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:5}
+  flyway:
+    enabled: true
+  cloud:
+    function:
+      definition: productHttpHandler
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+springdoc:
+  swagger-ui:
+    path: /swagger
+  api-docs:
+    path: /v3/api-docs
+
+---
+spring:
+  config:
+    activate:
+      on-profile: lambda
+  main:
+    web-application-type: none
+
+---
+spring:
+  config:
+    activate:
+      on-profile: test-integration
