@@ -12,13 +12,13 @@ public record UpdateProductRequest(
         @NotBlank String name,
         @Schema(description = "Product description", example = "Green apple")
         @NotBlank String description,
-        @Schema(description = "Calories per serving", example = "48")
+        @Schema(description = "Calories per 100 grams", example = "48")
         @NotNull @PositiveOrZero BigDecimal calories,
-        @Schema(description = "Carbohydrates per serving", example = "13")
+        @Schema(description = "Carbohydrates per 100 grams", example = "13")
         @NotNull @PositiveOrZero BigDecimal carbohydrates,
-        @Schema(description = "Proteins per serving", example = "0.4")
+        @Schema(description = "Proteins per 100 grams", example = "0.4")
         @NotNull @PositiveOrZero BigDecimal proteins,
-        @Schema(description = "Fats per serving", example = "0.1")
+        @Schema(description = "Fats per 100 grams", example = "0.1")
         @NotNull @PositiveOrZero BigDecimal fats
 ) {
 }

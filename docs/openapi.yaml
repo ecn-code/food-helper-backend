@@ -2,22 +2,41 @@ openapi: 3.1.0
 info:
   title: FoodHelper API
   version: v1
-  description: API for managing products and their nutritional values.
+  description: API for managing products, recipes, and nutritional calculations.
 servers:
   - url: /
     description: Current server
 tags:
   - name: Products
     description: Create, update, and delete product operations
+  - name: Stock
+    description: Manage stock entries and inspect inventory ordered by expiration
+  - name: Recipes
+    description: Create, update, delete, and derive product operations for recipes
   - name: Health
     description: Basic API status
 paths:
   /api/v1/products:
+    get:
+      tags:
+        - Products
+      summary: List products
+      description: Returns all products with their nutritional values.
+      operationId: listProducts
+      responses:
+        '200':
+          description: Products returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductResponse'
     post:
       tags:
         - Products
       summary: Create product
-      description: Creates a product with name, description, and nutritional values.
+      description: Creates a product with name, description, and nutritional values per 100 grams.
       operationId: createProduct
       requestBody:
         required: true
@@ -58,7 +77,7 @@ paths:
       tags:
         - Products
       summary: Update product
-      description: Updates an existing product and replaces its nutritional data.
+      description: Updates an existing product and replaces its nutritional data per 100 grams.
       operationId: updateProduct
       parameters:
         - name: id
@@ -129,6 +148,392 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /api/v1/products/{productId}/stock:
+    post:
+      tags:
+        - Stock
+      summary: Create stock entry
+      description: Creates a stock entry for a product with a positive quantity, an optional expiration date, and a required entry date.
+      operationId: createStockEntry
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStockEntryRequest'
+            examples:
+              default:
+                value:
+                  quantity: 6.5
+                  expirationDate: 2026-06-20
+                  entryDate: 2026-06-10
+      responses:
+        '201':
+          description: Stock entry created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockEntryResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    get:
+      tags:
+        - Stock
+      summary: List stock entries for product
+      description: Returns stock entries for a single product ordered by expiration date ascending, optionally filtering by expiration date.
+      operationId: listStockEntriesByProduct
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: expiresBefore
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Only include stock entries with expiration date strictly before this date
+      responses:
+        '200':
+          description: Product stock entries ordered by expiration
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StockEntryResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/stock:
+    get:
+      tags:
+        - Stock
+      summary: List stock entries
+      description: Returns stock entries ordered by expiration date ascending, with optional filters by expiration date and product identifiers.
+      operationId: listStockEntries
+      parameters:
+        - name: expiresBefore
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Only include stock entries with expiration date strictly before this date
+        - name: productIds
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: integer
+              format: int64
+          style: form
+          explode: false
+          description: Optional product identifiers to filter stock entries
+      responses:
+        '200':
+          description: Stock entries ordered by expiration
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StockEntryResponse'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/stock/{stockEntryId}/add:
+    post:
+      tags:
+        - Stock
+      summary: Add quantity to stock entry
+      description: Adds a positive quantity to an existing stock entry.
+      operationId: addStockQuantity
+      parameters:
+        - name: stockEntryId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustStockQuantityRequest'
+            examples:
+              default:
+                value:
+                  quantity: 2
+      responses:
+        '200':
+          description: Stock entry updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockEntryResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Stock entry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/stock/{stockEntryId}/remove:
+    post:
+      tags:
+        - Stock
+      summary: Remove quantity from stock entry
+      description: Removes a positive quantity from a stock entry. If the remaining quantity becomes zero, the stock entry is deleted.
+      operationId: removeStockQuantity
+      parameters:
+        - name: stockEntryId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustStockQuantityRequest'
+            examples:
+              default:
+                value:
+                  quantity: 2
+      responses:
+        '200':
+          description: Stock quantity removed
+        '400':
+          description: Invalid request or quantity exceeds current stock
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Stock entry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/recipes:
+    post:
+      tags:
+        - Recipes
+      summary: Create recipe
+      description: Creates a recipe from existing products and calculates nutritional totals from assigned grams.
+      operationId: createRecipe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRecipeRequest'
+            examples:
+              default:
+                value:
+                  name: Curry
+                  description: Creamy homemade curry
+                  instructions: Cook all ingredients together.
+                  products:
+                    - productId: 1
+                      grams: 200
+                    - productId: 2
+                      grams: 100
+      responses:
+        '201':
+          description: Recipe created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: One or more ingredient products were not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Conflict while creating the recipe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/recipes/{id}:
+    put:
+      tags:
+        - Recipes
+      summary: Update recipe
+      description: Updates a recipe, recalculates nutritional totals, and synchronizes its derived product if it exists.
+      operationId: updateRecipe
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRecipeRequest'
+            examples:
+              default:
+                value:
+                  name: Curry
+                  description: Creamy homemade curry
+                  instructions: Cook all ingredients together.
+                  products:
+                    - productId: 1
+                      grams: 250
+                    - productId: 2
+                      grams: 100
+      responses:
+        '200':
+          description: Recipe updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Recipe or one of its ingredient products was not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Conflict while updating the recipe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      tags:
+        - Recipes
+      summary: Delete recipe
+      description: Deletes a recipe. If a derived product exists, it is deleted too.
+      operationId: deleteRecipe
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Recipe deleted
+        '404':
+          description: Recipe not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/recipes/{id}/derived-product:
+    post:
+      tags:
+        - Recipes
+      summary: Create derived product from recipe
+      description: Creates a product from a recipe once and stores the yield metadata used to calculate produced units.
+      operationId: createDerivedProduct
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRecipeDerivedProductRequest'
+            examples:
+              default:
+                value:
+                  producedGrams: 400
+                  gramsPerUnit: 100
+      responses:
+        '201':
+          description: Derived product created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeDerivedProductResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Recipe not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Derived product already exists or product name conflicts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /api/v1/health:
     get:
       tags:
@@ -149,6 +554,30 @@ paths:
                     status: UP
 components:
   schemas:
+    ApiError:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 400
+        error:
+          type: string
+          example: Bad Request
+        message:
+          type: string
+          example: Invalid request body
+        path:
+          type: string
+          example: /api/v1/products
+        timestamp:
+          type: string
+          format: date-time
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: UP
     CreateProductRequest:
       type: object
       required:
@@ -171,64 +600,59 @@ components:
           example: Fresh apple
         calories:
           type: number
-          description: Calories per serving
-          example: 52
           minimum: 0
+          description: Calories per 100 grams
+          example: 52
         carbohydrates:
           type: number
-          description: Carbohydrates per serving
-          example: 14
           minimum: 0
+          description: Carbohydrates per 100 grams
+          example: 14
         proteins:
           type: number
-          description: Proteins per serving
-          example: 0.3
           minimum: 0
+          description: Proteins per 100 grams
+          example: 0.3
         fats:
           type: number
-          description: Fats per serving
-          example: 0.2
           minimum: 0
-    UpdateProductRequest:
+          description: Fats per 100 grams
+          example: 0.2
+    CreateStockEntryRequest:
       type: object
       required:
-        - name
-        - description
-        - calories
-        - carbohydrates
-        - proteins
-        - fats
+        - quantity
+        - entryDate
       properties:
-        name:
+        quantity:
+          type: number
+          exclusiveMinimum: 0
+          description: Available quantity for this stock entry
+          example: 6.5
+        expirationDate:
           type: string
-          minLength: 1
-          description: Product name
-          example: Green Apple
-        description:
+          format: date
+          nullable: true
+          description: Stock expiration date when available
+          example: 2026-06-20
+        entryDate:
           type: string
-          minLength: 1
-          description: Product description
-          example: Green apple
-        calories:
+          format: date
+          description: Date when the stock entry was received
+          example: 2026-06-10
+    AdjustStockQuantityRequest:
+      type: object
+      required:
+        - quantity
+      properties:
+        quantity:
           type: number
-          description: Calories per serving
-          example: 48
-          minimum: 0
-        carbohydrates:
-          type: number
-          description: Carbohydrates per serving
-          example: 13
-          minimum: 0
-        proteins:
-          type: number
-          description: Proteins per serving
-          example: 0.4
-          minimum: 0
-        fats:
-          type: number
-          description: Fats per serving
-          example: 0.1
-          minimum: 0
+          exclusiveMinimum: 0
+          description: Quantity to add or remove
+          example: 2
+    UpdateProductRequest:
+      allOf:
+        - $ref: '#/components/schemas/CreateProductRequest'
     ProductResponse:
       type: object
       properties:
@@ -247,6 +671,159 @@ components:
           example: Fresh apple
         nutritionalValues:
           $ref: '#/components/schemas/NutritionalValuesResponse'
+    StockEntryResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Stock entry identifier
+          example: 3
+        productId:
+          type: integer
+          format: int64
+          description: Linked product identifier
+          example: 1
+        productName:
+          type: string
+          description: Linked product name
+          example: Apple
+        quantity:
+          type: number
+          description: Available quantity in this stock entry
+          example: 6.5
+        expirationDate:
+          type: string
+          format: date
+          nullable: true
+          description: Stock expiration date when available
+          example: 2026-06-20
+        entryDate:
+          type: string
+          format: date
+          description: Date when the stock entry was received
+          example: 2026-06-10
+    CreateRecipeRequest:
+      type: object
+      required:
+        - name
+        - description
+        - instructions
+        - products
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Recipe name
+          example: Curry
+        description:
+          type: string
+          minLength: 1
+          description: Recipe description
+          example: Creamy homemade curry
+        instructions:
+          type: string
+          minLength: 1
+          description: Recipe preparation instructions
+          example: Cook all ingredients together.
+        products:
+          type: array
+          minItems: 1
+          description: Assigned ingredient products with their gram amount
+          items:
+            $ref: '#/components/schemas/RecipeIngredientAssignmentRequest'
+    UpdateRecipeRequest:
+      allOf:
+        - $ref: '#/components/schemas/CreateRecipeRequest'
+    RecipeIngredientAssignmentRequest:
+      type: object
+      required:
+        - productId
+        - grams
+      properties:
+        productId:
+          type: integer
+          format: int64
+          description: Ingredient product identifier
+          example: 1
+        grams:
+          type: number
+          exclusiveMinimum: 0
+          description: Assigned grams from the ingredient product
+          example: 125
+    CreateRecipeDerivedProductRequest:
+      type: object
+      required:
+        - producedGrams
+        - gramsPerUnit
+      properties:
+        producedGrams:
+          type: number
+          exclusiveMinimum: 0
+          description: Total grams of product yielded by the recipe
+          example: 400
+        gramsPerUnit:
+          type: number
+          exclusiveMinimum: 0
+          description: Grams represented by one product unit
+          example: 100
+    RecipeResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Curry
+        description:
+          type: string
+          example: Creamy homemade curry
+        instructions:
+          type: string
+          example: Cook all ingredients together.
+        nutritionalValues:
+          $ref: '#/components/schemas/NutritionalValuesResponse'
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecipeIngredientResponse'
+        derivedProduct:
+          oneOf:
+            - $ref: '#/components/schemas/RecipeDerivedProductResponse'
+            - type: 'null'
+    RecipeIngredientResponse:
+      type: object
+      properties:
+        productId:
+          type: integer
+          format: int64
+          example: 1
+        productName:
+          type: string
+          example: Chicken breast
+        grams:
+          type: number
+          example: 125
+        nutritionalValues:
+          $ref: '#/components/schemas/NutritionalValuesResponse'
+    RecipeDerivedProductResponse:
+      type: object
+      properties:
+        productId:
+          type: integer
+          format: int64
+          example: 7
+        producedGrams:
+          type: number
+          example: 400
+        gramsPerUnit:
+          type: number
+          example: 100
+        unitsProduced:
+          type: number
+          example: 4
     NutritionalValuesResponse:
       type: object
       properties:
@@ -266,33 +843,3 @@ components:
           type: number
           description: Fats
           example: 0.2
-    HealthResponse:
-      type: object
-      properties:
-        status:
-          type: string
-          description: API status
-          example: UP
-    ApiError:
-      type: object
-      properties:
-        timestamp:
-          type: string
-          format: date-time
-          description: Time when the error occurred
-        status:
-          type: integer
-          description: HTTP status code
-          example: 400
-        error:
-          type: string
-          description: Short HTTP error name
-          example: Bad Request
-        message:
-          type: string
-          description: Functional error detail
-          example: name must not be blank
-        path:
-          type: string
-          description: Request path where the error occurred
-          example: /api/v1/products

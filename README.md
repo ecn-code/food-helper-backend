@@ -21,14 +21,31 @@ Function definition:
 - `productHttpHandler`
 
 ## Database
-- Flyway migration: `src/main/resources/db/migration/V1__create_products.sql`
+- Flyway migrations:
+  - `src/main/resources/db/migration/V1__create_products.sql`
+  - `src/main/resources/db/migration/V2__create_recipes.sql`
 - PostgreSQL/Neon via `SPRING_DATASOURCE_*` environment variables
 
 ## API
 - `POST /api/v1/products`
 - `PUT /api/v1/products/{id}`
 - `DELETE /api/v1/products/{id}`
+- `POST /api/v1/recipes`
+- `PUT /api/v1/recipes/{id}`
+- `DELETE /api/v1/recipes/{id}`
+- `POST /api/v1/recipes/{id}/derived-product`
+- `POST /api/v1/products/{productId}/stock`
+- `GET /api/v1/products/{productId}/stock`
+- `GET /api/v1/stock`
+- `POST /api/v1/stock/{stockEntryId}/add`
+- `POST /api/v1/stock/{stockEntryId}/remove`
 - `GET /api/v1/health`
+
+`Product` nutritional values are stored per 100 grams.
+
+`Recipe` nutritional values are calculated from assigned ingredient grams and kept synchronized with the derived product created through `POST /api/v1/recipes/{id}/derived-product`.
+
+`Stock` is stored as independent stock entries linked to products. Each entry keeps a positive quantity, a required entry date, and an optional expiration date. When a removal leaves a stock entry at zero, that entry is deleted.
 
 ## Swagger / OpenAPI
 - OpenAPI JSON: `/v3/api-docs`

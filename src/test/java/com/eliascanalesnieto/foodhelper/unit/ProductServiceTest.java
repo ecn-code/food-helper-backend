@@ -10,6 +10,7 @@ import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
 import java.math.BigDecimal;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -53,6 +54,20 @@ class ProductServiceTest {
         assertThat(result.getId()).isEqualTo(1L);
         assertThat(result.getName()).isEqualTo("Apple");
         assertThat(result.getDescription()).isEqualTo("Fresh apple");
+    }
+
+    @Test
+    void shouldReturnAllProducts() {
+        when(repository.findAll()).thenReturn(List.of(
+                Product.builder().id(1L).name("Apple").description("Fresh apple").build(),
+                Product.builder().id(2L).name("Banana").description("Fresh banana").build()
+        ));
+
+        List<Product> result = service.findAll();
+
+        assertThat(result).hasSize(2);
+        assertThat(result.getFirst().getName()).isEqualTo("Apple");
+        assertThat(result.get(1).getName()).isEqualTo("Banana");
     }
 
     @Test

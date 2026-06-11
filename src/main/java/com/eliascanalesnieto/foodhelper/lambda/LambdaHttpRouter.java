@@ -3,12 +3,24 @@ package com.eliascanalesnieto.foodhelper.lambda;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
 import com.eliascanalesnieto.foodhelper.application.ProductService;
+import com.eliascanalesnieto.foodhelper.application.RecipeService;
+import com.eliascanalesnieto.foodhelper.application.StockService;
 import com.eliascanalesnieto.foodhelper.domain.Product;
+import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
+import com.eliascanalesnieto.foodhelper.presentation.AdjustStockQuantityRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateProductRequest;
+import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeDerivedProductRequest;
+import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeRequest;
+import com.eliascanalesnieto.foodhelper.presentation.CreateStockEntryRequest;
 import com.eliascanalesnieto.foodhelper.presentation.ProductApiMapper;
+import com.eliascanalesnieto.foodhelper.presentation.RecipeIngredientAssignmentRequest;
+import com.eliascanalesnieto.foodhelper.presentation.UpdateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateProductRequest;
 import com.eliascanalesnieto.foodhelper.presentation.error.DuplicateResourceException;
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
+import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +34,8 @@ import tools.jackson.databind.ObjectMapper;
 public class LambdaHttpRouter {
 
     private final ProductService service;
+    private final RecipeService recipeService;
+    private final StockService stockService;
     private final ProductApiMapper mapper;
     private final ObjectMapper objectMapper;
 
@@ -56,7 +70,42 @@ public class LambdaHttpRouter {
             return json(201, mapper.toResponse(created));
         }
 
+        if ("GET".equals(method) && "/api/v1/stock".equals(path)) {
+            return json(200, stockService.findStock(
+                    parseOptionalDate(queryParam(request, "expiresBefore")),
+                    parseProductIds(queryParam(request, "productIds"))
+            ).stream().map(mapper::toResponse).toList());
+        }
+
+        if ("POST".equals(method) && "/api/v1/recipes".equals(path)) {
+            CreateRecipeRequest body = parseRecipeCreate(request.getBody());
+            return json(201, mapper.toResponse(recipeService.create(
+                    body.name(),
+                    body.description(),
+                    body.instructions(),
+                    toDomainIngredients(body.products())
+            )));
+        }
+
         if (path != null && path.startsWith("/api/v1/products/")) {
+            if (path.endsWith("/stock")) {
+                Long productId = parseId(path.substring(0, path.lastIndexOf('/')));
+                if ("POST".equals(method)) {
+                    CreateStockEntryRequest body = parseStockCreate(request.getBody());
+                    return json(201, mapper.toResponse(stockService.create(
+                            productId,
+                            body.quantity(),
+                            body.expirationDate(),
+                            body.entryDate()
+                    )));
+                }
+                if ("GET".equals(method)) {
+                    return json(200, stockService.findStockByProduct(
+                            productId,
+                            parseOptionalDate(queryParam(request, "expiresBefore"))
+                    ).stream().map(mapper::toResponse).toList());
+                }
+            }
             Long id = parseId(path);
             if ("PUT".equals(method)) {
                 UpdateProductRequest body = parseUpdate(request.getBody());
@@ -65,6 +114,50 @@ public class LambdaHttpRouter {
             if ("DELETE".equals(method)) {
                 service.delete(id);
                 return new APIGatewayProxyResponseEvent().withStatusCode(204).withHeaders(defaultHeaders());
+            }
+        }
+
+        if (path != null && path.startsWith("/api/v1/recipes/")) {
+            if (path.endsWith("/derived-product")) {
+                Long id = parseId(path.substring(0, path.lastIndexOf('/')));
+                if ("POST".equals(method)) {
+                    CreateRecipeDerivedProductRequest body = parseDerivedProductCreate(request.getBody());
+                    return json(201, mapper.toResponse(recipeService.createDerivedProduct(id, body.producedGrams(), body.gramsPerUnit())));
+                }
+            }
+
+            Long id = parseId(path);
+            if ("PUT".equals(method)) {
+                UpdateRecipeRequest body = parseRecipeUpdate(request.getBody());
+                return json(200, mapper.toResponse(recipeService.update(
+                        id,
+                        body.name(),
+                        body.description(),
+                        body.instructions(),
+                        toDomainIngredients(body.products())
+                )));
+            }
+            if ("DELETE".equals(method)) {
+                recipeService.delete(id);
+                return new APIGatewayProxyResponseEvent().withStatusCode(204).withHeaders(defaultHeaders());
+            }
+        }
+
+        if (path != null && path.startsWith("/api/v1/stock/")) {
+            if (path.endsWith("/add")) {
+                Long id = parseId(path.substring(0, path.lastIndexOf('/')));
+                if ("POST".equals(method)) {
+                    AdjustStockQuantityRequest body = parseAdjustStockQuantity(request.getBody());
+                    return json(200, mapper.toResponse(stockService.addQuantity(id, body.quantity())));
+                }
+            }
+            if (path.endsWith("/remove")) {
+                Long id = parseId(path.substring(0, path.lastIndexOf('/')));
+                if ("POST".equals(method)) {
+                    AdjustStockQuantityRequest body = parseAdjustStockQuantity(request.getBody());
+                    stockService.removeQuantity(id, body.quantity());
+                    return new APIGatewayProxyResponseEvent().withStatusCode(200).withHeaders(defaultHeaders());
+                }
             }
         }
 
@@ -102,6 +195,70 @@ public class LambdaHttpRouter {
         }
     }
 
+    private CreateRecipeRequest parseRecipeCreate(String body) {
+        if (!StringUtils.hasText(body)) {
+            throw new IllegalArgumentException("Body is required");
+        }
+        try {
+            return objectMapper.readValue(body, CreateRecipeRequest.class);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Invalid JSON body");
+        }
+    }
+
+    private UpdateRecipeRequest parseRecipeUpdate(String body) {
+        if (!StringUtils.hasText(body)) {
+            throw new IllegalArgumentException("Body is required");
+        }
+        try {
+            return objectMapper.readValue(body, UpdateRecipeRequest.class);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Invalid JSON body");
+        }
+    }
+
+    private CreateRecipeDerivedProductRequest parseDerivedProductCreate(String body) {
+        if (!StringUtils.hasText(body)) {
+            throw new IllegalArgumentException("Body is required");
+        }
+        try {
+            return objectMapper.readValue(body, CreateRecipeDerivedProductRequest.class);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Invalid JSON body");
+        }
+    }
+
+    private CreateStockEntryRequest parseStockCreate(String body) {
+        if (!StringUtils.hasText(body)) {
+            throw new IllegalArgumentException("Body is required");
+        }
+        try {
+            return objectMapper.readValue(body, CreateStockEntryRequest.class);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Invalid JSON body");
+        }
+    }
+
+    private AdjustStockQuantityRequest parseAdjustStockQuantity(String body) {
+        if (!StringUtils.hasText(body)) {
+            throw new IllegalArgumentException("Body is required");
+        }
+        try {
+            return objectMapper.readValue(body, AdjustStockQuantityRequest.class);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Invalid JSON body");
+        }
+    }
+
+    private List<RecipeIngredient> toDomainIngredients(List<RecipeIngredientAssignmentRequest> products) {
+        return products.stream()
+                .map(product -> RecipeIngredient.builder()
+                        .productId(product.productId())
+                        .grams(product.grams())
+                        .build())
+                .toList();
+    }
+
     private APIGatewayProxyResponseEvent json(int status, Object body) {
         try {
             return new APIGatewayProxyResponseEvent()
@@ -118,5 +275,38 @@ public class LambdaHttpRouter {
 
     private Map<String, String> defaultHeaders() {
         return Map.of("Content-Type", "application/json");
+    }
+
+    private String queryParam(APIGatewayProxyRequestEvent request, String name) {
+        if (request.getQueryStringParameters() == null) {
+            return null;
+        }
+        return request.getQueryStringParameters().get(name);
+    }
+
+    private LocalDate parseOptionalDate(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Invalid date");
+        }
+    }
+
+    private List<Long> parseProductIds(String value) {
+        if (!StringUtils.hasText(value)) {
+            return List.of();
+        }
+        try {
+            return Arrays.stream(value.split(","))
+                    .map(String::trim)
+                    .filter(StringUtils::hasText)
+                    .map(Long::parseLong)
+                    .toList();
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Invalid productIds");
+        }
     }
 }

@@ -30,6 +30,11 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, message, request.getRequestURI());
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiError> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request.getRequestURI());
+    }
+
     private ResponseEntity<ApiError> build(HttpStatus status, String message, String path) {
         return ResponseEntity.status(status).body(new ApiError(
                 Instant.now(),

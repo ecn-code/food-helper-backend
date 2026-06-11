@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -27,6 +28,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProductController {
     private final ProductService service;
     private final ProductApiMapper mapper;
+
+    @GetMapping
+    @Operation(
+            summary = "List products",
+            description = "Returns all products with their nutritional values."
+    )
+    @ApiResponse(responseCode = "200", description = "Products returned")
+    public java.util.List<ProductResponse> findAll() {
+        return service.findAll().stream()
+                .map(mapper::toResponse)
+                .toList();
+    }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)

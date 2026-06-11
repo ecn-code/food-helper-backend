@@ -4,6 +4,7 @@ import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
 import java.math.BigDecimal;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +27,10 @@ public class ProductService {
                 .description(description)
                 .nutritionalValues(buildNutritionalValues(calories, carbohydrates, proteins, fats))
                 .build());
+    }
+
+    public List<Product> findAll() {
+        return repository.findAll();
     }
 
     public void delete(Long id) {
