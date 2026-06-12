@@ -32,6 +32,7 @@ class ProductServiceTest {
                 .id(1L)
                 .name("Apple")
                 .description("Fresh apple")
+                .gramsPerUnit(new BigDecimal("150.00"))
                 .nutritionalValues(NutritionalValues.builder()
                         .productId(1L)
                         .calories(new BigDecimal("52"))
@@ -45,6 +46,7 @@ class ProductServiceTest {
         Product result = service.create(
                 "Apple",
                 "Fresh apple",
+                new BigDecimal("150"),
                 new BigDecimal("52"),
                 new BigDecimal("14"),
                 new BigDecimal("0.3"),
@@ -54,13 +56,14 @@ class ProductServiceTest {
         assertThat(result.getId()).isEqualTo(1L);
         assertThat(result.getName()).isEqualTo("Apple");
         assertThat(result.getDescription()).isEqualTo("Fresh apple");
+        assertThat(result.getGramsPerUnit()).isEqualByComparingTo("150.00");
     }
 
     @Test
     void shouldReturnAllProducts() {
         when(repository.findAll()).thenReturn(List.of(
-                Product.builder().id(1L).name("Apple").description("Fresh apple").build(),
-                Product.builder().id(2L).name("Banana").description("Fresh banana").build()
+                Product.builder().id(1L).name("Apple").description("Fresh apple").gramsPerUnit(new BigDecimal("150")).build(),
+                Product.builder().id(2L).name("Banana").description("Fresh banana").gramsPerUnit(new BigDecimal("120")).build()
         ));
 
         List<Product> result = service.findAll();

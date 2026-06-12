@@ -25,6 +25,7 @@ class ProductApiMapperTest {
                 .id(1L)
                 .name("Apple")
                 .description("Fresh apple")
+                .gramsPerUnit(new BigDecimal("150"))
                 .nutritionalValues(NutritionalValues.builder()
                         .productId(1L)
                         .calories(new java.math.BigDecimal("52"))
@@ -39,6 +40,7 @@ class ProductApiMapperTest {
         assertThat(response.id()).isEqualTo(1L);
         assertThat(response.name()).isEqualTo("Apple");
         assertThat(response.description()).isEqualTo("Fresh apple");
+        assertThat(response.gramsPerUnit()).isEqualByComparingTo("150");
         assertThat(response.nutritionalValues().calories()).isEqualByComparingTo("52");
     }
 

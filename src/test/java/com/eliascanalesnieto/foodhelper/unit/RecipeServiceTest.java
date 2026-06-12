@@ -130,6 +130,7 @@ class RecipeServiceTest {
                 .id(id)
                 .name(name)
                 .description(description)
+                .gramsPerUnit(new BigDecimal("100"))
                 .nutritionalValues(NutritionalValues.builder()
                         .productId(id)
                         .calories(new BigDecimal(calories))

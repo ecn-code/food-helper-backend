@@ -1,6 +1,7 @@
 package com.eliascanalesnieto.foodhelper.presentation;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.math.BigDecimal;
 
 @Schema(name = "ProductResponse", description = "API representation of a product")
 public record ProductResponse(
@@ -10,6 +11,8 @@ public record ProductResponse(
         String name,
         @Schema(description = "Product description", example = "Fresh apple")
         String description,
+        @Schema(description = "Default grams represented by one unit of this product", example = "150")
+        BigDecimal gramsPerUnit,
         @Schema(description = "Product nutritional values")
         NutritionalValuesResponse nutritionalValues
 ) {

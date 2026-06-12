@@ -25,6 +25,7 @@ public class JdbcProductRepository implements ProductRepository {
             SELECT p.id,
                    p.name,
                    p.description,
+                   p.grams_per_unit,
                    nv.product_id,
                    nv.calories,
                    nv.carbohydrates,
@@ -42,7 +43,7 @@ public class JdbcProductRepository implements ProductRepository {
     @Transactional
     public Product create(Product product) {
         try {
-            ProductEntity savedProduct = productRepository.save(new ProductEntity(null, product.getName(), product.getDescription()));
+            ProductEntity savedProduct = productRepository.save(new ProductEntity(null, product.getName(), product.getDescription(), product.getGramsPerUnit()));
             NutritionalValuesEntity savedValues = upsertNutritionalValues(savedProduct.id(), product.getNutritionalValues());
             return toDomain(savedProduct, savedValues);
         } catch (DataIntegrityViolationException ex) {
@@ -57,7 +58,7 @@ public class JdbcProductRepository implements ProductRepository {
             throw new ResourceNotFoundException("Product not found");
         }
         try {
-            ProductEntity savedProduct = productRepository.save(new ProductEntity(id, product.getName(), product.getDescription()));
+            ProductEntity savedProduct = productRepository.save(new ProductEntity(id, product.getName(), product.getDescription(), product.getGramsPerUnit()));
             NutritionalValuesEntity savedValues = upsertNutritionalValues(id, product.getNutritionalValues());
             return toDomain(savedProduct, savedValues);
         } catch (DataIntegrityViolationException ex) {
@@ -117,6 +118,7 @@ public class JdbcProductRepository implements ProductRepository {
                 .id(product.id())
                 .name(product.name())
                 .description(product.description())
+                .gramsPerUnit(product.gramsPerUnit())
                 .nutritionalValues(NutritionalValues.builder()
                         .productId(values.productId())
                         .calories(values.calories())
@@ -152,6 +154,7 @@ public class JdbcProductRepository implements ProductRepository {
                 .id(rs.getLong("id"))
                 .name(rs.getString("name"))
                 .description(rs.getString("description"))
+                .gramsPerUnit(rs.getBigDecimal("grams_per_unit"))
                 .nutritionalValues(NutritionalValues.builder()
                         .productId(rs.getLong("product_id"))
                         .calories(rs.getBigDecimal("calories"))

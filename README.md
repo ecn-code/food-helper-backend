@@ -26,7 +26,15 @@ Function definition:
   - `src/main/resources/db/migration/V2__create_recipes.sql`
 - PostgreSQL/Neon via `SPRING_DATASOURCE_*` environment variables
 
+## Authentication
+- `APP_AUTH_REGISTRATION_CODE`: shared code required by `POST /api/v1/auth/register`
+- `APP_AUTH_JWT_SECRET`: signing secret for issued JWTs
+- `APP_AUTH_JWT_ISSUER`: JWT issuer, defaults to `foodhelper-api`
+- `APP_AUTH_JWT_EXPIRATION_SECONDS`: JWT lifetime, defaults to `3600`
+
 ## API
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
 - `POST /api/v1/products`
 - `PUT /api/v1/products/{id}`
 - `DELETE /api/v1/products/{id}`

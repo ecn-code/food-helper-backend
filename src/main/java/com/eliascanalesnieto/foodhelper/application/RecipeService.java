@@ -74,6 +74,7 @@ public class RecipeService {
         Product createdProduct = productRepository.create(Product.builder()
                 .name(recipe.getName())
                 .description(recipe.getDescription())
+                .gramsPerUnit(scale(gramsPerUnit))
                 .nutritionalValues(recipe.getNutritionalValues())
                 .build());
         RecipeDerivedProduct linkedProduct = recipeRepository.linkDerivedProduct(
@@ -179,6 +180,7 @@ public class RecipeService {
         productRepository.update(derivedProduct.getProductId(), Product.builder()
                 .name(recipe.getName())
                 .description(recipe.getDescription())
+                .gramsPerUnit(scale(derivedProduct.getGramsPerUnit()))
                 .nutritionalValues(recipe.getNutritionalValues())
                 .build());
     }

@@ -25,6 +25,14 @@ springdoc:
   api-docs:
     path: /v3/api-docs
 
+app:
+  auth:
+    registration-code: ${APP_AUTH_REGISTRATION_CODE}
+    jwt:
+      secret: ${APP_AUTH_JWT_SECRET:foodhelper-development-secret-change-me}
+      issuer: ${APP_AUTH_JWT_ISSUER:foodhelper-api}
+      expiration-seconds: ${APP_AUTH_JWT_EXPIRATION_SECONDS:3600}
+
 ---
 spring:
   config:
@@ -38,3 +46,7 @@ spring:
   config:
     activate:
       on-profile: test-integration
+
+app:
+  auth:
+    registration-code: test-registration-code

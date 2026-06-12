@@ -59,6 +59,7 @@ public class ProductController {
         return mapper.toResponse(service.create(
                 request.name(),
                 request.description(),
+                request.gramsPerUnit(),
                 request.calories(),
                 request.carbohydrates(),
                 request.proteins(),
@@ -86,6 +87,7 @@ public class ProductController {
                 id,
                 request.name(),
                 request.description(),
+                request.gramsPerUnit(),
                 request.calories(),
                 request.carbohydrates(),
                 request.proteins(),

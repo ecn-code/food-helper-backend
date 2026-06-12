@@ -7,6 +7,8 @@ servers:
   - url: /
     description: Current server
 tags:
+  - name: Authentication
+    description: User registration and stateless JWT login
   - name: Products
     description: Create, update, and delete product operations
   - name: Stock
@@ -16,6 +18,75 @@ tags:
   - name: Health
     description: Basic API status
 paths:
+  /api/v1/auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register user
+      description: Creates a user when the registration code is valid and returns a signed Bearer JWT.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              default:
+                value:
+                  username: elias
+                  password: correct-horse-battery-staple
+                  registrationCode: foodhelper-invite
+      responses:
+        '201':
+          description: User registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid request or registration code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Username already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Log in
+      description: Validates credentials and returns a signed Bearer JWT for Authorization headers.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              default:
+                value:
+                  username: elias
+                  password: correct-horse-battery-staple
+      responses:
+        '200':
+          description: Login succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid credentials or request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /api/v1/products:
     get:
       tags:
@@ -578,6 +649,67 @@ components:
         status:
           type: string
           example: UP
+    RegisterRequest:
+      type: object
+      required:
+        - username
+        - password
+        - registrationCode
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 80
+          description: Unique username used to log in
+          example: elias
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Plain password. It is hashed before storage.
+          example: correct-horse-battery-staple
+        registrationCode:
+          type: string
+          maxLength: 128
+          description: Shared registration code required to create a user
+          example: foodhelper-invite
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          description: Registered username
+          example: elias
+        password:
+          type: string
+          description: User password
+          example: correct-horse-battery-staple
+    AuthResponse:
+      type: object
+      properties:
+        userId:
+          type: integer
+          format: int64
+          description: Created or authenticated user identifier
+          example: 1
+        username:
+          type: string
+          description: Authenticated username
+          example: elias
+        accessToken:
+          type: string
+          description: JWT access token for Authorization headers
+        tokenType:
+          type: string
+          description: Authorization scheme
+          example: Bearer
+        expiresAt:
+          type: string
+          format: date-time
+          description: Instant when the access token expires
     CreateProductRequest:
       type: object
       required:

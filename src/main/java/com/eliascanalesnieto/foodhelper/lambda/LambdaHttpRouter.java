@@ -2,18 +2,26 @@ package com.eliascanalesnieto.foodhelper.lambda;
 
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
+import com.eliascanalesnieto.foodhelper.application.AuthService;
+import com.eliascanalesnieto.foodhelper.application.JwtService;
 import com.eliascanalesnieto.foodhelper.application.ProductService;
+import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
 import com.eliascanalesnieto.foodhelper.application.RecipeService;
 import com.eliascanalesnieto.foodhelper.application.StockService;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
 import com.eliascanalesnieto.foodhelper.presentation.AdjustStockQuantityRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateProductRequest;
+import com.eliascanalesnieto.foodhelper.presentation.CreateProposedWeekMenuRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeDerivedProductRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateStockEntryRequest;
+import com.eliascanalesnieto.foodhelper.presentation.LoginRequest;
 import com.eliascanalesnieto.foodhelper.presentation.ProductApiMapper;
+import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuApiMapper;
 import com.eliascanalesnieto.foodhelper.presentation.RecipeIngredientAssignmentRequest;
+import com.eliascanalesnieto.foodhelper.presentation.RegisterRequest;
+import com.eliascanalesnieto.foodhelper.presentation.UpsertProposedWeekMenuDayRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateProductRequest;
 import com.eliascanalesnieto.foodhelper.presentation.error.DuplicateResourceException;
@@ -36,7 +44,11 @@ public class LambdaHttpRouter {
     private final ProductService service;
     private final RecipeService recipeService;
     private final StockService stockService;
+    private final ProposedWeekMenuService proposedWeekMenuService;
+    private final AuthService authService;
+    private final JwtService jwtService;
     private final ProductApiMapper mapper;
+    private final ProposedWeekMenuApiMapper proposedWeekMenuMapper;
     private final ObjectMapper objectMapper;
 
     @Bean
@@ -64,10 +76,29 @@ public class LambdaHttpRouter {
             return json(200, Map.of("status", "UP"));
         }
 
+        if ("POST".equals(method) && "/api/v1/auth/register".equals(path)) {
+            RegisterRequest body = parseRegister(request.getBody());
+            return json(201, authService.register(body.username(), body.password(), body.registrationCode()));
+        }
+
+        if ("POST".equals(method) && "/api/v1/auth/login".equals(path)) {
+            LoginRequest body = parseLogin(request.getBody());
+            return json(200, authService.login(body.username(), body.password()));
+        }
+
+        if (!isAuthorized(request)) {
+            return json(401, Map.of("message", "Missing or invalid Bearer token"));
+        }
+
         if ("POST".equals(method) && "/api/v1/products".equals(path)) {
             CreateProductRequest body = parseCreate(request.getBody());
-            Product created = service.create(body.name(), body.description(), body.calories(), body.carbohydrates(), body.proteins(), body.fats());
+            Product created = service.create(body.name(), body.description(), body.gramsPerUnit(), body.calories(), body.carbohydrates(), body.proteins(), body.fats());
             return json(201, mapper.toResponse(created));
+        }
+
+        if ("POST".equals(method) && "/api/v1/proposed-week-menus".equals(path)) {
+            CreateProposedWeekMenuRequest body = parseProposedWeekMenuCreate(request.getBody());
+            return json(201, proposedWeekMenuMapper.toResponse(proposedWeekMenuService.create(body.startDate(), body.endDate())));
         }
 
         if ("GET".equals(method) && "/api/v1/stock".equals(path)) {
@@ -109,7 +140,7 @@ public class LambdaHttpRouter {
             Long id = parseId(path);
             if ("PUT".equals(method)) {
                 UpdateProductRequest body = parseUpdate(request.getBody());
-                return json(200, mapper.toResponse(service.update(id, body.name(), body.description(), body.calories(), body.carbohydrates(), body.proteins(), body.fats())));
+                return json(200, mapper.toResponse(service.update(id, body.name(), body.description(), body.gramsPerUnit(), body.calories(), body.carbohydrates(), body.proteins(), body.fats())));
             }
             if ("DELETE".equals(method)) {
                 service.delete(id);
@@ -140,6 +171,20 @@ public class LambdaHttpRouter {
             if ("DELETE".equals(method)) {
                 recipeService.delete(id);
                 return new APIGatewayProxyResponseEvent().withStatusCode(204).withHeaders(defaultHeaders());
+            }
+        }
+
+        if (path != null && path.startsWith("/api/v1/proposed-week-menus/")) {
+            if (path.endsWith("/days")) {
+                Long id = parseId(path.substring(0, path.lastIndexOf('/')));
+                if ("PUT".equals(method)) {
+                    UpsertProposedWeekMenuDayRequest body = parseProposedWeekMenuDayUpsert(request.getBody());
+                    return json(200, proposedWeekMenuMapper.toResponse(proposedWeekMenuService.upsertDay(id, proposedWeekMenuMapper.toDomain(body))));
+                }
+            }
+            Long id = parseId(path);
+            if ("GET".equals(method)) {
+                return json(200, proposedWeekMenuMapper.toResponse(proposedWeekMenuService.findById(id)));
             }
         }
 
@@ -195,12 +240,56 @@ public class LambdaHttpRouter {
         }
     }
 
+    private RegisterRequest parseRegister(String body) {
+        if (!StringUtils.hasText(body)) {
+            throw new IllegalArgumentException("Body is required");
+        }
+        try {
+            return objectMapper.readValue(body, RegisterRequest.class);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Invalid JSON body");
+        }
+    }
+
+    private LoginRequest parseLogin(String body) {
+        if (!StringUtils.hasText(body)) {
+            throw new IllegalArgumentException("Body is required");
+        }
+        try {
+            return objectMapper.readValue(body, LoginRequest.class);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Invalid JSON body");
+        }
+    }
+
     private CreateRecipeRequest parseRecipeCreate(String body) {
         if (!StringUtils.hasText(body)) {
             throw new IllegalArgumentException("Body is required");
         }
         try {
             return objectMapper.readValue(body, CreateRecipeRequest.class);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Invalid JSON body");
+        }
+    }
+
+    private CreateProposedWeekMenuRequest parseProposedWeekMenuCreate(String body) {
+        if (!StringUtils.hasText(body)) {
+            throw new IllegalArgumentException("Body is required");
+        }
+        try {
+            return objectMapper.readValue(body, CreateProposedWeekMenuRequest.class);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Invalid JSON body");
+        }
+    }
+
+    private UpsertProposedWeekMenuDayRequest parseProposedWeekMenuDayUpsert(String body) {
+        if (!StringUtils.hasText(body)) {
+            throw new IllegalArgumentException("Body is required");
+        }
+        try {
+            return objectMapper.readValue(body, UpsertProposedWeekMenuDayRequest.class);
         } catch (Exception ex) {
             throw new IllegalArgumentException("Invalid JSON body");
         }
@@ -275,6 +364,25 @@ public class LambdaHttpRouter {
 
     private Map<String, String> defaultHeaders() {
         return Map.of("Content-Type", "application/json");
+    }
+
+    private boolean isAuthorized(APIGatewayProxyRequestEvent request) {
+        String authorization = header(request, "Authorization");
+        if (!StringUtils.hasText(authorization) || !authorization.startsWith("Bearer ")) {
+            return false;
+        }
+        return jwtService.isValid(authorization.substring("Bearer ".length()));
+    }
+
+    private String header(APIGatewayProxyRequestEvent request, String name) {
+        if (request.getHeaders() == null) {
+            return null;
+        }
+        String value = request.getHeaders().get(name);
+        if (StringUtils.hasText(value)) {
+            return value;
+        }
+        return request.getHeaders().get(name.toLowerCase());
     }
 
     private String queryParam(APIGatewayProxyRequestEvent request, String name) {
