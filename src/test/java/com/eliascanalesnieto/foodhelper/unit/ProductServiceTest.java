@@ -2,8 +2,10 @@ package com.eliascanalesnieto.foodhelper.unit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.eliascanalesnieto.foodhelper.application.MediaService;
 import com.eliascanalesnieto.foodhelper.application.ProductService;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.Product;
@@ -23,6 +25,9 @@ class ProductServiceTest {
     @Mock
     private ProductRepository repository;
 
+    @Mock
+    private MediaService mediaService;
+
     @InjectMocks
     private ProductService service;
 
@@ -41,7 +46,7 @@ class ProductServiceTest {
                         .fats(new BigDecimal("0.2"))
                         .build())
                 .build();
-        when(repository.create(org.mockito.ArgumentMatchers.any(Product.class))).thenReturn(created);
+        when(repository.create(any(Product.class))).thenReturn(created);
 
         Product result = service.create(
                 "Apple",
@@ -50,7 +55,8 @@ class ProductServiceTest {
                 new BigDecimal("52"),
                 new BigDecimal("14"),
                 new BigDecimal("0.3"),
-                new BigDecimal("0.2")
+                new BigDecimal("0.2"),
+                null
         );
 
         assertThat(result.getId()).isEqualTo(1L);
@@ -75,8 +81,7 @@ class ProductServiceTest {
 
     @Test
     void shouldPropagateNotFoundOnDeleteThroughRepository() {
-        org.mockito.Mockito.doThrow(new ResourceNotFoundException("Product not found"))
-                .when(repository).delete(99L);
+        when(repository.findById(99L)).thenThrow(new ResourceNotFoundException("Product not found"));
 
         assertThatThrownBy(() -> service.delete(99L))
                 .isInstanceOf(ResourceNotFoundException.class)

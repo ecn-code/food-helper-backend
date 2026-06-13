@@ -1,5 +1,7 @@
 package com.eliascanalesnieto.foodhelper.application;
 
+import com.eliascanalesnieto.foodhelper.domain.Media;
+import com.eliascanalesnieto.foodhelper.domain.MediaUpload;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
@@ -26,28 +28,37 @@ public class RecipeService {
 
     private final RecipeRepository recipeRepository;
     private final ProductRepository productRepository;
+    private final MediaService mediaService;
 
     @Transactional
-    public Recipe create(String name, String description, String instructions, List<RecipeIngredient> ingredients) {
+    public Recipe create(String name, String description, String instructions, List<RecipeIngredient> ingredients, MediaUpload photoUpload) {
+        Media photo = mediaService.createOptimized(photoUpload);
         Recipe recipe = enrichRecipe(Recipe.builder()
                 .name(name)
                 .description(description)
                 .instructions(instructions)
                 .ingredients(ingredients)
+                .photo(photo)
                 .build());
         return recipeRepository.create(recipe);
     }
 
     @Transactional
-    public Recipe update(Long id, String name, String description, String instructions, List<RecipeIngredient> ingredients) {
+    public Recipe update(Long id, String name, String description, String instructions, List<RecipeIngredient> ingredients, MediaUpload photoUpload) {
+        Recipe existing = recipeRepository.findById(id);
+        Media photo = photoUpload == null ? existing.getPhoto() : mediaService.createOptimized(photoUpload);
         Recipe recipe = enrichRecipe(Recipe.builder()
                 .id(id)
                 .name(name)
                 .description(description)
                 .instructions(instructions)
                 .ingredients(ingredients)
+                .photo(photo)
                 .build());
         Recipe savedRecipe = recipeRepository.update(id, recipe);
+        if (photoUpload != null && existing.getPhoto() != null) {
+            mediaService.delete(existing.getPhoto().getId());
+        }
         recipeRepository.findDerivedProductByRecipeId(id)
                 .ifPresent(derivedProduct -> syncDerivedProduct(savedRecipe, derivedProduct));
         return attachDerivedProduct(savedRecipe);
@@ -60,9 +71,13 @@ public class RecipeService {
 
     @Transactional
     public void delete(Long id) {
+        Recipe existing = recipeRepository.findById(id);
         recipeRepository.findDerivedProductByRecipeId(id)
                 .ifPresent(derivedProduct -> productRepository.delete(derivedProduct.getProductId()));
         recipeRepository.delete(id);
+        if (existing.getPhoto() != null) {
+            mediaService.delete(existing.getPhoto().getId());
+        }
     }
 
     @Transactional

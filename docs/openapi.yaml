@@ -15,6 +15,8 @@ tags:
     description: Manage stock entries and inspect inventory ordered by expiration
   - name: Recipes
     description: Create, update, delete, and derive product operations for recipes
+  - name: Media
+    description: Download stored media files
   - name: Health
     description: Basic API status
 paths:
@@ -120,10 +122,15 @@ paths:
                 value:
                   name: Apple
                   description: Fresh apple
+                  gramsPerUnit: 150
                   calories: 52
                   carbohydrates: 14
                   proteins: 0.3
                   fats: 0.2
+                  photo:
+                    fileName: apple.png
+                    contentType: image/png
+                    base64Data: iVBORw0KGgoAAAANSUhEUgAA...
       responses:
         '201':
           description: Product created
@@ -168,10 +175,15 @@ paths:
                 value:
                   name: Green Apple
                   description: Green apple
+                  gramsPerUnit: 140
                   calories: 48
                   carbohydrates: 13
                   proteins: 0.4
                   fats: 0.1
+                  photo:
+                    fileName: green-apple.png
+                    contentType: image/png
+                    base64Data: iVBORw0KGgoAAAANSUhEUgAA...
       responses:
         '200':
           description: Product updated
@@ -605,6 +617,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /api/v1/media/{id}:
+    get:
+      tags:
+        - Media
+      summary: Download media
+      description: Returns the binary content of a stored media file.
+      operationId: downloadMedia
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Media returned
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Media not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /api/v1/health:
     get:
       tags:
@@ -715,6 +755,7 @@ components:
       required:
         - name
         - description
+        - gramsPerUnit
         - calories
         - carbohydrates
         - proteins
@@ -730,6 +771,11 @@ components:
           minLength: 1
           description: Product description
           example: Fresh apple
+        gramsPerUnit:
+          type: number
+          exclusiveMinimum: 0
+          description: Default grams represented by one unit of this product
+          example: 150
         calories:
           type: number
           minimum: 0
@@ -750,6 +796,8 @@ components:
           minimum: 0
           description: Fats per 100 grams
           example: 0.2
+        photo:
+          $ref: '#/components/schemas/PhotoUploadRequest'
     CreateStockEntryRequest:
       type: object
       required:
@@ -801,8 +849,16 @@ components:
           type: string
           description: Product description
           example: Fresh apple
+        gramsPerUnit:
+          type: number
+          description: Default grams represented by one unit of this product
+          example: 150
         nutritionalValues:
           $ref: '#/components/schemas/NutritionalValuesResponse'
+        photo:
+          oneOf:
+            - $ref: '#/components/schemas/MediaResponse'
+            - type: 'null'
     StockEntryResponse:
       type: object
       properties:
@@ -864,6 +920,8 @@ components:
           description: Assigned ingredient products with their gram amount
           items:
             $ref: '#/components/schemas/RecipeIngredientAssignmentRequest'
+        photo:
+          $ref: '#/components/schemas/PhotoUploadRequest'
     UpdateRecipeRequest:
       allOf:
         - $ref: '#/components/schemas/CreateRecipeRequest'
@@ -925,6 +983,57 @@ components:
           oneOf:
             - $ref: '#/components/schemas/RecipeDerivedProductResponse'
             - type: 'null'
+        photo:
+          oneOf:
+            - $ref: '#/components/schemas/MediaResponse'
+            - type: 'null'
+    PhotoUploadRequest:
+      type: object
+      required:
+        - fileName
+        - contentType
+        - base64Data
+      properties:
+        fileName:
+          type: string
+          description: Original file name
+          example: apple.png
+        contentType:
+          type: string
+          description: Original MIME type reported by the client
+          example: image/png
+        base64Data:
+          type: string
+          description: Base64-encoded image binary
+          example: iVBORw0KGgoAAAANSUhEUgAA...
+    MediaResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Media identifier
+          example: 12
+        fileName:
+          type: string
+          description: Normalized stored file name
+          example: apple.jpg
+        contentType:
+          type: string
+          description: Stored MIME type
+          example: image/jpeg
+        sizeBytes:
+          type: integer
+          description: Stored image size in bytes
+          example: 84231
+        width:
+          type: integer
+          description: Stored image width in pixels
+          example: 1280
+        height:
+          type: integer
+          description: Stored image height in pixels
+          example: 960
     RecipeIngredientResponse:
       type: object
       properties:

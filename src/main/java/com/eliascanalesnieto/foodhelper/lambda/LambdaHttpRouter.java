@@ -4,6 +4,7 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
 import com.eliascanalesnieto.foodhelper.application.AuthService;
 import com.eliascanalesnieto.foodhelper.application.JwtService;
+import com.eliascanalesnieto.foodhelper.application.MediaService;
 import com.eliascanalesnieto.foodhelper.application.ProductService;
 import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
 import com.eliascanalesnieto.foodhelper.application.RecipeService;
@@ -26,7 +27,9 @@ import com.eliascanalesnieto.foodhelper.presentation.UpdateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateProductRequest;
 import com.eliascanalesnieto.foodhelper.presentation.error.DuplicateResourceException;
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
+import jakarta.validation.Validator;
 import java.time.LocalDate;
+import java.util.Base64;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -47,9 +50,11 @@ public class LambdaHttpRouter {
     private final ProposedWeekMenuService proposedWeekMenuService;
     private final AuthService authService;
     private final JwtService jwtService;
+    private final MediaService mediaService;
     private final ProductApiMapper mapper;
     private final ProposedWeekMenuApiMapper proposedWeekMenuMapper;
     private final ObjectMapper objectMapper;
+    private final Validator validator;
 
     @Bean
     public Function<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> productHttpHandler() {
@@ -92,7 +97,16 @@ public class LambdaHttpRouter {
 
         if ("POST".equals(method) && "/api/v1/products".equals(path)) {
             CreateProductRequest body = parseCreate(request.getBody());
-            Product created = service.create(body.name(), body.description(), body.gramsPerUnit(), body.calories(), body.carbohydrates(), body.proteins(), body.fats());
+            Product created = service.create(
+                    body.name(),
+                    body.description(),
+                    body.gramsPerUnit(),
+                    body.calories(),
+                    body.carbohydrates(),
+                    body.proteins(),
+                    body.fats(),
+                    body.photo() == null ? null : body.photo().toDomain()
+            );
             return json(201, mapper.toResponse(created));
         }
 
@@ -114,8 +128,16 @@ public class LambdaHttpRouter {
                     body.name(),
                     body.description(),
                     body.instructions(),
-                    toDomainIngredients(body.products())
+                    toDomainIngredients(body.products()),
+                    body.photo() == null ? null : body.photo().toDomain()
             )));
+        }
+
+        if (path != null && path.startsWith("/api/v1/media/")) {
+            Long id = parseId(path);
+            if ("GET".equals(method)) {
+                return binary(mediaService.findById(id));
+            }
         }
 
         if (path != null && path.startsWith("/api/v1/products/")) {
@@ -140,7 +162,17 @@ public class LambdaHttpRouter {
             Long id = parseId(path);
             if ("PUT".equals(method)) {
                 UpdateProductRequest body = parseUpdate(request.getBody());
-                return json(200, mapper.toResponse(service.update(id, body.name(), body.description(), body.gramsPerUnit(), body.calories(), body.carbohydrates(), body.proteins(), body.fats())));
+                return json(200, mapper.toResponse(service.update(
+                        id,
+                        body.name(),
+                        body.description(),
+                        body.gramsPerUnit(),
+                        body.calories(),
+                        body.carbohydrates(),
+                        body.proteins(),
+                        body.fats(),
+                        body.photo() == null ? null : body.photo().toDomain()
+                )));
             }
             if ("DELETE".equals(method)) {
                 service.delete(id);
@@ -165,7 +197,8 @@ public class LambdaHttpRouter {
                         body.name(),
                         body.description(),
                         body.instructions(),
-                        toDomainIngredients(body.products())
+                        toDomainIngredients(body.products()),
+                        body.photo() == null ? null : body.photo().toDomain()
                 )));
             }
             if ("DELETE".equals(method)) {
@@ -219,124 +252,70 @@ public class LambdaHttpRouter {
     }
 
     private CreateProductRequest parseCreate(String body) {
-        if (!StringUtils.hasText(body)) {
-            throw new IllegalArgumentException("Body is required");
-        }
-        try {
-            return objectMapper.readValue(body, CreateProductRequest.class);
-        } catch (Exception ex) {
-            throw new IllegalArgumentException("Invalid JSON body");
-        }
+        return readBody(body, CreateProductRequest.class);
     }
 
     private UpdateProductRequest parseUpdate(String body) {
-        if (!StringUtils.hasText(body)) {
-            throw new IllegalArgumentException("Body is required");
-        }
-        try {
-            return objectMapper.readValue(body, UpdateProductRequest.class);
-        } catch (Exception ex) {
-            throw new IllegalArgumentException("Invalid JSON body");
-        }
+        return readBody(body, UpdateProductRequest.class);
     }
 
     private RegisterRequest parseRegister(String body) {
-        if (!StringUtils.hasText(body)) {
-            throw new IllegalArgumentException("Body is required");
-        }
-        try {
-            return objectMapper.readValue(body, RegisterRequest.class);
-        } catch (Exception ex) {
-            throw new IllegalArgumentException("Invalid JSON body");
-        }
+        return readBody(body, RegisterRequest.class);
     }
 
     private LoginRequest parseLogin(String body) {
-        if (!StringUtils.hasText(body)) {
-            throw new IllegalArgumentException("Body is required");
-        }
-        try {
-            return objectMapper.readValue(body, LoginRequest.class);
-        } catch (Exception ex) {
-            throw new IllegalArgumentException("Invalid JSON body");
-        }
+        return readBody(body, LoginRequest.class);
     }
 
     private CreateRecipeRequest parseRecipeCreate(String body) {
-        if (!StringUtils.hasText(body)) {
-            throw new IllegalArgumentException("Body is required");
-        }
-        try {
-            return objectMapper.readValue(body, CreateRecipeRequest.class);
-        } catch (Exception ex) {
-            throw new IllegalArgumentException("Invalid JSON body");
-        }
+        return readBody(body, CreateRecipeRequest.class);
     }
 
     private CreateProposedWeekMenuRequest parseProposedWeekMenuCreate(String body) {
-        if (!StringUtils.hasText(body)) {
-            throw new IllegalArgumentException("Body is required");
-        }
-        try {
-            return objectMapper.readValue(body, CreateProposedWeekMenuRequest.class);
-        } catch (Exception ex) {
-            throw new IllegalArgumentException("Invalid JSON body");
-        }
+        return readBody(body, CreateProposedWeekMenuRequest.class);
     }
 
     private UpsertProposedWeekMenuDayRequest parseProposedWeekMenuDayUpsert(String body) {
-        if (!StringUtils.hasText(body)) {
-            throw new IllegalArgumentException("Body is required");
-        }
-        try {
-            return objectMapper.readValue(body, UpsertProposedWeekMenuDayRequest.class);
-        } catch (Exception ex) {
-            throw new IllegalArgumentException("Invalid JSON body");
-        }
+        return readBody(body, UpsertProposedWeekMenuDayRequest.class);
     }
 
     private UpdateRecipeRequest parseRecipeUpdate(String body) {
-        if (!StringUtils.hasText(body)) {
-            throw new IllegalArgumentException("Body is required");
-        }
-        try {
-            return objectMapper.readValue(body, UpdateRecipeRequest.class);
-        } catch (Exception ex) {
-            throw new IllegalArgumentException("Invalid JSON body");
-        }
+        return readBody(body, UpdateRecipeRequest.class);
     }
 
     private CreateRecipeDerivedProductRequest parseDerivedProductCreate(String body) {
-        if (!StringUtils.hasText(body)) {
-            throw new IllegalArgumentException("Body is required");
-        }
-        try {
-            return objectMapper.readValue(body, CreateRecipeDerivedProductRequest.class);
-        } catch (Exception ex) {
-            throw new IllegalArgumentException("Invalid JSON body");
-        }
+        return readBody(body, CreateRecipeDerivedProductRequest.class);
     }
 
     private CreateStockEntryRequest parseStockCreate(String body) {
+        return readBody(body, CreateStockEntryRequest.class);
+    }
+
+    private AdjustStockQuantityRequest parseAdjustStockQuantity(String body) {
+        return readBody(body, AdjustStockQuantityRequest.class);
+    }
+
+    private <T> T readBody(String body, Class<T> type) {
         if (!StringUtils.hasText(body)) {
             throw new IllegalArgumentException("Body is required");
         }
         try {
-            return objectMapper.readValue(body, CreateStockEntryRequest.class);
+            T request = objectMapper.readValue(body, type);
+            validate(request);
+            return request;
+        } catch (IllegalArgumentException ex) {
+            throw ex;
         } catch (Exception ex) {
             throw new IllegalArgumentException("Invalid JSON body");
         }
     }
 
-    private AdjustStockQuantityRequest parseAdjustStockQuantity(String body) {
-        if (!StringUtils.hasText(body)) {
-            throw new IllegalArgumentException("Body is required");
-        }
-        try {
-            return objectMapper.readValue(body, AdjustStockQuantityRequest.class);
-        } catch (Exception ex) {
-            throw new IllegalArgumentException("Invalid JSON body");
-        }
+    private void validate(Object request) {
+        validator.validate(request).stream()
+                .findFirst()
+                .ifPresent(violation -> {
+                    throw new IllegalArgumentException(violation.getPropertyPath() + " " + violation.getMessage());
+                });
     }
 
     private List<RecipeIngredient> toDomainIngredients(List<RecipeIngredientAssignmentRequest> products) {
@@ -360,6 +339,17 @@ public class LambdaHttpRouter {
                     .withHeaders(defaultHeaders())
                     .withBody("{\"message\":\"Internal server error\"}");
         }
+    }
+
+    private APIGatewayProxyResponseEvent binary(com.eliascanalesnieto.foodhelper.domain.Media media) {
+        return new APIGatewayProxyResponseEvent()
+                .withStatusCode(200)
+                .withHeaders(Map.of(
+                        "Content-Type", media.getContentType(),
+                        "Content-Disposition", "inline; filename=\"" + media.getFileName() + "\""
+                ))
+                .withIsBase64Encoded(true)
+                .withBody(Base64.getEncoder().encodeToString(media.getData()));
     }
 
     private Map<String, String> defaultHeaders() {

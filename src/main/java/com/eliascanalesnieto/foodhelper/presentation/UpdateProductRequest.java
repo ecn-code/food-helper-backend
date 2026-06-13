@@ -1,6 +1,7 @@
 package com.eliascanalesnieto.foodhelper.presentation;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -22,6 +23,19 @@ public record UpdateProductRequest(
         @Schema(description = "Proteins per 100 grams", example = "0.4")
         @NotNull @PositiveOrZero BigDecimal proteins,
         @Schema(description = "Fats per 100 grams", example = "0.1")
-        @NotNull @PositiveOrZero BigDecimal fats
+        @NotNull @PositiveOrZero BigDecimal fats,
+        @Schema(description = "Optional product photo that will be compressed before storage")
+        @Valid PhotoUploadRequest photo
 ) {
+    public UpdateProductRequest(
+            String name,
+            String description,
+            BigDecimal gramsPerUnit,
+            BigDecimal calories,
+            BigDecimal carbohydrates,
+            BigDecimal proteins,
+            BigDecimal fats
+    ) {
+        this(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, null);
+    }
 }

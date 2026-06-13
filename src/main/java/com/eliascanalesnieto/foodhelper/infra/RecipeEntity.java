@@ -9,6 +9,7 @@ public record RecipeEntity(
         @Id Long id,
         @Column("name") String name,
         @Column("description") String description,
-        @Column("instructions") String instructions
+        @Column("instructions") String instructions,
+        @Column("media_id") Long mediaId
 ) {
 }

@@ -2,6 +2,7 @@ package com.eliascanalesnieto.foodhelper.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.eliascanalesnieto.foodhelper.presentation.PhotoUploadRequest;
 import com.eliascanalesnieto.foodhelper.infra.NutritionalValuesCrudRepository;
 import com.eliascanalesnieto.foodhelper.infra.NutritionalValuesEntity;
 import com.eliascanalesnieto.foodhelper.presentation.AuthResponse;
@@ -25,9 +26,14 @@ import com.eliascanalesnieto.foodhelper.presentation.UpsertProposedWeekMenuDayRe
 import com.eliascanalesnieto.foodhelper.presentation.UpdateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateProductRequest;
 import java.math.BigDecimal;
+import java.awt.Color;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.time.LocalDate;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -198,6 +204,7 @@ class ProductRestIntegrationTest {
         assertThat(response.getBody()).contains("/api/v1/recipes");
         assertThat(response.getBody()).contains("/api/v1/recipes/{id}");
         assertThat(response.getBody()).contains("/api/v1/recipes/{id}/derived-product");
+        assertThat(response.getBody()).contains("/api/v1/media/{id}");
         assertThat(response.getBody()).contains("/api/v1/stock");
         assertThat(response.getBody()).contains("/api/v1/products/{productId}/stock");
         assertThat(response.getBody()).contains("/api/v1/stock/{stockEntryId}/add");
@@ -208,6 +215,7 @@ class ProductRestIntegrationTest {
         assertThat(response.getBody()).contains("/api/v1/auth/register");
         assertThat(response.getBody()).contains("/api/v1/auth/login");
         assertThat(response.getBody()).contains("registrationCode");
+        assertThat(response.getBody()).contains("PhotoUploadRequest");
         assertThat(response.getBody()).contains("bearerAuth");
         assertThat(response.getBody()).contains("/api/v1/health");
     }
@@ -420,6 +428,69 @@ class ProductRestIntegrationTest {
         assertThat(secondDerivedProductAttempt.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     }
 
+    @Test
+    void productPhotoShouldBeCompressedStoredAndDownloadable() {
+        String productsUrl = "http://localhost:" + port + "/api/v1/products";
+
+        ResponseEntity<ProductResponse> created = postAuthorized(
+                productsUrl,
+                new CreateProductRequest(
+                        "Photo Apple",
+                        "Apple with photo",
+                        new BigDecimal("150"),
+                        new BigDecimal("52"),
+                        new BigDecimal("14"),
+                        new BigDecimal("0.3"),
+                        new BigDecimal("0.2"),
+                        samplePhoto("product-photo")
+                ),
+                ProductResponse.class
+        );
+
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(created.getBody()).isNotNull();
+        assertThat(created.getBody().photo()).isNotNull();
+        assertThat(created.getBody().photo().contentType()).isEqualTo("image/jpeg");
+        assertThat(created.getBody().photo().sizeBytes()).isLessThanOrEqualTo(153600);
+
+        ResponseEntity<byte[]> mediaResponse = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/media/" + created.getBody().photo().id(),
+                HttpMethod.GET,
+                authorizedEntity(null),
+                byte[].class
+        );
+
+        assertThat(mediaResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(mediaResponse.getHeaders().getContentType()).isEqualTo(org.springframework.http.MediaType.IMAGE_JPEG);
+        assertThat(mediaResponse.getBody()).isNotNull();
+        assertThat(mediaResponse.getBody().length).isEqualTo(created.getBody().photo().sizeBytes());
+    }
+
+    @Test
+    void recipePhotoShouldBeCompressedAndReturnedInResponse() {
+        String productsUrl = "http://localhost:" + port + "/api/v1/products";
+        String recipesUrl = "http://localhost:" + port + "/api/v1/recipes";
+        Long ingredientId = createProduct(productsUrl, "Photo Rice", "Rice", "130", "28", "2.7", "0.3");
+
+        ResponseEntity<RecipeResponse> created = postAuthorized(
+                recipesUrl,
+                new CreateRecipeRequest(
+                        "Photo Rice Bowl",
+                        "Recipe with photo",
+                        "Cook and serve.",
+                        List.of(new RecipeIngredientAssignmentRequest(ingredientId, new BigDecimal("180"))),
+                        samplePhoto("recipe-photo")
+                ),
+                RecipeResponse.class
+        );
+
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(created.getBody()).isNotNull();
+        assertThat(created.getBody().photo()).isNotNull();
+        assertThat(created.getBody().photo().contentType()).isEqualTo("image/jpeg");
+        assertThat(created.getBody().photo().sizeBytes()).isLessThanOrEqualTo(153600);
+    }
+
     private Long createProduct(String productsUrl, String name, String description, String calories, String carbohydrates, String proteins, String fats) {
         return createProduct(productsUrl, name, description, calories, carbohydrates, proteins, fats, "100");
     }
@@ -469,5 +540,24 @@ class ProductRestIntegrationTest {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(accessToken);
         return headers;
+    }
+
+    private PhotoUploadRequest samplePhoto(String fileNameBase) {
+        try {
+            BufferedImage image = new BufferedImage(1800, 1200, BufferedImage.TYPE_INT_RGB);
+            for (int x = 0; x < image.getWidth(); x++) {
+                for (int y = 0; y < image.getHeight(); y++) {
+                    int red = (x * 255) / image.getWidth();
+                    int green = (y * 255) / image.getHeight();
+                    int blue = (red + green) / 2;
+                    image.setRGB(x, y, new Color(red, green, blue).getRGB());
+                }
+            }
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            ImageIO.write(image, "png", output);
+            return new PhotoUploadRequest(fileNameBase + ".png", "image/png", Base64.getEncoder().encodeToString(output.toByteArray()));
+        } catch (Exception ex) {
+            throw new AssertionError("Unable to build test image", ex);
+        }
     }
 }

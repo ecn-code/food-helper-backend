@@ -6,8 +6,13 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.awt.Color;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.util.Base64;
 import java.util.Map;
 import java.util.function.Function;
+import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -100,6 +105,34 @@ class ProductLambdaRouterIntegrationTest {
     }
 
     @Test
+    void shouldHandleProductPhotoAndMediaDownloadRequests() {
+        String token = registerAndReadToken();
+        APIGatewayProxyRequestEvent create = new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath("/api/v1/products")
+                .withHeaders(authHeaders(token))
+                .withBody("""
+                        {"name":"Photo Apple","description":"Fresh apple","gramsPerUnit":150,"calories":52,"carbohydrates":14,"proteins":0.3,"fats":0.2,"photo":{"fileName":"apple.png","contentType":"image/png","base64Data":"%s"}}
+                        """.formatted(samplePhotoBase64()));
+
+        APIGatewayProxyResponseEvent createResponse = productHttpHandler.apply(create);
+        assertThat(createResponse.getStatusCode()).isEqualTo(201);
+        long mediaId = readLong(createResponse.getBody(), "photo.id");
+        assertThat(readText(createResponse.getBody(), "photo.contentType")).isEqualTo("image/jpeg");
+
+        APIGatewayProxyRequestEvent mediaDownload = new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/media/" + mediaId)
+                .withHeaders(authHeaders(token));
+
+        APIGatewayProxyResponseEvent mediaResponse = productHttpHandler.apply(mediaDownload);
+        assertThat(mediaResponse.getStatusCode()).isEqualTo(200);
+        assertThat(mediaResponse.getHeaders()).containsEntry("Content-Type", "image/jpeg");
+        assertThat(mediaResponse.getIsBase64Encoded()).isTrue();
+        assertThat(Base64.getDecoder().decode(mediaResponse.getBody())).isNotEmpty();
+    }
+
+    @Test
     void shouldHandleStockRequests() {
         String token = registerAndReadToken();
         APIGatewayProxyRequestEvent createProduct = new APIGatewayProxyRequestEvent()
@@ -162,6 +195,18 @@ class ProductLambdaRouterIntegrationTest {
 
         APIGatewayProxyResponseEvent missingCodeResponse = productHttpHandler.apply(missingCodeRegister);
         assertThat(missingCodeResponse.getStatusCode()).isEqualTo(400);
+        assertThat(readText(missingCodeResponse.getBody(), "message")).contains("registrationCode");
+
+        APIGatewayProxyRequestEvent blankCodeRegister = new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath("/api/v1/auth/register")
+                .withBody("{\"username\":\"" + username + "-blank\",\"password\":\"secret-password\",\"registrationCode\":\"\"}");
+
+        APIGatewayProxyResponseEvent blankCodeResponse = productHttpHandler.apply(blankCodeRegister);
+        assertThat(blankCodeResponse.getStatusCode()).isEqualTo(400);
+        assertThat(readText(blankCodeResponse.getBody(), "message")).contains("registrationCode");
+        assertThat(blankCodeResponse.getBody()).doesNotContain("\"type\":\"failure\"");
+        assertThat(blankCodeResponse.getBody()).doesNotContain("\"data\"");
 
         APIGatewayProxyRequestEvent invalidCodeRegister = new APIGatewayProxyRequestEvent()
                 .withHttpMethod("POST")
@@ -170,6 +215,7 @@ class ProductLambdaRouterIntegrationTest {
 
         APIGatewayProxyResponseEvent invalidCodeResponse = productHttpHandler.apply(invalidCodeRegister);
         assertThat(invalidCodeResponse.getStatusCode()).isEqualTo(400);
+        assertThat(readText(invalidCodeResponse.getBody(), "message")).isEqualTo("Invalid registration code");
 
         APIGatewayProxyRequestEvent register = new APIGatewayProxyRequestEvent()
                 .withHttpMethod("POST")
@@ -200,8 +246,8 @@ class ProductLambdaRouterIntegrationTest {
 
     private long readLong(String json, String field) {
         try {
-            JsonNode root = OBJECT_MAPPER.readTree(json);
-            return root.get(field).asLong();
+            JsonNode node = readNode(json, field);
+            return node.asLong();
         } catch (Exception ex) {
             throw new AssertionError("Unable to read field '" + field + "' from response: " + json, ex);
         }
@@ -219,14 +265,44 @@ class ProductLambdaRouterIntegrationTest {
 
     private String readText(String json, String field) {
         try {
-            JsonNode root = OBJECT_MAPPER.readTree(json);
-            return root.get(field).asText();
+            JsonNode node = readNode(json, field);
+            return node.asText();
         } catch (Exception ex) {
             throw new AssertionError("Unable to read field '" + field + "' from response: " + json, ex);
         }
     }
 
+    private JsonNode readNode(String json, String path) throws Exception {
+        JsonNode current = OBJECT_MAPPER.readTree(json);
+        for (String segment : path.split("\\.")) {
+            current = current.get(segment);
+            if (current == null) {
+                throw new AssertionError("Path segment not found: " + segment);
+            }
+        }
+        return current;
+    }
+
     private Map<String, String> authHeaders(String token) {
         return Map.of("Authorization", "Bearer " + token);
+    }
+
+    private String samplePhotoBase64() {
+        try {
+            BufferedImage image = new BufferedImage(1600, 1000, BufferedImage.TYPE_INT_RGB);
+            for (int x = 0; x < image.getWidth(); x++) {
+                for (int y = 0; y < image.getHeight(); y++) {
+                    int red = (x * 255) / image.getWidth();
+                    int green = (y * 255) / image.getHeight();
+                    int blue = (red + green) / 2;
+                    image.setRGB(x, y, new Color(red, green, blue).getRGB());
+                }
+            }
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            ImageIO.write(image, "png", output);
+            return Base64.getEncoder().encodeToString(output.toByteArray());
+        } catch (Exception ex) {
+            throw new AssertionError("Unable to build test image", ex);
+        }
     }
 }

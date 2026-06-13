@@ -32,6 +32,9 @@ app:
       secret: ${APP_AUTH_JWT_SECRET:foodhelper-development-secret-change-me}
       issuer: ${APP_AUTH_JWT_ISSUER:foodhelper-api}
       expiration-seconds: ${APP_AUTH_JWT_EXPIRATION_SECONDS:3600}
+  media:
+    max-bytes: ${APP_MEDIA_MAX_BYTES:153600}
+    max-dimension: ${APP_MEDIA_MAX_DIMENSION:1280}
 
 ---
 spring:

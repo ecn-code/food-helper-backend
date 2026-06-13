@@ -1,5 +1,7 @@
 # FoodHelper Agent Notes
 
+Agents may only read, edit, create, delete, or otherwise operate on files under `/Users/elias/Documents/FoodHelper`. Do not inspect or modify sibling projects such as `/Users/elias/Documents/FoodHelperFront` unless the user explicitly updates this instruction.
+
 Before reporting that tests could not be executed because Docker or Testcontainers is unavailable, read and follow the repository skills under `.codex/skills`.
 
 For this project:

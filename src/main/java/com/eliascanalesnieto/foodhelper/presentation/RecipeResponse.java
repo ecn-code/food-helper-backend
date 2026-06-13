@@ -18,6 +18,8 @@ public record RecipeResponse(
         @Schema(description = "Assigned ingredient products")
         List<RecipeIngredientResponse> products,
         @Schema(description = "Linked derived product information when the recipe has created one")
-        RecipeDerivedProductResponse derivedProduct
+        RecipeDerivedProductResponse derivedProduct,
+        @Schema(description = "Optional photo metadata")
+        MediaResponse photo
 ) {
 }

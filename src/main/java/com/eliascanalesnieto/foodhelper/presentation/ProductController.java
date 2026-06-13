@@ -63,7 +63,8 @@ public class ProductController {
                 request.calories(),
                 request.carbohydrates(),
                 request.proteins(),
-                request.fats()
+                request.fats(),
+                request.photo() == null ? null : request.photo().toDomain()
         ));
     }
 
@@ -91,7 +92,8 @@ public class ProductController {
                 request.calories(),
                 request.carbohydrates(),
                 request.proteins(),
-                request.fats()
+                request.fats(),
+                request.photo() == null ? null : request.photo().toDomain()
         ));
     }
 

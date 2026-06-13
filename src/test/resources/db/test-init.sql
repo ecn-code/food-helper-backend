@@ -2,7 +2,18 @@ CREATE TABLE IF NOT EXISTS products (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(150) NOT NULL UNIQUE,
     description TEXT NOT NULL,
-    grams_per_unit NUMERIC(10,2) NOT NULL DEFAULT 100.00
+    grams_per_unit NUMERIC(10,2) NOT NULL DEFAULT 100.00,
+    media_id BIGINT
+);
+
+CREATE TABLE IF NOT EXISTS media (
+    id BIGSERIAL PRIMARY KEY,
+    file_name VARCHAR(255) NOT NULL,
+    content_type VARCHAR(100) NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    data BYTEA NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS nutritional_values (
@@ -21,7 +32,8 @@ CREATE TABLE IF NOT EXISTS recipes (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(150) NOT NULL UNIQUE,
     description TEXT NOT NULL,
-    instructions TEXT NOT NULL
+    instructions TEXT NOT NULL,
+    media_id BIGINT
 );
 
 CREATE TABLE IF NOT EXISTS recipe_products (
@@ -126,3 +138,33 @@ CREATE TABLE IF NOT EXISTS app_users (
     password_hash VARCHAR(255) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_name = 'fk_products_media'
+          AND table_name = 'products'
+    ) THEN
+        ALTER TABLE products
+            ADD CONSTRAINT fk_products_media
+                FOREIGN KEY (media_id)
+                REFERENCES media(id);
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_name = 'fk_recipes_media'
+          AND table_name = 'recipes'
+    ) THEN
+        ALTER TABLE recipes
+            ADD CONSTRAINT fk_recipes_media
+                FOREIGN KEY (media_id)
+                REFERENCES media(id);
+    END IF;
+END $$;

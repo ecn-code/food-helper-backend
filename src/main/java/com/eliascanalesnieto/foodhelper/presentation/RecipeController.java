@@ -51,7 +51,8 @@ public class RecipeController {
                 request.name(),
                 request.description(),
                 request.instructions(),
-                toDomainIngredients(request.products())
+                toDomainIngredients(request.products()),
+                request.photo() == null ? null : request.photo().toDomain()
         ));
     }
 
@@ -76,7 +77,8 @@ public class RecipeController {
                 request.name(),
                 request.description(),
                 request.instructions(),
-                toDomainIngredients(request.products())
+                toDomainIngredients(request.products()),
+                request.photo() == null ? null : request.photo().toDomain()
         ));
     }
 

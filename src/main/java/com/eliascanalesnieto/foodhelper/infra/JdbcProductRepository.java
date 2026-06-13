@@ -1,5 +1,6 @@
 package com.eliascanalesnieto.foodhelper.infra;
 
+import com.eliascanalesnieto.foodhelper.domain.Media;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
@@ -26,6 +27,12 @@ public class JdbcProductRepository implements ProductRepository {
                    p.name,
                    p.description,
                    p.grams_per_unit,
+                   m.id AS media_id,
+                   m.file_name,
+                   m.content_type,
+                   m.size_bytes,
+                   m.width,
+                   m.height,
                    nv.product_id,
                    nv.calories,
                    nv.carbohydrates,
@@ -33,6 +40,7 @@ public class JdbcProductRepository implements ProductRepository {
                    nv.fats
             FROM products p
             JOIN nutritional_values nv ON nv.product_id = p.id
+            LEFT JOIN media m ON m.id = p.media_id
             """;
 
     private final ProductCrudRepository productRepository;
@@ -43,7 +51,13 @@ public class JdbcProductRepository implements ProductRepository {
     @Transactional
     public Product create(Product product) {
         try {
-            ProductEntity savedProduct = productRepository.save(new ProductEntity(null, product.getName(), product.getDescription(), product.getGramsPerUnit()));
+            ProductEntity savedProduct = productRepository.save(new ProductEntity(
+                    null,
+                    product.getName(),
+                    product.getDescription(),
+                    product.getGramsPerUnit(),
+                    mediaId(product)
+            ));
             NutritionalValuesEntity savedValues = upsertNutritionalValues(savedProduct.id(), product.getNutritionalValues());
             return toDomain(savedProduct, savedValues);
         } catch (DataIntegrityViolationException ex) {
@@ -58,7 +72,13 @@ public class JdbcProductRepository implements ProductRepository {
             throw new ResourceNotFoundException("Product not found");
         }
         try {
-            ProductEntity savedProduct = productRepository.save(new ProductEntity(id, product.getName(), product.getDescription(), product.getGramsPerUnit()));
+            ProductEntity savedProduct = productRepository.save(new ProductEntity(
+                    id,
+                    product.getName(),
+                    product.getDescription(),
+                    product.getGramsPerUnit(),
+                    mediaId(product)
+            ));
             NutritionalValuesEntity savedValues = upsertNutritionalValues(id, product.getNutritionalValues());
             return toDomain(savedProduct, savedValues);
         } catch (DataIntegrityViolationException ex) {
@@ -119,6 +139,9 @@ public class JdbcProductRepository implements ProductRepository {
                 .name(product.name())
                 .description(product.description())
                 .gramsPerUnit(product.gramsPerUnit())
+                .photo(product.mediaId() == null ? null : Media.builder()
+                        .id(product.mediaId())
+                        .build())
                 .nutritionalValues(NutritionalValues.builder()
                         .productId(values.productId())
                         .calories(values.calories())
@@ -155,6 +178,7 @@ public class JdbcProductRepository implements ProductRepository {
                 .name(rs.getString("name"))
                 .description(rs.getString("description"))
                 .gramsPerUnit(rs.getBigDecimal("grams_per_unit"))
+                .photo(mapMedia(rs))
                 .nutritionalValues(NutritionalValues.builder()
                         .productId(rs.getLong("product_id"))
                         .calories(rs.getBigDecimal("calories"))
@@ -162,6 +186,25 @@ public class JdbcProductRepository implements ProductRepository {
                         .proteins(rs.getBigDecimal("proteins"))
                         .fats(rs.getBigDecimal("fats"))
                         .build())
+                .build();
+    }
+
+    private Long mediaId(Product product) {
+        return product.getPhoto() == null ? null : product.getPhoto().getId();
+    }
+
+    private Media mapMedia(ResultSet rs) throws SQLException {
+        long mediaId = rs.getLong("media_id");
+        if (rs.wasNull()) {
+            return null;
+        }
+        return Media.builder()
+                .id(mediaId)
+                .fileName(rs.getString("file_name"))
+                .contentType(rs.getString("content_type"))
+                .sizeBytes(rs.getInt("size_bytes"))
+                .width(rs.getInt("width"))
+                .height(rs.getInt("height"))
                 .build();
     }
 }

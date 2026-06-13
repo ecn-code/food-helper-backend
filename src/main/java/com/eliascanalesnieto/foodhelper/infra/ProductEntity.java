@@ -10,6 +10,7 @@ public record ProductEntity(
         @Id Long id,
         @Column("name") String name,
         @Column("description") String description,
-        @Column("grams_per_unit") BigDecimal gramsPerUnit
+        @Column("grams_per_unit") BigDecimal gramsPerUnit,
+        @Column("media_id") Long mediaId
 ) {
 }

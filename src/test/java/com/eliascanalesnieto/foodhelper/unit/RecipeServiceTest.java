@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.eliascanalesnieto.foodhelper.application.MediaService;
 import com.eliascanalesnieto.foodhelper.application.RecipeService;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.Product;
@@ -35,6 +36,9 @@ class RecipeServiceTest {
     @Mock
     private ProductRepository productRepository;
 
+    @Mock
+    private MediaService mediaService;
+
     @InjectMocks
     private RecipeService service;
 
@@ -56,7 +60,8 @@ class RecipeServiceTest {
                 List.of(
                         ingredient(1L, "150"),
                         ingredient(2L, "200")
-                )
+                ),
+                null
         );
 
         assertThat(created.getId()).isEqualTo(10L);
@@ -73,6 +78,13 @@ class RecipeServiceTest {
         when(productRepository.findByIds(List.of(1L))).thenReturn(List.of(
                 product(1L, "Chicken", "Chicken breast", "165", "0", "31", "3.6")
         ));
+        when(recipeRepository.findById(7L)).thenReturn(Recipe.builder()
+                .id(7L)
+                .name("Chicken prep")
+                .description("Original description")
+                .instructions("Original instructions")
+                .ingredients(List.of(ingredient(1L, "200")))
+                .build());
         when(recipeRepository.update(eq(7L), any(Recipe.class))).thenAnswer(invocation -> {
             Recipe recipe = invocation.getArgument(1);
             return recipe.toBuilder().id(7L).build();
@@ -94,7 +106,8 @@ class RecipeServiceTest {
                 "Chicken prep",
                 "Updated description",
                 "Updated instructions",
-                List.of(ingredient(1L, "250"))
+                List.of(ingredient(1L, "250")),
+                null
         );
 
         ArgumentCaptor<Product> productCaptor = ArgumentCaptor.forClass(Product.class);

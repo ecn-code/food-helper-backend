@@ -1,5 +1,6 @@
 package com.eliascanalesnieto.foodhelper.infra;
 
+import com.eliascanalesnieto.foodhelper.domain.Media;
 import com.eliascanalesnieto.foodhelper.domain.Recipe;
 import com.eliascanalesnieto.foodhelper.domain.RecipeDerivedProduct;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
@@ -64,6 +65,9 @@ public class JdbcRecipeRepository implements RecipeRepository {
                 .name(recipe.name())
                 .description(recipe.description())
                 .instructions(recipe.instructions())
+                .photo(recipe.mediaId() == null ? null : Media.builder()
+                        .id(recipe.mediaId())
+                        .build())
                 .ingredients(ingredients)
                 .build();
     }
@@ -107,7 +111,13 @@ public class JdbcRecipeRepository implements RecipeRepository {
     }
 
     private RecipeEntity toEntity(Long id, Recipe recipe) {
-        return new RecipeEntity(id, recipe.getName(), recipe.getDescription(), recipe.getInstructions());
+        return new RecipeEntity(
+                id,
+                recipe.getName(),
+                recipe.getDescription(),
+                recipe.getInstructions(),
+                recipe.getPhoto() == null ? null : recipe.getPhoto().getId()
+        );
     }
 
     private void saveIngredients(Long recipeId, List<RecipeIngredient> ingredients) {

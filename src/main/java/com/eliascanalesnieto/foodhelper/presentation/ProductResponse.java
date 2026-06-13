@@ -14,6 +14,8 @@ public record ProductResponse(
         @Schema(description = "Default grams represented by one unit of this product", example = "150")
         BigDecimal gramsPerUnit,
         @Schema(description = "Product nutritional values")
-        NutritionalValuesResponse nutritionalValues
+        NutritionalValuesResponse nutritionalValues,
+        @Schema(description = "Optional photo metadata")
+        MediaResponse photo
 ) {
 }

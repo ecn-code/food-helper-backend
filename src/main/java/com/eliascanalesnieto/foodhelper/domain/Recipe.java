@@ -14,4 +14,5 @@ public class Recipe {
     List<RecipeIngredient> ingredients;
     NutritionalValues nutritionalValues;
     RecipeDerivedProduct derivedProduct;
+    Media photo;
 }
