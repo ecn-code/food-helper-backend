@@ -5,6 +5,7 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent
 import com.eliascanalesnieto.foodhelper.application.AuthService;
 import com.eliascanalesnieto.foodhelper.application.JwtService;
 import com.eliascanalesnieto.foodhelper.application.MediaService;
+import com.eliascanalesnieto.foodhelper.application.MediaUrlService;
 import com.eliascanalesnieto.foodhelper.application.ProductService;
 import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
 import com.eliascanalesnieto.foodhelper.application.RecipeService;
@@ -51,6 +52,7 @@ public class LambdaHttpRouter {
     private final AuthService authService;
     private final JwtService jwtService;
     private final MediaService mediaService;
+    private final MediaUrlService mediaUrlService;
     private final ProductApiMapper mapper;
     private final ProposedWeekMenuApiMapper proposedWeekMenuMapper;
     private final ObjectMapper objectMapper;
@@ -91,6 +93,16 @@ public class LambdaHttpRouter {
             return json(200, authService.login(body.username(), body.password()));
         }
 
+        if (path != null && path.startsWith("/api/v1/media/")) {
+            Long id = parseId(path);
+            if ("GET".equals(method)) {
+                if (!isAuthorized(request) && !isSignedMediaRequest(id, request)) {
+                    return json(401, Map.of("message", "Missing or invalid Bearer token"));
+                }
+                return binary(mediaService.findById(id));
+            }
+        }
+
         if (!isAuthorized(request)) {
             return json(401, Map.of("message", "Missing or invalid Bearer token"));
         }
@@ -122,6 +134,10 @@ public class LambdaHttpRouter {
             ).stream().map(mapper::toResponse).toList());
         }
 
+        if ("GET".equals(method) && "/api/v1/recipes".equals(path)) {
+            return json(200, recipeService.findAll().stream().map(mapper::toResponse).toList());
+        }
+
         if ("POST".equals(method) && "/api/v1/recipes".equals(path)) {
             CreateRecipeRequest body = parseRecipeCreate(request.getBody());
             return json(201, mapper.toResponse(recipeService.create(
@@ -131,13 +147,6 @@ public class LambdaHttpRouter {
                     toDomainIngredients(body.products()),
                     body.photo() == null ? null : body.photo().toDomain()
             )));
-        }
-
-        if (path != null && path.startsWith("/api/v1/media/")) {
-            Long id = parseId(path);
-            if ("GET".equals(method)) {
-                return binary(mediaService.findById(id));
-            }
         }
 
         if (path != null && path.startsWith("/api/v1/products/")) {
@@ -362,6 +371,10 @@ public class LambdaHttpRouter {
             return false;
         }
         return jwtService.isValid(authorization.substring("Bearer ".length()));
+    }
+
+    private boolean isSignedMediaRequest(Long mediaId, APIGatewayProxyRequestEvent request) {
+        return mediaUrlService.isValid(mediaId, queryParam(request, "expiresAt"), queryParam(request, "signature"));
     }
 
     private String header(APIGatewayProxyRequestEvent request, String name) {

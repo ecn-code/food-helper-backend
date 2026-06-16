@@ -27,6 +27,7 @@ public class AuthService {
         this.passwordHasher = passwordHasher;
         this.jwtService = jwtService;
         this.registrationCode = registrationCode;
+        System.out.println("[DEBUG] APP_AUTH_REGISTRATION_CODE=" + registrationCode);
     }
 
     @Transactional

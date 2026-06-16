@@ -4,6 +4,7 @@ import com.eliascanalesnieto.foodhelper.application.RecipeService;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
 import com.eliascanalesnieto.foodhelper.presentation.error.ApiError;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -14,6 +15,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -25,10 +27,23 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/recipes")
 @RequiredArgsConstructor
-@Tag(name = "Recipes", description = "Create, update, delete, and derive product operations for recipes")
+@Tag(name = "Recipes", description = "List, create, update, delete, and derive product operations for recipes")
 public class RecipeController {
     private final RecipeService service;
     private final ProductApiMapper mapper;
+
+    @GetMapping
+    @Operation(
+            summary = "List recipes",
+            description = "Returns all recipes with their calculated nutritional totals, ingredients, and optional derived product information."
+    )
+    @ApiResponse(responseCode = "200", description = "Recipes returned",
+            content = @Content(array = @ArraySchema(schema = @Schema(implementation = RecipeResponse.class))))
+    public List<RecipeResponse> findAll() {
+        return service.findAll().stream()
+                .map(mapper::toResponse)
+                .toList();
+    }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)

@@ -38,6 +38,7 @@ Function definition:
 - `POST /api/v1/products`
 - `PUT /api/v1/products/{id}`
 - `DELETE /api/v1/products/{id}`
+- `GET /api/v1/recipes`
 - `POST /api/v1/recipes`
 - `PUT /api/v1/recipes/{id}`
 - `DELETE /api/v1/recipes/{id}`

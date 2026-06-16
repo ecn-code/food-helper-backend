@@ -188,6 +188,48 @@ class ProductRestIntegrationTest {
     }
 
     @Test
+    void listRecipesShouldReturnCreatedRecipesAndExposeCorsForLocalFrontend() {
+        String suffix = Long.toString(System.nanoTime());
+        String productsUrl = "http://localhost:" + port + "/api/v1/products";
+        String recipesUrl = "http://localhost:" + port + "/api/v1/recipes";
+        String recipeName = "Curry " + suffix;
+        Long chickenId = createProduct(productsUrl, "Recipe Chicken " + suffix, "Chicken breast", "165", "0", "31", "3.6");
+
+        ResponseEntity<RecipeResponse> created = postAuthorized(
+                recipesUrl,
+                new CreateRecipeRequest(
+                        recipeName,
+                        "Creamy curry " + suffix,
+                        "Cook everything together.",
+                        List.of(new RecipeIngredientAssignmentRequest(chickenId, new BigDecimal("200")))
+                ),
+                RecipeResponse.class
+        );
+
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        HttpHeaders headers = authHeaders();
+        headers.add(HttpHeaders.ORIGIN, "http://localhost:5173");
+
+        ResponseEntity<RecipeResponse[]> listed = restTemplate.exchange(
+                recipesUrl,
+                HttpMethod.GET,
+                new HttpEntity<>(null, headers),
+                RecipeResponse[].class
+        );
+
+        assertThat(listed.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(listed.getHeaders().getFirst(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)).isEqualTo("http://localhost:5173");
+        assertThat(listed.getBody()).isNotNull();
+        assertThat(java.util.Arrays.stream(listed.getBody()).map(RecipeResponse::name)).contains(recipeName);
+        RecipeResponse listedRecipe = java.util.Arrays.stream(listed.getBody())
+                .filter(recipe -> recipe.name().equals(recipeName))
+                .findFirst()
+                .orElseThrow();
+        assertThat(listedRecipe.products()).hasSize(1);
+    }
+
+    @Test
     void healthShouldBeUp() {
         ResponseEntity<String> response = restTemplate.getForEntity("http://localhost:" + port + "/api/v1/health", String.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -450,20 +492,21 @@ class ProductRestIntegrationTest {
         assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(created.getBody()).isNotNull();
         assertThat(created.getBody().photo()).isNotNull();
-        assertThat(created.getBody().photo().contentType()).isEqualTo("image/jpeg");
-        assertThat(created.getBody().photo().sizeBytes()).isLessThanOrEqualTo(153600);
+        assertThat(created.getBody().photo()).startsWith("/api/v1/media/");
+        assertThat(created.getBody().photo()).contains("expiresAt=");
+        assertThat(created.getBody().photo()).contains("signature=");
 
         ResponseEntity<byte[]> mediaResponse = restTemplate.exchange(
-                "http://localhost:" + port + "/api/v1/media/" + created.getBody().photo().id(),
+                "http://localhost:" + port + created.getBody().photo(),
                 HttpMethod.GET,
-                authorizedEntity(null),
+                HttpEntity.EMPTY,
                 byte[].class
         );
 
         assertThat(mediaResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(mediaResponse.getHeaders().getContentType()).isEqualTo(org.springframework.http.MediaType.IMAGE_JPEG);
         assertThat(mediaResponse.getBody()).isNotNull();
-        assertThat(mediaResponse.getBody().length).isEqualTo(created.getBody().photo().sizeBytes());
+        assertThat(mediaResponse.getBody().length).isLessThanOrEqualTo(153600);
     }
 
     @Test
@@ -487,8 +530,9 @@ class ProductRestIntegrationTest {
         assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(created.getBody()).isNotNull();
         assertThat(created.getBody().photo()).isNotNull();
-        assertThat(created.getBody().photo().contentType()).isEqualTo("image/jpeg");
-        assertThat(created.getBody().photo().sizeBytes()).isLessThanOrEqualTo(153600);
+        assertThat(created.getBody().photo()).startsWith("/api/v1/media/");
+        assertThat(created.getBody().photo()).contains("expiresAt=");
+        assertThat(created.getBody().photo()).contains("signature=");
     }
 
     private Long createProduct(String productsUrl, String name, String description, String calories, String carbohydrates, String proteins, String fats) {
@@ -560,4 +604,5 @@ class ProductRestIntegrationTest {
             throw new AssertionError("Unable to build test image", ex);
         }
     }
+
 }

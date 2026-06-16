@@ -15,6 +15,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -35,7 +36,11 @@ public class MediaController {
             @ApiResponse(responseCode = "404", description = "Media not found",
                     content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    public ResponseEntity<byte[]> download(@PathVariable Long id) {
+    public ResponseEntity<byte[]> download(
+            @PathVariable Long id,
+            @RequestParam(required = false) String expiresAt,
+            @RequestParam(required = false) String signature
+    ) {
         Media media = mediaService.findById(id);
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(media.getContentType()))

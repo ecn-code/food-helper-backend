@@ -1,5 +1,6 @@
 package com.eliascanalesnieto.foodhelper.presentation;
 
+import com.eliascanalesnieto.foodhelper.application.MediaUrlService;
 import com.eliascanalesnieto.foodhelper.domain.Media;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.Product;
@@ -7,23 +8,34 @@ import com.eliascanalesnieto.foodhelper.domain.Recipe;
 import com.eliascanalesnieto.foodhelper.domain.RecipeDerivedProduct;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
 import com.eliascanalesnieto.foodhelper.domain.StockEntry;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 @Mapper(componentModel = "spring")
-public interface ProductApiMapper {
-    ProductResponse toResponse(Product product);
+public abstract class ProductApiMapper {
+    @Autowired
+    protected MediaUrlService mediaUrlService;
 
-    MediaResponse toResponse(Media media);
+    @Mapping(target = "photo", expression = "java(toSignedPhotoUrl(product.getPhoto()))")
+    public abstract ProductResponse toResponse(Product product);
 
-    NutritionalValuesResponse toResponse(NutritionalValues nutritionalValues);
+    public abstract NutritionalValuesResponse toResponse(NutritionalValues nutritionalValues);
 
+    @Mapping(target = "photo", expression = "java(toSignedPhotoUrl(recipe.getPhoto()))")
     @Mapping(target = "products", source = "ingredients")
-    RecipeResponse toResponse(Recipe recipe);
+    public abstract RecipeResponse toResponse(Recipe recipe);
 
-    RecipeIngredientResponse toResponse(RecipeIngredient ingredient);
+    public abstract RecipeIngredientResponse toResponse(RecipeIngredient ingredient);
 
-    RecipeDerivedProductResponse toResponse(RecipeDerivedProduct derivedProduct);
+    public abstract RecipeDerivedProductResponse toResponse(RecipeDerivedProduct derivedProduct);
 
-    StockEntryResponse toResponse(StockEntry stockEntry);
+    public abstract StockEntryResponse toResponse(StockEntry stockEntry);
+
+    protected String toSignedPhotoUrl(Media media) {
+        if (media == null) {
+            return null;
+        }
+        return mediaUrlService.signedUrl(media);
+    }
 }

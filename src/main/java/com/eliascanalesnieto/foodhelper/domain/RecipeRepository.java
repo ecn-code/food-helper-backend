@@ -1,9 +1,12 @@
 package com.eliascanalesnieto.foodhelper.domain;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 public interface RecipeRepository {
+    List<Recipe> findAll();
+
     Recipe create(Recipe recipe);
 
     Recipe update(Long id, Recipe recipe);

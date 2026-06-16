@@ -12,7 +12,7 @@ import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
         info = @Info(
                 title = "FoodHelper API",
                 version = "v1",
-                description = "API for managing products and their nutritional values.",
+                description = "API for managing products, recipes, and nutritional calculations.",
                 contact = @Contact(name = "FoodHelper"),
                 license = @License(name = "Proprietary")
         ),

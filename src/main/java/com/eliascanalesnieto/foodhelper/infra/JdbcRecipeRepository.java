@@ -8,22 +8,51 @@ import com.eliascanalesnieto.foodhelper.domain.RecipeRepository;
 import com.eliascanalesnieto.foodhelper.presentation.error.DuplicateResourceException;
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
 import java.math.BigDecimal;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.stream.StreamSupport;
 
 @Repository
 @RequiredArgsConstructor
 public class JdbcRecipeRepository implements RecipeRepository {
+    private static final String SELECT_RECIPES_WITH_MEDIA = """
+            SELECT r.id,
+                   r.name,
+                   r.description,
+                   r.instructions,
+                   r.media_id,
+                   m.file_name,
+                   m.content_type,
+                   m.size_bytes,
+                   m.width,
+                   m.height
+            FROM recipes r
+            LEFT JOIN media m ON m.id = r.media_id
+            """;
+
     private final RecipeCrudRepository recipeRepository;
     private final RecipeIngredientCrudRepository recipeIngredientRepository;
     private final RecipeProductOriginCrudRepository recipeProductOriginRepository;
     private final NamedParameterJdbcTemplate jdbcTemplate;
+
+    @Override
+    public List<Recipe> findAll() {
+        return StreamSupport.stream(recipeRepository.findAll().spliterator(), false)
+                .map(RecipeEntity::id)
+                .sorted(Comparator.naturalOrder())
+                .map(this::findById)
+                .toList();
+    }
 
     @Override
     @Transactional
@@ -55,20 +84,16 @@ public class JdbcRecipeRepository implements RecipeRepository {
 
     @Override
     public Recipe findById(Long id) {
-        RecipeEntity recipe = recipeRepository.findById(id)
+        Recipe recipe = jdbcTemplate.query(SELECT_RECIPES_WITH_MEDIA + " WHERE r.id = :id",
+                        new MapSqlParameterSource("id", id),
+                        recipeRowMapper())
+                .stream()
+                .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Recipe not found"));
-        List<RecipeIngredient> ingredients = recipeIngredientRepository.findAllByRecipeId(id).stream()
-                .map(this::toDomain)
-                .toList();
-        return Recipe.builder()
-                .id(recipe.id())
-                .name(recipe.name())
-                .description(recipe.description())
-                .instructions(recipe.instructions())
-                .photo(recipe.mediaId() == null ? null : Media.builder()
-                        .id(recipe.mediaId())
-                        .build())
-                .ingredients(ingredients)
+        return recipe.toBuilder()
+                .ingredients(recipeIngredientRepository.findAllByRecipeId(id).stream()
+                        .map(this::toDomain)
+                        .toList())
                 .build();
     }
 
@@ -138,6 +163,31 @@ public class JdbcRecipeRepository implements RecipeRepository {
                 .productId(entity.productId())
                 .producedGrams(entity.producedGrams())
                 .gramsPerUnit(entity.gramsPerUnit())
+                .build();
+    }
+
+    private RowMapper<Recipe> recipeRowMapper() {
+        return (rs, rowNum) -> Recipe.builder()
+                .id(rs.getLong("id"))
+                .name(rs.getString("name"))
+                .description(rs.getString("description"))
+                .instructions(rs.getString("instructions"))
+                .photo(mapMedia(rs))
+                .build();
+    }
+
+    private Media mapMedia(ResultSet rs) throws SQLException {
+        long mediaId = rs.getLong("media_id");
+        if (rs.wasNull()) {
+            return null;
+        }
+        return Media.builder()
+                .id(mediaId)
+                .fileName(rs.getString("file_name"))
+                .contentType(rs.getString("content_type"))
+                .sizeBytes(rs.getInt("size_bytes"))
+                .width(rs.getInt("width"))
+                .height(rs.getInt("height"))
                 .build();
     }
 }

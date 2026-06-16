@@ -9,6 +9,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.net.URI;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
 import java.util.function.Function;
@@ -93,6 +95,15 @@ class ProductLambdaRouterIntegrationTest {
         assertThat(recipeResponse.getBody()).contains("330.00");
         long recipeId = readLong(recipeResponse.getBody(), "id");
 
+        APIGatewayProxyRequestEvent listRecipes = new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/recipes")
+                .withHeaders(authHeaders(token));
+
+        APIGatewayProxyResponseEvent listRecipesResponse = productHttpHandler.apply(listRecipes);
+        assertThat(listRecipesResponse.getStatusCode()).isEqualTo(200);
+        assertThat(listRecipesResponse.getBody()).contains("Curry");
+
         APIGatewayProxyRequestEvent createDerivedProduct = new APIGatewayProxyRequestEvent()
                 .withHttpMethod("POST")
                 .withPath("/api/v1/recipes/" + recipeId + "/derived-product")
@@ -117,13 +128,15 @@ class ProductLambdaRouterIntegrationTest {
 
         APIGatewayProxyResponseEvent createResponse = productHttpHandler.apply(create);
         assertThat(createResponse.getStatusCode()).isEqualTo(201);
-        long mediaId = readLong(createResponse.getBody(), "photo.id");
-        assertThat(readText(createResponse.getBody(), "photo.contentType")).isEqualTo("image/jpeg");
+        String photo = readText(createResponse.getBody(), "photo");
+        assertThat(photo).startsWith("/api/v1/media/");
+        assertThat(photo).contains("signature=");
+        URI photoUri = URI.create(photo);
 
         APIGatewayProxyRequestEvent mediaDownload = new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")
-                .withPath("/api/v1/media/" + mediaId)
-                .withHeaders(authHeaders(token));
+                .withPath(photoUri.getPath())
+                .withQueryStringParameters(queryParams(photoUri.getQuery()));
 
         APIGatewayProxyResponseEvent mediaResponse = productHttpHandler.apply(mediaDownload);
         assertThat(mediaResponse.getStatusCode()).isEqualTo(200);
@@ -251,6 +264,12 @@ class ProductLambdaRouterIntegrationTest {
         } catch (Exception ex) {
             throw new AssertionError("Unable to read field '" + field + "' from response: " + json, ex);
         }
+    }
+
+    private Map<String, String> queryParams(String query) {
+        return Arrays.stream(query.split("&"))
+                .map(param -> param.split("=", 2))
+                .collect(java.util.stream.Collectors.toMap(parts -> parts[0], parts -> parts[1]));
     }
 
     private String registerAndReadToken() {

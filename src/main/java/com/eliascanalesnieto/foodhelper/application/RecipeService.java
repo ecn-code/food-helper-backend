@@ -65,6 +65,14 @@ public class RecipeService {
     }
 
     @Transactional(readOnly = true)
+    public List<Recipe> findAll() {
+        return recipeRepository.findAll().stream()
+                .map(this::enrichRecipe)
+                .map(this::attachDerivedProduct)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public Recipe findById(Long id) {
         return loadRecipe(id);
     }
