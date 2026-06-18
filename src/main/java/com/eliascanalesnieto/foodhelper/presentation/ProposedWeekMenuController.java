@@ -32,7 +32,7 @@ public class ProposedWeekMenuController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
             summary = "Create proposed week menu",
-            description = "Starts an empty proposed week menu with a date range. Proposed menus can contain only the days planned so far."
+            description = "Starts an empty proposed week menu with a date range. The range must fit within a single week, and proposed menus can contain only the days planned so far."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Proposed week menu created",
@@ -47,7 +47,7 @@ public class ProposedWeekMenuController {
     @GetMapping("/{id}")
     @Operation(
             summary = "Get proposed week menu",
-            description = "Returns one proposed week menu with ordered days, sections, products, and nutritional totals."
+            description = "Returns one proposed week menu with ordered days, configured day parts, products, nutritional totals, and a stock preview summary."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Proposed week menu returned",
@@ -62,7 +62,7 @@ public class ProposedWeekMenuController {
     @PutMapping("/{id}/days")
     @Operation(
             summary = "Create or replace proposed day menu",
-            description = "Creates or replaces one proposed day menu. Sections and products keep the explicit order supplied in the request."
+            description = "Creates or replaces one proposed day menu. Each selected day part can appear only once and products keep their explicit order."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Proposed week menu updated",

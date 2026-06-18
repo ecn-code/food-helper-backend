@@ -8,7 +8,9 @@ import lombok.Value;
 @Builder(toBuilder = true)
 public class ProposedWeekMenuSection {
     Long id;
+    Long dayPartId;
     String name;
+    String description;
     Integer sortOrder;
     List<ProposedWeekMenuProduct> products;
     NutritionalValues nutritionalValues;

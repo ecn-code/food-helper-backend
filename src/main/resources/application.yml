@@ -27,7 +27,7 @@ springdoc:
 
 app:
   auth:
-    registration-code: ${APP_AUTH_REGISTRATION_CODE}
+    registration-code: ${APP_AUTH_REGISTRATION_CODE:foodhelper-invite}
     jwt:
       secret: ${APP_AUTH_JWT_SECRET:foodhelper-development-secret-change-me}
       issuer: ${APP_AUTH_JWT_ISSUER:foodhelper-api}

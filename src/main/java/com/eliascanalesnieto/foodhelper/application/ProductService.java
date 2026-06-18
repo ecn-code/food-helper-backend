@@ -19,12 +19,13 @@ public class ProductService {
     private final MediaService mediaService;
 
     @Transactional
-    public Product create(String name, String description, BigDecimal gramsPerUnit, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, MediaUpload photoUpload) {
+    public Product create(String name, String description, BigDecimal gramsPerUnit, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, BigDecimal defaultPrice, MediaUpload photoUpload) {
         Media photo = mediaService.createOptimized(photoUpload);
         Product created = repository.create(Product.builder()
                 .name(name)
                 .description(description)
                 .gramsPerUnit(scale(gramsPerUnit))
+                .defaultPrice(scaleOptional(defaultPrice))
                 .nutritionalValues(buildNutritionalValues(calories, carbohydrates, proteins, fats))
                 .photo(photo)
                 .build());
@@ -34,13 +35,15 @@ public class ProductService {
     }
 
     @Transactional
-    public Product update(Long id, String name, String description, BigDecimal gramsPerUnit, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, MediaUpload photoUpload) {
+    public Product update(Long id, String name, String description, BigDecimal gramsPerUnit, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, BigDecimal defaultPrice, MediaUpload photoUpload) {
         Product existing = repository.findById(id);
         Media photo = photoUpload == null ? existing.getPhoto() : mediaService.createOptimized(photoUpload);
+        BigDecimal resolvedDefaultPrice = defaultPrice == null ? existing.getDefaultPrice() : scaleOptional(defaultPrice);
         Product updated = repository.update(id, Product.builder()
                 .name(name)
                 .description(description)
                 .gramsPerUnit(scale(gramsPerUnit))
+                .defaultPrice(resolvedDefaultPrice)
                 .nutritionalValues(buildNutritionalValues(calories, carbohydrates, proteins, fats))
                 .photo(photo)
                 .build());
@@ -55,6 +58,12 @@ public class ProductService {
     @Transactional(readOnly = true)
     public List<Product> findAll() {
         return repository.findAll();
+    }
+
+    @Transactional(readOnly = true)
+    public PageResult<Product> findPage(PaginationRequest pagination) {
+        List<Product> items = repository.findPage(pagination.offset(), pagination.size());
+        return new PageResult<>(items, pagination.page(), pagination.size(), repository.count());
     }
 
     @Transactional
@@ -78,6 +87,13 @@ public class ProductService {
     private BigDecimal scale(BigDecimal value) {
         if (value == null) {
             throw new IllegalArgumentException("Grams per unit is required");
+        }
+        return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal scaleOptional(BigDecimal value) {
+        if (value == null) {
+            return null;
         }
         return value.setScale(2, RoundingMode.HALF_UP);
     }

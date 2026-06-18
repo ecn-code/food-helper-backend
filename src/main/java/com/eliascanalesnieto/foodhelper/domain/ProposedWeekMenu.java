@@ -13,4 +13,5 @@ public class ProposedWeekMenu {
     LocalDate endDate;
     List<ProposedWeekMenuDay> days;
     NutritionalValues nutritionalValues;
+    ProposedWeekMenuStockSummary stockSummary;
 }

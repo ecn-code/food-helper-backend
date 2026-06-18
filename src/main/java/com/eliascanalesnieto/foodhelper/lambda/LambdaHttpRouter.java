@@ -6,9 +6,12 @@ import com.eliascanalesnieto.foodhelper.application.AuthService;
 import com.eliascanalesnieto.foodhelper.application.JwtService;
 import com.eliascanalesnieto.foodhelper.application.MediaService;
 import com.eliascanalesnieto.foodhelper.application.MediaUrlService;
+import com.eliascanalesnieto.foodhelper.application.PageResult;
+import com.eliascanalesnieto.foodhelper.application.PaginationRequest;
 import com.eliascanalesnieto.foodhelper.application.ProductService;
 import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
 import com.eliascanalesnieto.foodhelper.application.RecipeService;
+import com.eliascanalesnieto.foodhelper.application.StatsService;
 import com.eliascanalesnieto.foodhelper.application.StockService;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
@@ -20,8 +23,10 @@ import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateStockEntryRequest;
 import com.eliascanalesnieto.foodhelper.presentation.LoginRequest;
 import com.eliascanalesnieto.foodhelper.presentation.ProductApiMapper;
+import com.eliascanalesnieto.foodhelper.presentation.ProductPageResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuApiMapper;
 import com.eliascanalesnieto.foodhelper.presentation.RecipeIngredientAssignmentRequest;
+import com.eliascanalesnieto.foodhelper.presentation.RecipePageResponse;
 import com.eliascanalesnieto.foodhelper.presentation.RegisterRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpsertProposedWeekMenuDayRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateRecipeRequest;
@@ -36,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
@@ -43,12 +49,14 @@ import tools.jackson.databind.ObjectMapper;
 
 @Configuration
 @RequiredArgsConstructor
+@Slf4j
 public class LambdaHttpRouter {
 
     private final ProductService service;
     private final RecipeService recipeService;
     private final StockService stockService;
     private final ProposedWeekMenuService proposedWeekMenuService;
+    private final StatsService statsService;
     private final AuthService authService;
     private final JwtService jwtService;
     private final MediaService mediaService;
@@ -70,6 +78,7 @@ public class LambdaHttpRouter {
             } catch (IllegalArgumentException ex) {
                 return json(400, Map.of("message", ex.getMessage()));
             } catch (Exception ex) {
+                log.error("Lambda router error handling {} {}", request.getHttpMethod(), request.getPath(), ex);
                 return json(500, Map.of("message", "Internal server error"));
             }
         };
@@ -117,9 +126,14 @@ public class LambdaHttpRouter {
                     body.carbohydrates(),
                     body.proteins(),
                     body.fats(),
+                    body.defaultPrice(),
                     body.photo() == null ? null : body.photo().toDomain()
             );
             return json(201, mapper.toResponse(created));
+        }
+
+        if ("GET".equals(method) && "/api/v1/products".equals(path)) {
+            return json(200, toProductPage(service.findPage(parsePagination(request))));
         }
 
         if ("POST".equals(method) && "/api/v1/proposed-week-menus".equals(path)) {
@@ -134,8 +148,16 @@ public class LambdaHttpRouter {
             ).stream().map(mapper::toResponse).toList());
         }
 
+        if ("GET".equals(method) && "/api/v1/products/stats".equals(path)) {
+            return json(200, statsService.getProductStats());
+        }
+
         if ("GET".equals(method) && "/api/v1/recipes".equals(path)) {
-            return json(200, recipeService.findAll().stream().map(mapper::toResponse).toList());
+            return json(200, toRecipePage(recipeService.findPage(parsePagination(request))));
+        }
+
+        if ("GET".equals(method) && "/api/v1/recipes/stats".equals(path)) {
+            return json(200, statsService.getRecipeStats());
         }
 
         if ("POST".equals(method) && "/api/v1/recipes".equals(path)) {
@@ -157,6 +179,7 @@ public class LambdaHttpRouter {
                     return json(201, mapper.toResponse(stockService.create(
                             productId,
                             body.quantity(),
+                            body.price(),
                             body.expirationDate(),
                             body.entryDate()
                     )));
@@ -180,6 +203,7 @@ public class LambdaHttpRouter {
                         body.carbohydrates(),
                         body.proteins(),
                         body.fats(),
+                        body.defaultPrice(),
                         body.photo() == null ? null : body.photo().toDomain()
                 )));
             }
@@ -304,6 +328,24 @@ public class LambdaHttpRouter {
         return readBody(body, AdjustStockQuantityRequest.class);
     }
 
+    private PaginationRequest parsePagination(APIGatewayProxyRequestEvent request) {
+        return PaginationRequest.of(
+                parseOptionalInteger(queryParam(request, "page"), "page"),
+                parseOptionalInteger(queryParam(request, "size"), "size")
+        );
+    }
+
+    private Integer parseOptionalInteger(String value, String name) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Invalid " + name);
+        }
+    }
+
     private <T> T readBody(String body, Class<T> type) {
         if (!StringUtils.hasText(body)) {
             throw new IllegalArgumentException("Body is required");
@@ -334,6 +376,26 @@ public class LambdaHttpRouter {
                         .grams(product.grams())
                         .build())
                 .toList();
+    }
+
+    private ProductPageResponse toProductPage(PageResult<Product> page) {
+        return new ProductPageResponse(
+                page.items().stream().map(mapper::toResponse).toList(),
+                page.page(),
+                page.size(),
+                page.totalElements(),
+                page.totalPages()
+        );
+    }
+
+    private RecipePageResponse toRecipePage(PageResult<com.eliascanalesnieto.foodhelper.domain.Recipe> page) {
+        return new RecipePageResponse(
+                page.items().stream().map(mapper::toResponse).toList(),
+                page.page(),
+                page.size(),
+                page.totalElements(),
+                page.totalPages()
+        );
     }
 
     private APIGatewayProxyResponseEvent json(int status, Object body) {

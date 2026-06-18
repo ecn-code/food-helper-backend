@@ -10,6 +10,7 @@ public class Product {
     String name;
     String description;
     java.math.BigDecimal gramsPerUnit;
+    java.math.BigDecimal defaultPrice;
     NutritionalValues nutritionalValues;
     Media photo;
 }

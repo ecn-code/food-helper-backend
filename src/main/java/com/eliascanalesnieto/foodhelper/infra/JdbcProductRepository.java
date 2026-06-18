@@ -27,6 +27,7 @@ public class JdbcProductRepository implements ProductRepository {
                    p.name,
                    p.description,
                    p.grams_per_unit,
+                   p.default_price,
                    m.id AS media_id,
                    m.file_name,
                    m.content_type,
@@ -56,6 +57,7 @@ public class JdbcProductRepository implements ProductRepository {
                     product.getName(),
                     product.getDescription(),
                     product.getGramsPerUnit(),
+                    product.getDefaultPrice(),
                     mediaId(product)
             ));
             NutritionalValuesEntity savedValues = upsertNutritionalValues(savedProduct.id(), product.getNutritionalValues());
@@ -77,6 +79,7 @@ public class JdbcProductRepository implements ProductRepository {
                     product.getName(),
                     product.getDescription(),
                     product.getGramsPerUnit(),
+                    product.getDefaultPrice(),
                     mediaId(product)
             ));
             NutritionalValuesEntity savedValues = upsertNutritionalValues(id, product.getNutritionalValues());
@@ -102,6 +105,22 @@ public class JdbcProductRepository implements ProductRepository {
     @Override
     public List<Product> findAll() {
         return jdbcTemplate.query(SELECT_PRODUCTS_WITH_VALUES + " ORDER BY p.id", productRowMapper());
+    }
+
+    @Override
+    public List<Product> findPage(int offset, int limit) {
+        return jdbcTemplate.query(
+                SELECT_PRODUCTS_WITH_VALUES + " ORDER BY p.id LIMIT :limit OFFSET :offset",
+                new MapSqlParameterSource()
+                        .addValue("limit", limit)
+                        .addValue("offset", offset),
+                productRowMapper()
+        );
+    }
+
+    @Override
+    public long count() {
+        return productRepository.count();
     }
 
     @Override
@@ -139,6 +158,7 @@ public class JdbcProductRepository implements ProductRepository {
                 .name(product.name())
                 .description(product.description())
                 .gramsPerUnit(product.gramsPerUnit())
+                .defaultPrice(product.defaultPrice())
                 .photo(product.mediaId() == null ? null : Media.builder()
                         .id(product.mediaId())
                         .build())
@@ -178,6 +198,7 @@ public class JdbcProductRepository implements ProductRepository {
                 .name(rs.getString("name"))
                 .description(rs.getString("description"))
                 .gramsPerUnit(rs.getBigDecimal("grams_per_unit"))
+                .defaultPrice(rs.getBigDecimal("default_price"))
                 .photo(mapMedia(rs))
                 .nutritionalValues(NutritionalValues.builder()
                         .productId(rs.getLong("product_id"))

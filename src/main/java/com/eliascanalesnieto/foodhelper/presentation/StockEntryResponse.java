@@ -14,6 +14,8 @@ public record StockEntryResponse(
         String productName,
         @Schema(description = "Available quantity in this stock entry", example = "6.5")
         BigDecimal quantity,
+        @Schema(description = "Price paid for this stock entry", example = "4.99")
+        BigDecimal price,
         @Schema(description = "Stock expiration date when available", example = "2026-06-20", nullable = true)
         LocalDate expirationDate,
         @Schema(description = "Date when the stock entry was received", example = "2026-06-10")

@@ -55,6 +55,28 @@ public class JdbcRecipeRepository implements RecipeRepository {
     }
 
     @Override
+    public List<Recipe> findPage(int offset, int limit) {
+        return jdbcTemplate.query(
+                        SELECT_RECIPES_WITH_MEDIA + " ORDER BY r.id LIMIT :limit OFFSET :offset",
+                        new MapSqlParameterSource()
+                                .addValue("limit", limit)
+                                .addValue("offset", offset),
+                        recipeRowMapper())
+                .stream()
+                .map(recipe -> recipe.toBuilder()
+                        .ingredients(recipeIngredientRepository.findAllByRecipeId(recipe.getId()).stream()
+                                .map(this::toDomain)
+                                .toList())
+                        .build())
+                .toList();
+    }
+
+    @Override
+    public long count() {
+        return recipeRepository.count();
+    }
+
+    @Override
     @Transactional
     public Recipe create(Recipe recipe) {
         try {

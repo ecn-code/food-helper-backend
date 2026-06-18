@@ -11,7 +11,7 @@ import java.util.List;
 public record UpsertProposedWeekMenuDayRequest(
         @Schema(description = "Date of the proposed day menu", example = "2026-06-15")
         @NotNull LocalDate date,
-        @Schema(description = "Ordered sections for the day, such as lunch or snack")
+        @Schema(description = "Configured day parts selected for the day. Each day part can appear only once.")
         @NotEmpty List<@Valid ProposedWeekMenuSectionRequest> sections
 ) {
 }

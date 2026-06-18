@@ -24,6 +24,8 @@ public record UpdateProductRequest(
         @NotNull @PositiveOrZero BigDecimal proteins,
         @Schema(description = "Fats per 100 grams", example = "0.1")
         @NotNull @PositiveOrZero BigDecimal fats,
+        @Schema(description = "Optional default price for this product", example = "2.79", nullable = true)
+        @PositiveOrZero BigDecimal defaultPrice,
         @Schema(description = "Optional product photo that will be compressed before storage")
         @Valid PhotoUploadRequest photo
 ) {
@@ -36,6 +38,32 @@ public record UpdateProductRequest(
             BigDecimal proteins,
             BigDecimal fats
     ) {
-        this(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, null);
+        this(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, null, null);
+    }
+
+    public UpdateProductRequest(
+            String name,
+            String description,
+            BigDecimal gramsPerUnit,
+            BigDecimal calories,
+            BigDecimal carbohydrates,
+            BigDecimal proteins,
+            BigDecimal fats,
+            PhotoUploadRequest photo
+    ) {
+        this(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, null, photo);
+    }
+
+    public UpdateProductRequest(
+            String name,
+            String description,
+            BigDecimal gramsPerUnit,
+            BigDecimal calories,
+            BigDecimal carbohydrates,
+            BigDecimal proteins,
+            BigDecimal fats,
+            BigDecimal defaultPrice
+    ) {
+        this(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, defaultPrice, null);
     }
 }

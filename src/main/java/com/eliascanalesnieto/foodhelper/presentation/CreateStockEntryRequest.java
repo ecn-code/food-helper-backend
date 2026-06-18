@@ -3,6 +3,7 @@ package com.eliascanalesnieto.foodhelper.presentation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
@@ -10,6 +11,8 @@ import java.time.LocalDate;
 public record CreateStockEntryRequest(
         @Schema(description = "Available quantity for this stock entry", example = "6.5")
         @NotNull @Positive BigDecimal quantity,
+        @Schema(description = "Price paid for this stock entry", example = "4.99")
+        @NotNull @PositiveOrZero BigDecimal price,
         @Schema(description = "Stock expiration date when available", example = "2026-06-20", nullable = true)
         LocalDate expirationDate,
         @Schema(description = "Date when the stock entry was received", example = "2026-06-10")

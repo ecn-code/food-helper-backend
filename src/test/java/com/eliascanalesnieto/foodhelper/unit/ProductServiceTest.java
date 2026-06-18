@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -36,11 +37,13 @@ class ProductServiceTest {
 
     @Test
     void shouldCreateProduct() {
+        ArgumentCaptor<Product> productCaptor = ArgumentCaptor.forClass(Product.class);
         Product created = Product.builder()
                 .id(1L)
                 .name("Apple")
                 .description("Fresh apple")
                 .gramsPerUnit(new BigDecimal("150.00"))
+                .defaultPrice(new BigDecimal("2.49"))
                 .nutritionalValues(NutritionalValues.builder()
                         .productId(1L)
                         .calories(new BigDecimal("52"))
@@ -49,7 +52,7 @@ class ProductServiceTest {
                         .fats(new BigDecimal("0.2"))
                         .build())
                 .build();
-        when(repository.create(any(Product.class))).thenReturn(created);
+        when(repository.create(productCaptor.capture())).thenReturn(created);
 
         Product result = service.create(
                 "Apple",
@@ -59,6 +62,7 @@ class ProductServiceTest {
                 new BigDecimal("14"),
                 new BigDecimal("0.3"),
                 new BigDecimal("0.2"),
+                new BigDecimal("2.49"),
                 null
         );
 
@@ -66,6 +70,8 @@ class ProductServiceTest {
         assertThat(result.getName()).isEqualTo("Apple");
         assertThat(result.getDescription()).isEqualTo("Fresh apple");
         assertThat(result.getGramsPerUnit()).isEqualByComparingTo("150.00");
+        assertThat(result.getDefaultPrice()).isEqualByComparingTo("2.49");
+        assertThat(productCaptor.getValue().getDefaultPrice()).isEqualByComparingTo("2.49");
     }
 
     @Test
@@ -80,6 +86,7 @@ class ProductServiceTest {
                 .name("Apple")
                 .description("Fresh apple")
                 .gramsPerUnit(new BigDecimal("150.00"))
+                .defaultPrice(new BigDecimal("2.49"))
                 .nutritionalValues(NutritionalValues.builder()
                         .productId(1L)
                         .calories(new BigDecimal("52"))
@@ -99,6 +106,7 @@ class ProductServiceTest {
                 .name("Green Apple")
                 .description("Green apple")
                 .gramsPerUnit(new BigDecimal("140.00"))
+                .defaultPrice(new BigDecimal("2.79"))
                 .nutritionalValues(NutritionalValues.builder()
                         .productId(1L)
                         .calories(new BigDecimal("48"))
@@ -121,18 +129,20 @@ class ProductServiceTest {
                 new BigDecimal("13"),
                 new BigDecimal("0.4"),
                 new BigDecimal("0.1"),
+                new BigDecimal("2.79"),
                 photoUpload
         );
 
         assertThat(result.getPhoto()).isEqualTo(optimizedPhoto);
         verify(mediaService).createOptimized(photoUpload);
+        assertThat(result.getDefaultPrice()).isEqualByComparingTo("2.79");
     }
 
     @Test
     void shouldReturnAllProducts() {
         when(repository.findAll()).thenReturn(List.of(
-                Product.builder().id(1L).name("Apple").description("Fresh apple").gramsPerUnit(new BigDecimal("150")).build(),
-                Product.builder().id(2L).name("Banana").description("Fresh banana").gramsPerUnit(new BigDecimal("120")).build()
+                Product.builder().id(1L).name("Apple").description("Fresh apple").gramsPerUnit(new BigDecimal("150")).defaultPrice(new BigDecimal("2.49")).build(),
+                Product.builder().id(2L).name("Banana").description("Fresh banana").gramsPerUnit(new BigDecimal("120")).defaultPrice(new BigDecimal("1.79")).build()
         ));
 
         List<Product> result = service.findAll();

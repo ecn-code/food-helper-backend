@@ -27,7 +27,7 @@ Function definition:
 - PostgreSQL/Neon via `SPRING_DATASOURCE_*` environment variables
 
 ## Authentication
-- `APP_AUTH_REGISTRATION_CODE`: shared code required by `POST /api/v1/auth/register`
+- `APP_AUTH_REGISTRATION_CODE`: shared code required by `POST /api/v1/auth/register`, defaults to `foodhelper-invite` for local development
 - `APP_AUTH_JWT_SECRET`: signing secret for issued JWTs
 - `APP_AUTH_JWT_ISSUER`: JWT issuer, defaults to `foodhelper-api`
 - `APP_AUTH_JWT_EXPIRATION_SECONDS`: JWT lifetime, defaults to `3600`
@@ -36,13 +36,22 @@ Function definition:
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `POST /api/v1/products`
+- `GET /api/v1/products/stats`
 - `PUT /api/v1/products/{id}`
 - `DELETE /api/v1/products/{id}`
-- `GET /api/v1/recipes`
+- `GET /api/v1/products?page=&size=`
+- `GET /api/v1/recipes?page=&size=`
+- `GET /api/v1/recipes/stats`
 - `POST /api/v1/recipes`
 - `PUT /api/v1/recipes/{id}`
 - `DELETE /api/v1/recipes/{id}`
 - `POST /api/v1/recipes/{id}/derived-product`
+- `POST /api/v1/proposed-week-menus`
+- `GET /api/v1/proposed-week-menus/{id}`
+- `PUT /api/v1/proposed-week-menus/{id}/days`
+- `GET /api/v1/proposed-week-menu-day-parts`
+- `POST /api/v1/proposed-week-menu-day-parts`
+- `PUT /api/v1/proposed-week-menu-day-parts/{id}`
 - `POST /api/v1/products/{productId}/stock`
 - `GET /api/v1/products/{productId}/stock`
 - `GET /api/v1/stock`
@@ -54,12 +63,24 @@ Function definition:
 
 `Recipe` nutritional values are calculated from assigned ingredient grams and kept synchronized with the derived product created through `POST /api/v1/recipes/{id}/derived-product`.
 
+`Proposed week menus` are draft weekly plans with a start date, an end date, optional planned days, and selected reusable day parts for each planned day. Day parts are configured separately with a name, description, and sort order. The date range must span at most 7 days so the menu represents one week. Product grams can be supplied explicitly or inferred from `gramsPerUnit * units`, and nutritional totals are calculated for each product, section, day, and proposed menu. A day cannot repeat the same day part.
+
 `Stock` is stored as independent stock entries linked to products. Each entry keeps a positive quantity, a required entry date, and an optional expiration date. When a removal leaves a stock entry at zero, that entry is deleted.
 
 ## Swagger / OpenAPI
 - OpenAPI JSON: `/v3/api-docs`
+- Grouped OpenAPI JSON: `/v3/api-docs/{group}`
 - Swagger UI: `/swagger`
 - Offline static snapshot: `docs/openapi.yaml`
+
+Available OpenAPI groups:
+- `auth`
+- `health`
+- `media`
+- `products`
+- `recipes`
+- `stock`
+- `proposed-week-menus`
 
 Every new endpoint, and every change to request or response data in an existing endpoint, must be documented in Swagger/OpenAPI within the same change.
 

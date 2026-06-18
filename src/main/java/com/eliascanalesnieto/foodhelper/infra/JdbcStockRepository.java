@@ -27,6 +27,7 @@ public class JdbcStockRepository implements StockRepository {
                 null,
                 productId,
                 stockEntry.getQuantity(),
+                stockEntry.getPrice(),
                 stockEntry.getExpirationDate(),
                 stockEntry.getEntryDate()
         ));
@@ -42,6 +43,7 @@ public class JdbcStockRepository implements StockRepository {
                 existingEntry.id(),
                 existingEntry.productId(),
                 existingEntry.quantity().add(quantity),
+                existingEntry.price(),
                 existingEntry.expirationDate(),
                 existingEntry.entryDate()
         ));
@@ -65,6 +67,7 @@ public class JdbcStockRepository implements StockRepository {
                 existingEntry.id(),
                 existingEntry.productId(),
                 updatedQuantity,
+                existingEntry.price(),
                 existingEntry.expirationDate(),
                 existingEntry.entryDate()
         ));
@@ -77,6 +80,7 @@ public class JdbcStockRepository implements StockRepository {
                        s.product_id,
                        p.name AS product_name,
                        s.quantity,
+                       s.price,
                        s.expiration_date,
                        s.entry_date
                 FROM stock_entries s
@@ -109,6 +113,7 @@ public class JdbcStockRepository implements StockRepository {
                         .productId(rs.getLong("product_id"))
                         .productName(rs.getString("product_name"))
                         .quantity(rs.getBigDecimal("quantity"))
+                        .price(rs.getBigDecimal("price"))
                         .expirationDate(rs.getObject("expiration_date", LocalDate.class))
                         .entryDate(rs.getObject("entry_date", LocalDate.class))
                         .build())
@@ -121,6 +126,7 @@ public class JdbcStockRepository implements StockRepository {
                        s.product_id,
                        p.name AS product_name,
                        s.quantity,
+                       s.price,
                        s.expiration_date,
                        s.entry_date
                 FROM stock_entries s
@@ -133,6 +139,7 @@ public class JdbcStockRepository implements StockRepository {
                         .productId(rs.getLong("product_id"))
                         .productName(rs.getString("product_name"))
                         .quantity(rs.getBigDecimal("quantity"))
+                        .price(rs.getBigDecimal("price"))
                         .expirationDate(rs.getObject("expiration_date", LocalDate.class))
                         .entryDate(rs.getObject("entry_date", LocalDate.class))
                         .build())

@@ -5,6 +5,10 @@ import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenu;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDay;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuProduct;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuSection;
+import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockRequirement;
+import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummary;
+import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummaryCalories;
+import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummaryDayCalories;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -15,7 +19,8 @@ public class ProposedWeekMenuApiMapper {
                 menu.getStartDate(),
                 menu.getEndDate(),
                 menu.getDays().stream().map(this::toResponse).toList(),
-                toResponse(menu.getNutritionalValues())
+                toResponse(menu.getNutritionalValues()),
+                toResponse(menu.getStockSummary())
         );
     }
 
@@ -30,8 +35,7 @@ public class ProposedWeekMenuApiMapper {
 
     private ProposedWeekMenuSection toDomain(ProposedWeekMenuSectionRequest request) {
         return ProposedWeekMenuSection.builder()
-                .name(request.name())
-                .sortOrder(request.sortOrder())
+                .dayPartId(request.dayPartId())
                 .products(request.products().stream()
                         .map(this::toDomain)
                         .toList())
@@ -59,7 +63,9 @@ public class ProposedWeekMenuApiMapper {
     private ProposedWeekMenuSectionResponse toResponse(ProposedWeekMenuSection section) {
         return new ProposedWeekMenuSectionResponse(
                 section.getId(),
+                section.getDayPartId(),
                 section.getName(),
+                section.getDescription(),
                 section.getSortOrder(),
                 section.getProducts().stream().map(this::toResponse).toList(),
                 toResponse(section.getNutritionalValues())
@@ -83,6 +89,49 @@ public class ProposedWeekMenuApiMapper {
                 nutritionalValues.getCarbohydrates(),
                 nutritionalValues.getProteins(),
                 nutritionalValues.getFats()
+        );
+    }
+
+    private ProposedWeekMenuStockSummaryResponse toResponse(ProposedWeekMenuStockSummary stockSummary) {
+        if (stockSummary == null) {
+            return null;
+        }
+        return new ProposedWeekMenuStockSummaryResponse(
+                stockSummary.getPlannedDays(),
+                stockSummary.getDistinctProducts(),
+                toResponse(stockSummary.getCalories()),
+                stockSummary.getEstimatedCost(),
+                stockSummary.getRequirements().stream().map(this::toResponse).toList()
+        );
+    }
+
+    private ProposedWeekMenuStockSummaryCaloriesResponse toResponse(ProposedWeekMenuStockSummaryCalories calories) {
+        return new ProposedWeekMenuStockSummaryCaloriesResponse(
+                calories.getAveragePerPlannedDay(),
+                toResponse(calories.getMaxDay()),
+                toResponse(calories.getMinDay())
+        );
+    }
+
+    private ProposedWeekMenuStockSummaryDayCaloriesResponse toResponse(ProposedWeekMenuStockSummaryDayCalories dayCalories) {
+        if (dayCalories == null) {
+            return null;
+        }
+        return new ProposedWeekMenuStockSummaryDayCaloriesResponse(
+                dayCalories.getDate(),
+                dayCalories.getCalories()
+        );
+    }
+
+    private ProposedWeekMenuStockRequirementResponse toResponse(ProposedWeekMenuStockRequirement requirement) {
+        return new ProposedWeekMenuStockRequirementResponse(
+                requirement.getProductId(),
+                requirement.getProductName(),
+                requirement.getRequiredUnits(),
+                requirement.getAvailableUnits(),
+                requirement.getCoveredUnits(),
+                requirement.getMissingUnits(),
+                requirement.getEstimatedCost()
         );
     }
 }

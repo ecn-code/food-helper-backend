@@ -11,6 +11,7 @@ public record StockEntryEntity(
         @Id Long id,
         @Column("product_id") Long productId,
         @Column("quantity") BigDecimal quantity,
+        @Column("price") BigDecimal price,
         @Column("expiration_date") LocalDate expirationDate,
         @Column("entry_date") LocalDate entryDate
 ) {

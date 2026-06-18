@@ -10,7 +10,7 @@ public record ProposedWeekMenuDayResponse(
         Long id,
         @Schema(description = "Date of the proposed day menu", example = "2026-06-15")
         LocalDate date,
-        @Schema(description = "Ordered sections for the day")
+        @Schema(description = "Configured day parts selected for the day")
         List<ProposedWeekMenuSectionResponse> sections,
         @Schema(description = "Nutritional totals for the day")
         NutritionalValuesResponse nutritionalValues

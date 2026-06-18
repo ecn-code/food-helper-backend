@@ -15,6 +15,8 @@ public record ProposedWeekMenuResponse(
         @Schema(description = "Existing proposed day menus. A proposed week menu may start empty.")
         List<ProposedWeekMenuDayResponse> days,
         @Schema(description = "Nutritional totals for the whole proposed menu")
-        NutritionalValuesResponse nutritionalValues
+        NutritionalValuesResponse nutritionalValues,
+        @Schema(description = "Preview of stock requirements and calorie coverage for the proposed week")
+        ProposedWeekMenuStockSummaryResponse stockSummary
 ) {
 }

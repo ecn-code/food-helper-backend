@@ -34,7 +34,7 @@ class ProductPhotoUpdateIntegrationTest {
     private static final String REGISTRATION_CODE = "test-registration-code";
 
     @Container
-    static PostgreSQLContainer<?> postgres = TestContainerSupport.postgres("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = postgres("postgres:16-alpine");
 
     @DynamicPropertySource
     static void configureDataSource(DynamicPropertyRegistry registry) {
@@ -137,5 +137,20 @@ class ProductPhotoUpdateIntegrationTest {
                 "image/webp",
                 "UklGRjwAAABXRUJQVlA4IDAAAADQAQCdASoBAAEAAgA0JaACdLoB+AADsAD+8MQL/yC5YXXI1/8gP+QH/ID/+PIAAAA="
         );
+    }
+
+    private static PostgreSQLContainer<?> postgres(String imageName) {
+        PostgreSQLContainer<?> container = new PostgreSQLContainer<>(imageName)
+                .withDatabaseName("foodhelper")
+                .withUsername("foodhelper")
+                .withPassword("foodhelper")
+                .withInitScript("db/test-init.sql");
+
+        String fixedPort = System.getenv("TESTCONTAINERS_POSTGRES_HOST_PORT");
+        if (fixedPort != null && !fixedPort.isBlank()) {
+            container.setPortBindings(java.util.List.of(fixedPort + ":5432"));
+        }
+
+        return container;
     }
 }

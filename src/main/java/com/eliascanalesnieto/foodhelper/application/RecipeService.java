@@ -73,6 +73,15 @@ public class RecipeService {
     }
 
     @Transactional(readOnly = true)
+    public PageResult<Recipe> findPage(PaginationRequest pagination) {
+        List<Recipe> items = recipeRepository.findPage(pagination.offset(), pagination.size()).stream()
+                .map(this::enrichRecipe)
+                .map(this::attachDerivedProduct)
+                .toList();
+        return new PageResult<>(items, pagination.page(), pagination.size(), recipeRepository.count());
+    }
+
+    @Transactional(readOnly = true)
     public Recipe findById(Long id) {
         return loadRecipe(id);
     }

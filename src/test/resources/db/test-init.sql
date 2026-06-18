@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS products (
     name VARCHAR(150) NOT NULL UNIQUE,
     description TEXT NOT NULL,
     grams_per_unit NUMERIC(10,2) NOT NULL DEFAULT 100.00,
+    default_price NUMERIC(10,2),
     media_id BIGINT
 );
 
@@ -70,6 +71,7 @@ CREATE TABLE IF NOT EXISTS stock_entries (
     id BIGSERIAL PRIMARY KEY,
     product_id BIGINT NOT NULL,
     quantity NUMERIC(10,2) NOT NULL CHECK (quantity >= 0),
+    price NUMERIC(10,2) NOT NULL,
     expiration_date DATE,
     entry_date DATE NOT NULL,
     CONSTRAINT fk_stock_entries_product
@@ -99,16 +101,28 @@ CREATE TABLE IF NOT EXISTS proposed_week_menu_days (
     CONSTRAINT uq_proposed_week_menu_days_date UNIQUE (menu_id, menu_date)
 );
 
+CREATE TABLE IF NOT EXISTS proposed_week_menu_day_parts (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS proposed_week_menu_sections (
     id BIGSERIAL PRIMARY KEY,
     day_id BIGINT NOT NULL,
+    day_part_id BIGINT NOT NULL,
     name VARCHAR(100) NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL,
     CONSTRAINT fk_proposed_week_menu_sections_day
         FOREIGN KEY (day_id)
         REFERENCES proposed_week_menu_days(id)
         ON DELETE CASCADE,
-    CONSTRAINT uq_proposed_week_menu_sections_order UNIQUE (day_id, sort_order)
+    CONSTRAINT fk_proposed_week_menu_sections_day_part
+        FOREIGN KEY (day_part_id)
+        REFERENCES proposed_week_menu_day_parts(id),
+    CONSTRAINT uq_proposed_week_menu_sections_day_part UNIQUE (day_id, day_part_id)
 );
 
 CREATE TABLE IF NOT EXISTS proposed_week_menu_products (
@@ -129,6 +143,7 @@ CREATE TABLE IF NOT EXISTS proposed_week_menu_products (
 );
 
 CREATE INDEX IF NOT EXISTS idx_proposed_week_menu_days_menu_id ON proposed_week_menu_days(menu_id);
+CREATE INDEX IF NOT EXISTS idx_proposed_week_menu_day_parts_sort_order ON proposed_week_menu_day_parts(sort_order);
 CREATE INDEX IF NOT EXISTS idx_proposed_week_menu_sections_day_id ON proposed_week_menu_sections(day_id);
 CREATE INDEX IF NOT EXISTS idx_proposed_week_menu_products_section_id ON proposed_week_menu_products(section_id);
 

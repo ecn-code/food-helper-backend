@@ -16,14 +16,16 @@ public class StockService {
     private final StockRepository stockRepository;
     private final ProductRepository productRepository;
 
-    public StockEntry create(Long productId, BigDecimal quantity, LocalDate expirationDate, LocalDate entryDate) {
+    public StockEntry create(Long productId, BigDecimal quantity, BigDecimal price, LocalDate expirationDate, LocalDate entryDate) {
         validatePositiveQuantity(quantity);
+        validatePrice(price);
         if (entryDate == null) {
             throw new IllegalArgumentException("Entry date is required");
         }
         productRepository.findById(productId);
         return stockRepository.create(productId, StockEntry.builder()
                 .quantity(quantity)
+                .price(scale(price))
                 .expirationDate(expirationDate)
                 .entryDate(entryDate)
                 .build());
@@ -52,5 +54,18 @@ public class StockService {
         if (quantity == null || quantity.signum() <= 0) {
             throw new IllegalArgumentException("Quantity must be greater than zero");
         }
+    }
+
+    private void validatePrice(BigDecimal price) {
+        if (price == null) {
+            throw new IllegalArgumentException("Price is required");
+        }
+        if (price.signum() < 0) {
+            throw new IllegalArgumentException("Price must be greater than or equal to zero");
+        }
+    }
+
+    private BigDecimal scale(BigDecimal value) {
+        return value.setScale(2, java.math.RoundingMode.HALF_UP);
     }
 }

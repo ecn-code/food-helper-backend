@@ -35,7 +35,7 @@ public class StockController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
             summary = "Create stock entry",
-            description = "Creates a stock entry for a product with a positive quantity, an optional expiration date, and a required entry date."
+            description = "Creates a stock entry for a product with a positive quantity, a required price, an optional expiration date, and a required entry date."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Stock entry created",
@@ -52,6 +52,7 @@ public class StockController {
         return mapper.toResponse(service.create(
                 productId,
                 request.quantity(),
+                request.price(),
                 request.expirationDate(),
                 request.entryDate()
         ));

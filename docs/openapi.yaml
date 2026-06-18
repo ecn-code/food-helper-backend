@@ -10,11 +10,15 @@ tags:
   - name: Authentication
     description: User registration and stateless JWT login
   - name: Products
-    description: Create, update, and delete product operations
+    description: Create, update, delete, and inspect product statistics
   - name: Stock
     description: Manage stock entries and inspect inventory ordered by expiration
   - name: Recipes
-    description: List, create, update, delete, and derive product operations for recipes
+    description: List, create, update, delete, derive product, and inspect recipe statistics
+  - name: Proposed week menus
+    description: Draft weekly menu planning before a menu becomes final
+  - name: Proposed week menu day parts
+    description: Configure reusable day parts used by proposed menus
   - name: Media
     description: Download stored media files
   - name: Health
@@ -94,22 +98,37 @@ paths:
       tags:
         - Products
       summary: List products
-      description: Returns all products with their nutritional values.
+      description: Returns a paginated list of products ordered by identifier ascending.
       operationId: listProducts
+      parameters:
+        - name: page
+          in: query
+          required: false
+          description: Zero-based page number
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - name: size
+          in: query
+          required: false
+          description: Number of items per page, between 1 and 100
+          schema:
+            type: integer
+            format: int32
+            default: 20
       responses:
         '200':
           description: Products returned
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ProductResponse'
+                $ref: '#/components/schemas/ProductPageResponse'
     post:
       tags:
         - Products
       summary: Create product
-      description: Creates a product with name, description, and nutritional values per 100 grams.
+      description: Creates a product with name, description, nutritional values per 100 grams, and an optional default price.
       operationId: createProduct
       requestBody:
         required: true
@@ -127,6 +146,7 @@ paths:
                   carbohydrates: 14
                   proteins: 0.3
                   fats: 0.2
+                  defaultPrice: 2.49
                   photo:
                     fileName: apple.png
                     contentType: image/png
@@ -150,12 +170,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /api/v1/products/stats:
+    get:
+      tags:
+        - Products
+      summary: Product statistics
+      description: Returns aggregated product and stock statistics calculated on the server from the current database state.
+      operationId: productStats
+      responses:
+        '200':
+          description: Product statistics returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductStatsResponse'
   /api/v1/products/{id}:
     put:
       tags:
         - Products
       summary: Update product
-      description: Updates an existing product and replaces its nutritional data per 100 grams.
+      description: Updates an existing product, replaces its nutritional data per 100 grams, and can change its optional default price.
       operationId: updateProduct
       parameters:
         - name: id
@@ -180,6 +214,7 @@ paths:
                   carbohydrates: 13
                   proteins: 0.4
                   fats: 0.1
+                  defaultPrice: 2.79
                   photo:
                     fileName: green-apple.png
                     contentType: image/png
@@ -236,7 +271,7 @@ paths:
       tags:
         - Stock
       summary: Create stock entry
-      description: Creates a stock entry for a product with a positive quantity, an optional expiration date, and a required entry date.
+      description: Creates a stock entry for a product with a positive quantity, a required price, an optional expiration date, and a required entry date.
       operationId: createStockEntry
       parameters:
         - name: productId
@@ -255,6 +290,7 @@ paths:
               default:
                 value:
                   quantity: 6.5
+                  price: 4.99
                   expirationDate: 2026-06-20
                   entryDate: 2026-06-10
       responses:
@@ -445,17 +481,32 @@ paths:
       tags:
         - Recipes
       summary: List recipes
-      description: Returns all recipes with their calculated nutritional totals, ingredients, and optional derived product information.
+      description: Returns a paginated list of recipes ordered by identifier ascending, including calculated nutritional totals, ingredients, and optional derived product information.
       operationId: listRecipes
+      parameters:
+        - name: page
+          in: query
+          required: false
+          description: Zero-based page number
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - name: size
+          in: query
+          required: false
+          description: Number of items per page, between 1 and 100
+          schema:
+            type: integer
+            format: int32
+            default: 20
       responses:
         '200':
           description: Recipes returned
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/RecipeResponse'
+                $ref: '#/components/schemas/RecipePageResponse'
     post:
       tags:
         - Recipes
@@ -504,6 +555,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /api/v1/recipes/stats:
+    get:
+      tags:
+        - Recipes
+      summary: Recipe statistics
+      description: Returns aggregated recipe metrics calculated on the server from the current database state.
+      operationId: recipeStats
+      responses:
+        '200':
+          description: Recipe statistics returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeStatsResponse'
   /api/v1/recipes/{id}:
     put:
       tags:
@@ -628,6 +693,211 @@ paths:
                 $ref: '#/components/schemas/ApiError'
         '409':
           description: Derived product already exists or product name conflicts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/proposed-week-menus:
+    post:
+      tags:
+        - Proposed week menus
+      summary: Create proposed week menu
+      description: Starts an empty proposed week menu with a date range. The range must fit within a single week, and proposed menus can contain only the days planned so far.
+      operationId: createProposedWeekMenu
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProposedWeekMenuRequest'
+            examples:
+              default:
+                value:
+                  startDate: 2026-06-15
+                  endDate: 2026-06-21
+      responses:
+        '201':
+          description: Proposed week menu created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposedWeekMenuResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/proposed-week-menus/{id}:
+    get:
+      tags:
+        - Proposed week menus
+      summary: Get proposed week menu
+      description: Returns one proposed week menu with ordered days, sections, products, nutritional totals, and a stock preview summary.
+      operationId: getProposedWeekMenu
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Proposed week menu returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposedWeekMenuResponse'
+        '404':
+          description: Proposed week menu not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/proposed-week-menus/{id}/days:
+    put:
+      tags:
+        - Proposed week menus
+      summary: Create or replace proposed day menu
+      description: Creates or replaces one proposed day menu. Sections and products keep the explicit order supplied in the request.
+      operationId: upsertProposedWeekMenuDay
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertProposedWeekMenuDayRequest'
+            examples:
+              default:
+                value:
+                  date: 2026-06-15
+                  sections:
+                    - dayPartId: 1
+                      products:
+                        - productId: 1
+                          units: 1
+                          grams: 200
+                          sortOrder: 10
+                    - dayPartId: 2
+                      products:
+                        - productId: 2
+                          units: 2
+                          sortOrder: 10
+      responses:
+        '200':
+          description: Proposed week menu updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposedWeekMenuResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Proposed week menu or product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/proposed-week-menu-day-parts:
+    get:
+      tags:
+        - Proposed week menu day parts
+      summary: List proposed week menu day parts
+      description: Returns all reusable day parts ordered by the configured sort order and identifier.
+      operationId: listProposedWeekMenuDayParts
+      responses:
+        '200':
+          description: Day parts returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProposedWeekMenuDayPartResponse'
+    post:
+      tags:
+        - Proposed week menu day parts
+      summary: Create proposed week menu day part
+      description: Creates a reusable day part that can later be referenced by proposed menu days.
+      operationId: createProposedWeekMenuDayPart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposedWeekMenuDayPartRequest'
+            examples:
+              default:
+                value:
+                  name: Lunch
+                  description: Main meal of the day
+                  sortOrder: 20
+      responses:
+        '201':
+          description: Day part created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposedWeekMenuDayPartResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/proposed-week-menu-day-parts/{id}:
+    put:
+      tags:
+        - Proposed week menu day parts
+      summary: Update proposed week menu day part
+      description: Updates an existing reusable day part configuration.
+      operationId: updateProposedWeekMenuDayPart
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposedWeekMenuDayPartRequest'
+            examples:
+              default:
+                value:
+                  name: Snack
+                  description: Afternoon snack
+                  sortOrder: 30
+      responses:
+        '200':
+          description: Day part updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposedWeekMenuDayPartResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Day part not found
           content:
             application/json:
               schema:
@@ -806,6 +1076,12 @@ components:
           exclusiveMinimum: 0
           description: Default grams represented by one unit of this product
           example: 150
+        defaultPrice:
+          type: number
+          minimum: 0
+          nullable: true
+          description: Optional default price for this product
+          example: 2.49
         calories:
           type: number
           minimum: 0
@@ -832,6 +1108,7 @@ components:
       type: object
       required:
         - quantity
+        - price
         - entryDate
       properties:
         quantity:
@@ -839,6 +1116,11 @@ components:
           exclusiveMinimum: 0
           description: Available quantity for this stock entry
           example: 6.5
+        price:
+          type: number
+          minimum: 0
+          description: Price paid for this stock entry
+          example: 4.99
         expirationDate:
           type: string
           format: date
@@ -883,6 +1165,11 @@ components:
           type: number
           description: Default grams represented by one unit of this product
           example: 150
+        defaultPrice:
+          type: number
+          nullable: true
+          description: Optional default price for this product
+          example: 2.49
         nutritionalValues:
           $ref: '#/components/schemas/NutritionalValuesResponse'
         photo:
@@ -891,6 +1178,147 @@ components:
               description: Signed photo URL that expires with the authentication token lifetime
               example: /api/v1/media/12?expiresAt=1781611200&signature=5f2a...
             - type: 'null'
+    ProductPageResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductResponse'
+        page:
+          type: integer
+          format: int32
+          description: Zero-based page number
+          example: 0
+        size:
+          type: integer
+          format: int32
+          description: Requested page size
+          example: 20
+        totalElements:
+          type: integer
+          format: int64
+          description: Total number of products
+          example: 42
+        totalPages:
+          type: integer
+          format: int32
+          description: Total number of pages
+          example: 3
+    ProductStatsMetricResponse:
+      type: object
+      properties:
+        productId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Product identifier when the catalog has data
+          example: 1
+        productName:
+          type: string
+          description: Product name or fallback label when there is no data
+          example: Chicken breast
+        value:
+          type: number
+          description: Metric value
+          example: 165
+        message:
+          type: string
+          nullable: true
+          description: Fallback label for empty catalogs
+          example: Sin datos
+    ProductStatsTotalsResponse:
+      type: object
+      properties:
+        totalQuantity:
+          type: number
+          description: Total quantity across all stock entries
+          example: 18.5
+        batchCount:
+          type: integer
+          format: int64
+          description: Number of stock entries
+          example: 3
+    ProductStatsSummaryResponse:
+      type: object
+      properties:
+        productId:
+          type: integer
+          format: int64
+          description: Product identifier
+          example: 1
+        productName:
+          type: string
+          description: Product name
+          example: Chicken breast
+        totalQuantity:
+          type: number
+          description: Total quantity aggregated across all stock entries for this product
+          example: 12.5
+        batchCount:
+          type: integer
+          format: int64
+          description: Number of stock entries for this product
+          example: 2
+        nextExpirationDate:
+          type: string
+          format: date
+          nullable: true
+          description: Earliest expiration date among this product's stock entries
+          example: 2026-06-20
+        nextExpirationMessage:
+          type: string
+          nullable: true
+          description: Fallback label when the product has no stock or no expiration dates
+          example: Sin caducidad
+    ProductStatsExpirationResponse:
+      type: object
+      properties:
+        productId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Product identifier when an expiring lot exists
+          example: 1
+        productName:
+          type: string
+          description: Product name when an expiring lot exists
+          example: Chicken breast
+        quantity:
+          type: number
+          nullable: true
+          description: Quantity of the earliest expiring stock entry
+          example: 2
+        expirationDate:
+          type: string
+          format: date
+          nullable: true
+          description: Earliest expiration date across all stock entries
+          example: 2026-06-20
+        message:
+          type: string
+          nullable: true
+          description: Fallback label when there are no lots or no expiring lots
+          example: Sin caducidad
+    ProductStatsResponse:
+      type: object
+      properties:
+        caloriesTop:
+          $ref: '#/components/schemas/ProductStatsMetricResponse'
+        carbohydratesTop:
+          $ref: '#/components/schemas/ProductStatsMetricResponse'
+        proteinsTop:
+          $ref: '#/components/schemas/ProductStatsMetricResponse'
+        fatsTop:
+          $ref: '#/components/schemas/ProductStatsMetricResponse'
+        stock:
+          $ref: '#/components/schemas/ProductStatsTotalsResponse'
+        earliestExpiration:
+          $ref: '#/components/schemas/ProductStatsExpirationResponse'
+        summaries:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductStatsSummaryResponse'
     StockEntryResponse:
       type: object
       properties:
@@ -912,6 +1340,10 @@ components:
           type: number
           description: Available quantity in this stock entry
           example: 6.5
+        price:
+          type: number
+          description: Price paid for this stock entry
+          example: 4.99
         expirationDate:
           type: string
           format: date
@@ -1021,6 +1453,55 @@ components:
               description: Signed photo URL that expires with the authentication token lifetime
               example: /api/v1/media/12?expiresAt=1781611200&signature=5f2a...
             - type: 'null'
+    RecipePageResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecipeResponse'
+        page:
+          type: integer
+          format: int32
+          description: Zero-based page number
+          example: 0
+        size:
+          type: integer
+          format: int32
+          description: Requested page size
+          example: 20
+        totalElements:
+          type: integer
+          format: int64
+          description: Total number of recipes
+          example: 42
+        totalPages:
+          type: integer
+          format: int32
+          description: Total number of pages
+          example: 3
+    RecipeStatsResponse:
+      type: object
+      properties:
+        activeRecipes:
+          type: integer
+          format: int64
+          description: Number of active recipes
+          example: 4
+        averageCalories:
+          type: number
+          description: Average recipe calories
+          example: 512.5
+        totalIngredients:
+          type: integer
+          format: int64
+          description: Total number of ingredients across all recipes
+          example: 11
+        recipesWithDerivedProduct:
+          type: integer
+          format: int64
+          description: Number of recipes with a derived product
+          example: 2
     PhotoUploadRequest:
       type: object
       required:
@@ -1071,6 +1552,316 @@ components:
         unitsProduced:
           type: number
           example: 4
+    CreateProposedWeekMenuRequest:
+      description: Payload for starting an empty proposed week menu. The date range cannot span more than 7 days.
+      type: object
+      required:
+        - startDate
+        - endDate
+      properties:
+        startDate:
+          type: string
+          format: date
+          description: First date covered by the proposed menu
+          example: 2026-06-15
+        endDate:
+          type: string
+          format: date
+          description: Last date covered by the proposed menu
+          example: 2026-06-21
+    UpsertProposedWeekMenuDayRequest:
+      type: object
+      required:
+        - date
+        - sections
+      properties:
+        date:
+          type: string
+          format: date
+          description: Date of the proposed day menu
+          example: 2026-06-15
+        sections:
+          type: array
+          minItems: 1
+          description: Configured day parts selected for the day. Each day part can appear only once.
+          items:
+            $ref: '#/components/schemas/ProposedWeekMenuSectionRequest'
+    ProposedWeekMenuSectionRequest:
+      type: object
+      required:
+        - dayPartId
+        - products
+      properties:
+        dayPartId:
+          type: integer
+          format: int64
+          description: Reusable day part identifier
+          example: 1
+        products:
+          type: array
+          minItems: 1
+          description: Ordered products consumed in this section
+          items:
+            $ref: '#/components/schemas/ProposedWeekMenuProductRequest'
+    ProposedWeekMenuProductRequest:
+      type: object
+      required:
+        - productId
+        - sortOrder
+      properties:
+        productId:
+          type: integer
+          format: int64
+          description: Product identifier
+          example: 1
+        units:
+          type: number
+          exclusiveMinimum: 0
+          nullable: true
+          description: Consumed units. Defaults to 1 when omitted.
+          example: 2
+        grams:
+          type: number
+          exclusiveMinimum: 0
+          nullable: true
+          description: Consumed grams. Defaults to product gramsPerUnit multiplied by units when omitted.
+          example: 300
+        sortOrder:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Explicit display order within the section
+          example: 10
+    ProposedWeekMenuResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Proposed menu identifier
+          example: 1
+        startDate:
+          type: string
+          format: date
+          description: First date covered by the proposed menu
+          example: 2026-06-15
+        endDate:
+          type: string
+          format: date
+          description: Last date covered by the proposed menu
+          example: 2026-06-21
+        days:
+          type: array
+          description: Existing proposed day menus. A proposed week menu may start empty.
+          items:
+            $ref: '#/components/schemas/ProposedWeekMenuDayResponse'
+        nutritionalValues:
+          $ref: '#/components/schemas/NutritionalValuesResponse'
+        stockSummary:
+          $ref: '#/components/schemas/ProposedWeekMenuStockSummaryResponse'
+    ProposedWeekMenuStockSummaryResponse:
+      type: object
+      properties:
+        plannedDays:
+          type: integer
+          format: int32
+          description: Days in the menu that already have at least one saved day
+          example: 3
+        distinctProducts:
+          type: integer
+          format: int32
+          description: Distinct products used across all planned days
+          example: 8
+        calories:
+          $ref: '#/components/schemas/ProposedWeekMenuStockSummaryCaloriesResponse'
+        estimatedCost:
+          type: number
+          description: Total estimated cost covered by available stock
+          example: 18.5
+        requirements:
+          type: array
+          description: Per-product stock coverage requirements
+          items:
+            $ref: '#/components/schemas/ProposedWeekMenuStockRequirementResponse'
+    ProposedWeekMenuStockSummaryCaloriesResponse:
+      type: object
+      properties:
+        averagePerPlannedDay:
+          type: number
+          description: Average calories per planned day
+          example: 1234.56
+        maxDay:
+          $ref: '#/components/schemas/ProposedWeekMenuStockSummaryDayCaloriesResponse'
+        minDay:
+          $ref: '#/components/schemas/ProposedWeekMenuStockSummaryDayCaloriesResponse'
+    ProposedWeekMenuStockSummaryDayCaloriesResponse:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          description: Day date
+          example: 2026-06-15
+        calories:
+          type: number
+          description: Calories for the day
+          example: 1450.25
+    ProposedWeekMenuStockRequirementResponse:
+      type: object
+      properties:
+        productId:
+          type: integer
+          format: int64
+          description: Product identifier
+          example: 1
+        productName:
+          type: string
+          description: Product name
+          example: Apple
+        requiredUnits:
+          type: number
+          description: Total units required by the proposed menu
+          example: 4.5
+        availableUnits:
+          type: number
+          description: Total units available in stock
+          example: 6
+        coveredUnits:
+          type: number
+          description: Units that can be covered by available stock
+          example: 4.5
+        missingUnits:
+          type: number
+          description: Units still missing after consuming all available stock
+          example: 0
+        estimatedCost:
+          type: number
+          description: Estimated cost for the covered units
+          example: 12.75
+    ProposedWeekMenuDayResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Proposed day identifier
+          example: 1
+        date:
+          type: string
+          format: date
+          description: Date of the proposed day menu
+          example: 2026-06-15
+        sections:
+          type: array
+          description: Configured day parts selected for the day
+          items:
+            $ref: '#/components/schemas/ProposedWeekMenuSectionResponse'
+        nutritionalValues:
+          $ref: '#/components/schemas/NutritionalValuesResponse'
+    ProposedWeekMenuSectionResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Section identifier
+          example: 1
+        dayPartId:
+          type: integer
+          format: int64
+          description: Reusable day part identifier
+          example: 1
+        name:
+          type: string
+          description: Section name
+          example: Lunch
+        description:
+          type: string
+          description: Section description copied from the reusable day part
+          example: Main meal of the day
+        sortOrder:
+          type: integer
+          format: int32
+          description: Explicit display order within the day
+          example: 10
+        products:
+          type: array
+          description: Ordered products consumed in this section
+          items:
+            $ref: '#/components/schemas/ProposedWeekMenuProductResponse'
+        nutritionalValues:
+          $ref: '#/components/schemas/NutritionalValuesResponse'
+    ProposedWeekMenuDayPartRequest:
+      type: object
+      required:
+        - name
+        - description
+        - sortOrder
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Day part name
+          example: Lunch
+        description:
+          type: string
+          minLength: 1
+          description: Day part description
+          example: Main meal of the day
+        sortOrder:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Explicit display order among day parts
+          example: 20
+    ProposedWeekMenuDayPartResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Day part identifier
+          example: 1
+        name:
+          type: string
+          description: Day part name
+          example: Lunch
+        description:
+          type: string
+          description: Day part description
+          example: Main meal of the day
+        sortOrder:
+          type: integer
+          format: int32
+          description: Explicit display order among day parts
+          example: 20
+    ProposedWeekMenuProductResponse:
+      type: object
+      properties:
+        productId:
+          type: integer
+          format: int64
+          description: Product identifier
+          example: 1
+        productName:
+          type: string
+          description: Product name
+          example: Apple
+        units:
+          type: number
+          description: Consumed units
+          example: 2
+        grams:
+          type: number
+          description: Consumed grams
+          example: 300
+        sortOrder:
+          type: integer
+          format: int32
+          description: Explicit display order within the section
+          example: 10
+        nutritionalValues:
+          $ref: '#/components/schemas/NutritionalValuesResponse'
     NutritionalValuesResponse:
       type: object
       properties:

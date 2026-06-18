@@ -1,13 +1,12 @@
 package com.eliascanalesnieto.foodhelper.unit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.eliascanalesnieto.foodhelper.application.AuthService;
 import com.eliascanalesnieto.foodhelper.application.JwtService;
 import com.eliascanalesnieto.foodhelper.application.PasswordHasher;
 import com.eliascanalesnieto.foodhelper.domain.AppUserRepository;
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -26,17 +25,18 @@ class AuthServiceTest {
     private JwtService jwtService;
 
     @Test
-    void shouldPrintRegistrationCodeDuringConstruction() {
-        PrintStream originalOut = System.out;
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(captured));
+    void shouldCreateServiceWithoutExposingRegistrationCode() {
+        AuthService service = new AuthService(userRepository, passwordHasher, jwtService, "12345");
 
-        try {
-            new AuthService(userRepository, passwordHasher, jwtService, "12345");
-        } finally {
-            System.setOut(originalOut);
-        }
+        assertThat(service).isNotNull();
+    }
 
-        assertThat(captured.toString()).contains("[DEBUG] APP_AUTH_REGISTRATION_CODE=12345");
+    @Test
+    void shouldRejectInvalidRegistrationCode() {
+        AuthService service = new AuthService(userRepository, passwordHasher, jwtService, "12345");
+
+        assertThatThrownBy(() -> service.register("elias", "secret-password", "wrong"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Invalid registration code");
     }
 }

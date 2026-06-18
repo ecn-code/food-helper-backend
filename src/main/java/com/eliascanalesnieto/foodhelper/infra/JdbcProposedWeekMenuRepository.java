@@ -2,6 +2,8 @@ package com.eliascanalesnieto.foodhelper.infra;
 
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenu;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDay;
+import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDayPart;
+import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDayPartRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuProduct;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuSection;
@@ -22,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepository {
     private final JdbcTemplate jdbcTemplate;
+    private final ProposedWeekMenuDayPartRepository dayPartRepository;
 
     @Override
     @Transactional
@@ -112,14 +115,16 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
 
     private List<ProposedWeekMenuSection> findSections(Long dayId) {
         return jdbcTemplate.query("""
-                        SELECT id, name, sort_order
+                        SELECT id, day_part_id, name, description, sort_order
                         FROM proposed_week_menu_sections
                         WHERE day_id = ?
-                        ORDER BY sort_order
+                        ORDER BY sort_order, id
                         """,
                 (rs, rowNum) -> ProposedWeekMenuSection.builder()
                         .id(rs.getLong("id"))
+                        .dayPartId(rs.getLong("day_part_id"))
                         .name(rs.getString("name"))
+                        .description(rs.getString("description"))
                         .sortOrder(rs.getInt("sort_order"))
                         .products(findProducts(rs.getLong("id")))
                         .build(),
@@ -147,24 +152,27 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
     private void saveSections(Long dayId, List<ProposedWeekMenuSection> sections) {
         try {
             for (ProposedWeekMenuSection section : sections) {
-                Long sectionId = insertSection(dayId, section);
+                ProposedWeekMenuDayPart dayPart = dayPartRepository.findById(section.getDayPartId());
+                Long sectionId = insertSection(dayId, dayPart);
                 saveProducts(sectionId, section.getProducts());
             }
         } catch (DataIntegrityViolationException ex) {
-            throw new IllegalArgumentException("Section and product sort orders must be unique within their parent");
+            throw new IllegalArgumentException("Day parts and product sort orders must be unique within their parent");
         }
     }
 
-    private Long insertSection(Long dayId, ProposedWeekMenuSection section) {
+    private Long insertSection(Long dayId, ProposedWeekMenuDayPart dayPart) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement("""
-                    INSERT INTO proposed_week_menu_sections (day_id, name, sort_order)
-                    VALUES (?, ?, ?)
+                    INSERT INTO proposed_week_menu_sections (day_id, day_part_id, name, description, sort_order)
+                    VALUES (?, ?, ?, ?, ?)
                     """, new String[]{"id"});
             ps.setLong(1, dayId);
-            ps.setString(2, section.getName());
-            ps.setInt(3, section.getSortOrder());
+            ps.setLong(2, dayPart.getId());
+            ps.setString(3, dayPart.getName());
+            ps.setString(4, dayPart.getDescription());
+            ps.setInt(5, dayPart.getSortOrder());
             return ps;
         }, keyHolder);
         return keyHolder.getKey().longValue();

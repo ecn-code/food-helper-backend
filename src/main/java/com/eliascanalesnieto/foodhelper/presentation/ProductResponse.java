@@ -13,6 +13,8 @@ public record ProductResponse(
         String description,
         @Schema(description = "Default grams represented by one unit of this product", example = "150")
         BigDecimal gramsPerUnit,
+        @Schema(description = "Optional default price for this product", example = "2.49", nullable = true)
+        BigDecimal defaultPrice,
         @Schema(description = "Product nutritional values")
         NutritionalValuesResponse nutritionalValues,
         @Schema(description = "Optional signed photo URL that expires with the authentication token lifetime", example = "/api/v1/media/12?expiresAt=1781611200&signature=5f2a...")

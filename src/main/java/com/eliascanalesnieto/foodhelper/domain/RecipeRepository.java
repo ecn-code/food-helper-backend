@@ -7,6 +7,10 @@ import java.util.Optional;
 public interface RecipeRepository {
     List<Recipe> findAll();
 
+    List<Recipe> findPage(int offset, int limit);
+
+    long count();
+
     Recipe create(Recipe recipe);
 
     Recipe update(Long id, Recipe recipe);
