@@ -49,6 +49,10 @@ Function definition:
 - `POST /api/v1/proposed-week-menus`
 - `GET /api/v1/proposed-week-menus/{id}`
 - `PUT /api/v1/proposed-week-menus/{id}/days`
+- `POST /api/v1/proposed-week-menus/{id}/publish`
+- `GET /api/v1/established-week-menus/{id}`
+- `GET /api/v1/established-week-menus/{id}/used-stock`
+- `GET /api/v1/established-week-menus/{id}/shopping-list`
 - `GET /api/v1/proposed-week-menu-day-parts`
 - `POST /api/v1/proposed-week-menu-day-parts`
 - `PUT /api/v1/proposed-week-menu-day-parts/{id}`
@@ -63,7 +67,9 @@ Function definition:
 
 `Recipe` nutritional values are calculated from assigned ingredient grams and kept synchronized with the derived product created through `POST /api/v1/recipes/{id}/derived-product`.
 
-`Proposed week menus` are draft weekly plans with a start date, an end date, optional planned days, and selected reusable day parts for each planned day. Day parts are configured separately with a name, description, and sort order. The date range must span at most 7 days so the menu represents one week. Product grams can be supplied explicitly or inferred from `gramsPerUnit * units`, and nutritional totals are calculated for each product, section, day, and proposed menu. A day cannot repeat the same day part.
+`Proposed week menus` are draft weekly plans with a start date, an end date, optional planned days, and selected reusable day parts for each planned day. Day parts are configured separately with a name, description, and sort order. The inclusive date range must span at most 8 calendar days so a Friday-to-Friday or Monday-to-Monday menu is valid. Product grams can be supplied explicitly or inferred from `gramsPerUnit * units`, and nutritional totals are calculated for each product, section, day, and proposed menu. A day cannot repeat the same day part.
+
+`Established week menus` are created by publishing a proposed week menu. Publication freezes the menu snapshot, captures the nutritional totals and covered cost, consumes matching stock entries in FIFO order by expiration date, deletes any stock entry that reaches zero, and stores the missing quantities as a shopping list. The consumed stock can be queried later through the established week endpoints.
 
 `Stock` is stored as independent stock entries linked to products. Each entry keeps a positive quantity, a required entry date, and an optional expiration date. When a removal leaves a stock entry at zero, that entry is deleted.
 
@@ -81,6 +87,7 @@ Available OpenAPI groups:
 - `recipes`
 - `stock`
 - `proposed-week-menus`
+- `established-week-menus`
 
 Every new endpoint, and every change to request or response data in an existing endpoint, must be documented in Swagger/OpenAPI within the same change.
 

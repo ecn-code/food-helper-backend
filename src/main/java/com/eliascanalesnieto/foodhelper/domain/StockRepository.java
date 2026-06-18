@@ -8,6 +8,8 @@ import java.util.List;
 public interface StockRepository {
     StockEntry create(Long productId, StockEntry stockEntry);
 
+    StockEntry update(Long stockEntryId, StockEntry stockEntry);
+
     StockEntry addQuantity(Long stockEntryId, BigDecimal quantity);
 
     void removeQuantity(Long stockEntryId, BigDecimal quantity);

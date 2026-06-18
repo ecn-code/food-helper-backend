@@ -10,7 +10,7 @@ public record ProposedWeekMenuResponse(
         Long id,
         @Schema(description = "First date covered by the proposed menu", example = "2026-06-15")
         LocalDate startDate,
-        @Schema(description = "Last date covered by the proposed menu", example = "2026-06-21")
+        @Schema(description = "Last date covered by the proposed menu", example = "2026-06-22")
         LocalDate endDate,
         @Schema(description = "Existing proposed day menus. A proposed week menu may start empty.")
         List<ProposedWeekMenuDayResponse> days,

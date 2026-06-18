@@ -14,7 +14,7 @@ public record ProposedWeekMenuProductRequest(
         @Positive BigDecimal units,
         @Schema(description = "Consumed grams. Defaults to product gramsPerUnit multiplied by units when omitted.", example = "300")
         @Positive BigDecimal grams,
-        @Schema(description = "Explicit display order within the section", example = "10")
+        @Schema(description = "Explicit display order within the section. Must be unique among products in the same section.", example = "10")
         @NotNull @PositiveOrZero Integer sortOrder
 ) {
 }

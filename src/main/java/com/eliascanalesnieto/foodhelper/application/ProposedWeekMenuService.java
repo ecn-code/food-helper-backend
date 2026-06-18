@@ -24,8 +24,9 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,7 +38,7 @@ public class ProposedWeekMenuService {
     private static final BigDecimal ZERO = new BigDecimal("0.00");
     private static final BigDecimal DEFAULT_UNITS = BigDecimal.ONE;
     private static final int SCALE = 2;
-    private static final long MAX_MENU_DAYS = 7;
+    private static final long MAX_MENU_DAYS = 8;
 
     private final ProposedWeekMenuRepository menuRepository;
     private final ProductRepository productRepository;
@@ -49,7 +50,7 @@ public class ProposedWeekMenuService {
             throw new IllegalArgumentException("End date must be on or after start date");
         }
         if (ChronoUnit.DAYS.between(startDate, endDate) + 1 > MAX_MENU_DAYS) {
-            throw new IllegalArgumentException("Proposed week menu cannot span more than 7 days");
+            throw new IllegalArgumentException("Proposed week menu cannot span more than 8 days");
         }
         return enrich(menuRepository.create(ProposedWeekMenu.builder()
                 .startDate(startDate)
@@ -66,6 +67,7 @@ public class ProposedWeekMenuService {
     @Transactional
     public ProposedWeekMenu upsertDay(Long menuId, ProposedWeekMenuDay day) {
         validateDayParts(day);
+        validateProductSortOrders(day);
         ProposedWeekMenuDay completedDay = completeDefaultGrams(day);
         return enrich(menuRepository.upsertDay(menuId, completedDay));
     }
@@ -76,6 +78,17 @@ public class ProposedWeekMenuService {
                 .collect(java.util.stream.Collectors.toSet());
         if (dayPartIds.size() != day.getSections().size()) {
             throw new IllegalArgumentException("Day parts must be unique within a day");
+        }
+    }
+
+    private void validateProductSortOrders(ProposedWeekMenuDay day) {
+        for (ProposedWeekMenuSection section : day.getSections()) {
+            Set<Integer> sortOrders = new HashSet<>();
+            for (ProposedWeekMenuProduct product : section.getProducts()) {
+                if (!sortOrders.add(product.getSortOrder())) {
+                    throw new IllegalArgumentException("Product sortOrder must be unique within each section");
+                }
+            }
         }
     }
 

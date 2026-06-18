@@ -1,6 +1,7 @@
 package com.eliascanalesnieto.foodhelper.presentation;
 
 import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
+import com.eliascanalesnieto.foodhelper.application.CurrentWeekMenuService;
 import com.eliascanalesnieto.foodhelper.presentation.error.ApiError;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -26,13 +27,14 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Proposed week menus", description = "Draft weekly menu planning operations before a menu becomes final")
 public class ProposedWeekMenuController {
     private final ProposedWeekMenuService service;
+    private final CurrentWeekMenuService currentWeekMenuService;
     private final ProposedWeekMenuApiMapper mapper;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
             summary = "Create proposed week menu",
-            description = "Starts an empty proposed week menu with a date range. The range must fit within a single week, and proposed menus can contain only the days planned so far."
+            description = "Starts an empty proposed week menu with an inclusive date range. The range may cover up to 8 calendar days, such as Monday to Monday, and proposed menus can contain only the days planned so far."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Proposed week menu created",
@@ -62,7 +64,7 @@ public class ProposedWeekMenuController {
     @PutMapping("/{id}/days")
     @Operation(
             summary = "Create or replace proposed day menu",
-            description = "Creates or replaces one proposed day menu. Each selected day part can appear only once and products keep their explicit order."
+            description = "Creates or replaces one proposed day menu. Each selected day part can appear only once and products keep their explicit order, which must be unique within each section."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Proposed week menu updated",
@@ -77,5 +79,21 @@ public class ProposedWeekMenuController {
             @Valid @RequestBody UpsertProposedWeekMenuDayRequest request
     ) {
         return mapper.toResponse(service.upsertDay(id, mapper.toDomain(request)));
+    }
+
+    @PostMapping("/{id}/publish")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(
+            summary = "Publish proposed week menu",
+            description = "Consumes available stock for the proposed week menu, creates an established week snapshot, and stores the missing products as a shopping list."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Established week menu created",
+                    content = @Content(schema = @Schema(implementation = CurrentWeekMenuResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Proposed week menu not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public CurrentWeekMenuResponse publish(@PathVariable Long id) {
+        return currentWeekMenuService.publishFromProposed(id);
     }
 }

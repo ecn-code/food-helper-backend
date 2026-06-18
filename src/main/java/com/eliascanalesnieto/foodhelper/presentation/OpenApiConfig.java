@@ -76,6 +76,16 @@ public class OpenApiConfig {
         ).build();
     }
 
+    @Bean
+    GroupedOpenApi currentWeekMenusApi() {
+        return groupedApi(
+                "established-week-menus",
+                "Established week menus",
+                "/api/v1/established-week-menus",
+                "/api/v1/established-week-menus/**"
+        ).build();
+    }
+
     private GroupedOpenApi.Builder groupedApi(String group, String displayName, String... pathsToMatch) {
         return GroupedOpenApi.builder()
                 .group(group)

@@ -240,6 +240,15 @@ class ProductLambdaRouterIntegrationTest {
         assertThat(createStockResponse.getBody()).contains("\"price\":4.99");
         long stockEntryId = readLong(createStockResponse.getBody(), "id");
 
+        APIGatewayProxyResponseEvent updateStockResponse = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("PUT")
+                .withPath("/api/v1/stock/" + stockEntryId)
+                .withHeaders(authHeaders(token))
+                .withBody("{\"quantity\":7.25,\"price\":5.49,\"expirationDate\":\"2026-06-25\",\"entryDate\":\"2026-06-11\"}"));
+        assertThat(updateStockResponse.getStatusCode()).isEqualTo(200);
+        assertThat(updateStockResponse.getBody()).contains("\"quantity\":7.25");
+        assertThat(updateStockResponse.getBody()).contains("\"price\":5.49");
+
         APIGatewayProxyRequestEvent addStock = new APIGatewayProxyRequestEvent()
                 .withHttpMethod("POST")
                 .withPath("/api/v1/stock/" + stockEntryId + "/add")
@@ -248,7 +257,7 @@ class ProductLambdaRouterIntegrationTest {
 
         APIGatewayProxyResponseEvent addStockResponse = productHttpHandler.apply(addStock);
         assertThat(addStockResponse.getStatusCode()).isEqualTo(200);
-        assertThat(addStockResponse.getBody()).contains("\"quantity\":7");
+        assertThat(addStockResponse.getBody()).contains("\"quantity\":9.25");
 
         APIGatewayProxyRequestEvent listStock = new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")

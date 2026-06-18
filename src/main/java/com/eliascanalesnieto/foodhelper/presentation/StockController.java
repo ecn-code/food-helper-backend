@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -51,6 +52,32 @@ public class StockController {
     ) {
         return mapper.toResponse(service.create(
                 productId,
+                request.quantity(),
+                request.price(),
+                request.expirationDate(),
+                request.entryDate()
+        ));
+    }
+
+    @PutMapping("/api/v1/stock/{stockEntryId}")
+    @Operation(
+            summary = "Update stock entry",
+            description = "Updates the editable fields of an existing stock entry: quantity, price, expiration date, and entry date. The linked product stays unchanged."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Stock entry updated",
+                    content = @Content(schema = @Schema(implementation = StockEntryResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid request",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "404", description = "Stock entry not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public StockEntryResponse update(
+            @PathVariable Long stockEntryId,
+            @Valid @RequestBody UpdateStockEntryRequest request
+    ) {
+        return mapper.toResponse(service.update(
+                stockEntryId,
                 request.quantity(),
                 request.price(),
                 request.expirationDate(),

@@ -9,6 +9,7 @@ import com.eliascanalesnieto.foodhelper.application.MediaUrlService;
 import com.eliascanalesnieto.foodhelper.application.PageResult;
 import com.eliascanalesnieto.foodhelper.application.PaginationRequest;
 import com.eliascanalesnieto.foodhelper.application.ProductService;
+import com.eliascanalesnieto.foodhelper.application.CurrentWeekMenuService;
 import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
 import com.eliascanalesnieto.foodhelper.application.RecipeService;
 import com.eliascanalesnieto.foodhelper.application.StatsService;
@@ -28,6 +29,7 @@ import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuApiMapper;
 import com.eliascanalesnieto.foodhelper.presentation.RecipeIngredientAssignmentRequest;
 import com.eliascanalesnieto.foodhelper.presentation.RecipePageResponse;
 import com.eliascanalesnieto.foodhelper.presentation.RegisterRequest;
+import com.eliascanalesnieto.foodhelper.presentation.UpdateStockEntryRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpsertProposedWeekMenuDayRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateProductRequest;
@@ -56,6 +58,7 @@ public class LambdaHttpRouter {
     private final RecipeService recipeService;
     private final StockService stockService;
     private final ProposedWeekMenuService proposedWeekMenuService;
+    private final CurrentWeekMenuService currentWeekMenuService;
     private final StatsService statsService;
     private final AuthService authService;
     private final JwtService jwtService;
@@ -139,6 +142,13 @@ public class LambdaHttpRouter {
         if ("POST".equals(method) && "/api/v1/proposed-week-menus".equals(path)) {
             CreateProposedWeekMenuRequest body = parseProposedWeekMenuCreate(request.getBody());
             return json(201, proposedWeekMenuMapper.toResponse(proposedWeekMenuService.create(body.startDate(), body.endDate())));
+        }
+
+        if (path != null && path.startsWith("/api/v1/proposed-week-menus/") && path.endsWith("/publish")) {
+            Long id = parseId(path.substring(0, path.lastIndexOf('/')));
+            if ("POST".equals(method)) {
+                return json(201, currentWeekMenuService.publishFromProposed(id));
+            }
         }
 
         if ("GET".equals(method) && "/api/v1/stock".equals(path)) {
@@ -254,7 +264,39 @@ public class LambdaHttpRouter {
             }
         }
 
+        if (path != null && path.startsWith("/api/v1/established-week-menus/")) {
+            if (path.endsWith("/used-stock")) {
+                Long id = parseId(path.substring(0, path.lastIndexOf('/')));
+                if ("GET".equals(method)) {
+                    return json(200, currentWeekMenuService.findById(id).usedStock());
+                }
+            }
+            if (path.endsWith("/shopping-list")) {
+                Long id = parseId(path.substring(0, path.lastIndexOf('/')));
+                if ("GET".equals(method)) {
+                    return json(200, currentWeekMenuService.findById(id).shoppingList());
+                }
+            }
+            Long id = parseId(path);
+            if ("GET".equals(method)) {
+                return json(200, currentWeekMenuService.findById(id));
+            }
+        }
+
         if (path != null && path.startsWith("/api/v1/stock/")) {
+            if (!path.endsWith("/add") && !path.endsWith("/remove")) {
+                Long id = parseId(path);
+                if ("PUT".equals(method)) {
+                    UpdateStockEntryRequest body = parseStockUpdate(request.getBody());
+                    return json(200, mapper.toResponse(stockService.update(
+                            id,
+                            body.quantity(),
+                            body.price(),
+                            body.expirationDate(),
+                            body.entryDate()
+                    )));
+                }
+            }
             if (path.endsWith("/add")) {
                 Long id = parseId(path.substring(0, path.lastIndexOf('/')));
                 if ("POST".equals(method)) {
@@ -322,6 +364,10 @@ public class LambdaHttpRouter {
 
     private CreateStockEntryRequest parseStockCreate(String body) {
         return readBody(body, CreateStockEntryRequest.class);
+    }
+
+    private UpdateStockEntryRequest parseStockUpdate(String body) {
+        return readBody(body, UpdateStockEntryRequest.class);
     }
 
     private AdjustStockQuantityRequest parseAdjustStockQuantity(String body) {

@@ -9,7 +9,13 @@ import lombok.Value;
 @Value
 @Builder(toBuilder = true)
 @Jacksonized
-public class ProposedWeekMenuStockSummaryDayCalories {
-    LocalDate date;
-    BigDecimal calories;
+public class CurrentWeekMenuUsedStock {
+    Long stockEntryId;
+    Long productId;
+    String productName;
+    BigDecimal usedUnits;
+    BigDecimal price;
+    BigDecimal totalCost;
+    LocalDate expirationDate;
+    LocalDate entryDate;
 }

@@ -36,6 +36,22 @@ public class JdbcStockRepository implements StockRepository {
 
     @Override
     @Transactional
+    public StockEntry update(Long stockEntryId, StockEntry stockEntry) {
+        StockEntryEntity existingEntry = stockCrudRepository.findById(stockEntryId)
+                .orElseThrow(() -> new ResourceNotFoundException("Stock entry not found"));
+        stockCrudRepository.save(new StockEntryEntity(
+                existingEntry.id(),
+                existingEntry.productId(),
+                stockEntry.getQuantity(),
+                stockEntry.getPrice(),
+                stockEntry.getExpirationDate(),
+                stockEntry.getEntryDate()
+        ));
+        return findStockEntry(stockEntryId);
+    }
+
+    @Override
+    @Transactional
     public StockEntry addQuantity(Long stockEntryId, BigDecimal quantity) {
         StockEntryEntity existingEntry = stockCrudRepository.findById(stockEntryId)
                 .orElseThrow(() -> new ResourceNotFoundException("Stock entry not found"));

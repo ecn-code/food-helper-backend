@@ -13,7 +13,7 @@ public record ProposedWeekMenuProductResponse(
         BigDecimal units,
         @Schema(description = "Consumed grams", example = "300")
         BigDecimal grams,
-        @Schema(description = "Explicit display order within the section", example = "10")
+        @Schema(description = "Explicit display order within the section. Values are unique within the section.", example = "10")
         Integer sortOrder,
         @Schema(description = "Nutritional contribution for this consumed product")
         NutritionalValuesResponse nutritionalValues

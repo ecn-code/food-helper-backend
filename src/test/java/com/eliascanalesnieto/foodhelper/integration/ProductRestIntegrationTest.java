@@ -11,6 +11,9 @@ import com.eliascanalesnieto.foodhelper.presentation.CreateProposedWeekMenuReque
 import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeDerivedProductRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.LoginRequest;
+import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuResponse;
+import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuShoppingListItemResponse;
+import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuUsedStockResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProductStatsResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProductResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProductPageResponse;
@@ -18,6 +21,7 @@ import com.eliascanalesnieto.foodhelper.presentation.AdjustStockQuantityRequest;
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuDayPartRequest;
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuDayPartResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuProductRequest;
+import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuProductResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuStockSummaryResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuSectionRequest;
@@ -30,6 +34,7 @@ import com.eliascanalesnieto.foodhelper.presentation.RegisterRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateStockEntryRequest;
 import com.eliascanalesnieto.foodhelper.presentation.StockEntryResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProductStatsSummaryResponse;
+import com.eliascanalesnieto.foodhelper.presentation.UpdateStockEntryRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpsertProposedWeekMenuDayRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateProductRequest;
@@ -295,6 +300,7 @@ class ProductRestIntegrationTest {
         assertThat(response.getBody()).contains("/api/v1/recipes/{id}/derived-product");
         assertThat(response.getBody()).contains("/api/v1/media/{id}");
         assertThat(response.getBody()).contains("/api/v1/stock");
+        assertThat(response.getBody()).contains("/api/v1/stock/{stockEntryId}");
         assertThat(response.getBody()).contains("/api/v1/products/{productId}/stock");
         assertThat(response.getBody()).contains("/api/v1/stock/{stockEntryId}/add");
         assertThat(response.getBody()).contains("/api/v1/stock/{stockEntryId}/remove");
@@ -304,10 +310,11 @@ class ProductRestIntegrationTest {
         assertThat(response.getBody()).contains("/api/v1/proposed-week-menus/{id}");
         assertThat(response.getBody()).contains("/api/v1/proposed-week-menus/{id}/days");
         assertThat(response.getBody()).contains("/api/v1/proposed-week-menu-day-parts");
+        assertThat(response.getBody()).contains("unique within each section");
         assertThat(response.getBody()).contains("stockSummary");
         assertThat(response.getBody()).contains("ProposedWeekMenuStockSummaryResponse");
         assertThat(response.getBody()).contains("ProposedWeekMenuStockRequirementResponse");
-        assertThat(response.getBody()).contains("cannot span more than 7 days");
+        assertThat(response.getBody()).contains("inclusive date range cannot span more than 8 calendar days");
         assertThat(response.getBody()).contains("/api/v1/auth/register");
         assertThat(response.getBody()).contains("/api/v1/auth/login");
         assertThat(response.getBody()).contains("registrationCode");
@@ -325,7 +332,7 @@ class ProductRestIntegrationTest {
         assertOpenApiGroup("media", "/api/v1/media/{id}");
         assertOpenApiGroup("products", "/api/v1/products", "/api/v1/products/stats", "/api/v1/products/{id}");
         assertOpenApiGroup("recipes", "/api/v1/recipes", "/api/v1/recipes/stats", "/api/v1/recipes/{id}", "/api/v1/recipes/{id}/derived-product");
-        assertOpenApiGroup("stock", "/api/v1/stock", "/api/v1/stock/{stockEntryId}/add", "/api/v1/stock/{stockEntryId}/remove", "/api/v1/products/{productId}/stock");
+        assertOpenApiGroup("stock", "/api/v1/stock", "/api/v1/stock/{stockEntryId}", "/api/v1/stock/{stockEntryId}/add", "/api/v1/stock/{stockEntryId}/remove", "/api/v1/products/{productId}/stock");
         assertOpenApiGroup("proposed-week-menus", "/api/v1/proposed-week-menus", "/api/v1/proposed-week-menus/{id}", "/api/v1/proposed-week-menus/{id}/days", "/api/v1/proposed-week-menu-day-parts");
     }
 
@@ -526,6 +533,124 @@ class ProductRestIntegrationTest {
     }
 
     @Test
+    void publishingAProposedWeekShouldCreateCurrentWeekSnapshotConsumeStockAndExposeMissingItems() {
+        String productsUrl = "http://localhost:" + port + "/api/v1/products";
+        String dayPartsUrl = "http://localhost:" + port + "/api/v1/proposed-week-menu-day-parts";
+        String stockUrl = "http://localhost:" + port + "/api/v1/stock";
+        String proposedMenusUrl = "http://localhost:" + port + "/api/v1/proposed-week-menus";
+        String currentWeekMenusUrl = "http://localhost:" + port + "/api/v1/established-week-menus";
+
+        Long chickenId = createProduct(productsUrl, "Current Week Chicken", "Chicken breast", "200", "0", "31", "3.6", "2.00");
+        Long riceId = createProduct(productsUrl, "Current Week Rice", "Rice", "100", "0", "2.7", "0.3", "1.20");
+        Long beansId = createProduct(productsUrl, "Current Week Beans", "Beans", "100", "22", "8", "1.2", "1.50");
+        Long lunchDayPartId = createDayPart(dayPartsUrl, "Lunch current", "Main meal of the day", 10);
+
+        ResponseEntity<StockEntryResponse> chickenStock = postAuthorized(
+                productsUrl + "/" + chickenId + "/stock",
+                new CreateStockEntryRequest(new BigDecimal("1.50"), new BigDecimal("2.00"), LocalDate.of(2026, 6, 20), LocalDate.of(2026, 6, 10)),
+                StockEntryResponse.class
+        );
+        ResponseEntity<StockEntryResponse> beansStock = postAuthorized(
+                productsUrl + "/" + beansId + "/stock",
+                new CreateStockEntryRequest(new BigDecimal("0.50"), new BigDecimal("1.50"), null, LocalDate.of(2026, 6, 11)),
+                StockEntryResponse.class
+        );
+        assertThat(chickenStock.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(beansStock.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<ProposedWeekMenuResponse> createdMenu = postAuthorized(
+                proposedMenusUrl,
+                new CreateProposedWeekMenuRequest(LocalDate.of(2026, 6, 15), LocalDate.of(2026, 6, 21)),
+                ProposedWeekMenuResponse.class
+        );
+        assertThat(createdMenu.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<ProposedWeekMenuResponse> plannedMenu = restTemplate.exchange(
+                proposedMenusUrl + "/" + createdMenu.getBody().id() + "/days",
+                HttpMethod.PUT,
+                authorizedEntity(new UpsertProposedWeekMenuDayRequest(
+                        LocalDate.of(2026, 6, 15),
+                        List.of(
+                                new ProposedWeekMenuSectionRequest(
+                                        lunchDayPartId,
+                                        List.of(
+                                                new ProposedWeekMenuProductRequest(chickenId, new BigDecimal("1.50"), null, 10),
+                                                new ProposedWeekMenuProductRequest(riceId, new BigDecimal("2.00"), null, 20),
+                                                new ProposedWeekMenuProductRequest(beansId, new BigDecimal("1.00"), null, 30)
+                                        )
+                                )
+                        )
+                )),
+                ProposedWeekMenuResponse.class
+        );
+        assertThat(plannedMenu.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(plannedMenu.getBody()).isNotNull();
+        assertThat(plannedMenu.getBody().stockSummary().estimatedCost()).isEqualByComparingTo("3.75");
+
+        ResponseEntity<CurrentWeekMenuResponse> published = postAuthorized(
+                proposedMenusUrl + "/" + createdMenu.getBody().id() + "/publish",
+                null,
+                CurrentWeekMenuResponse.class
+        );
+        assertThat(published.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(published.getBody()).isNotNull();
+        assertThat(published.getBody().proposedWeekMenuId()).isEqualTo(createdMenu.getBody().id());
+        assertThat(published.getBody().nutritionalValues().calories()).isEqualByComparingTo(plannedMenu.getBody().nutritionalValues().calories());
+        assertThat(published.getBody().stockSummary().estimatedCost()).isEqualByComparingTo("3.75");
+        assertThat(published.getBody().usedStock()).hasSize(2);
+        assertThat(published.getBody().shoppingList()).hasSize(2);
+
+        Long currentWeekId = published.getBody().id();
+        ResponseEntity<CurrentWeekMenuResponse> loadedCurrentWeek = getAuthorized(
+                currentWeekMenusUrl + "/" + currentWeekId,
+                CurrentWeekMenuResponse.class
+        );
+        assertThat(loadedCurrentWeek.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(loadedCurrentWeek.getBody()).isNotNull();
+        assertThat(loadedCurrentWeek.getBody().days()).hasSize(1);
+        assertThat(loadedCurrentWeek.getBody().days().getFirst().sections()).hasSize(1);
+
+        ResponseEntity<CurrentWeekMenuUsedStockResponse[]> usedStock = getAuthorized(
+                currentWeekMenusUrl + "/" + currentWeekId + "/used-stock",
+                CurrentWeekMenuUsedStockResponse[].class
+        );
+        assertThat(usedStock.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(usedStock.getBody()).isNotNull();
+        assertThat(usedStock.getBody()).hasSize(2);
+        assertThat(usedStock.getBody())
+                .extracting(CurrentWeekMenuUsedStockResponse::productId)
+                .containsExactlyInAnyOrder(chickenId, beansId);
+
+        ResponseEntity<CurrentWeekMenuShoppingListItemResponse[]> shoppingList = getAuthorized(
+                currentWeekMenusUrl + "/" + currentWeekId + "/shopping-list",
+                CurrentWeekMenuShoppingListItemResponse[].class
+        );
+        assertThat(shoppingList.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(shoppingList.getBody()).isNotNull();
+        assertThat(shoppingList.getBody()).hasSize(2);
+        assertThat(shoppingList.getBody())
+                .filteredOn(item -> item.productId().equals(riceId))
+                .singleElement()
+                .satisfies(item -> assertThat(item.missingUnits()).isEqualByComparingTo("2.00"));
+
+        ResponseEntity<StockEntryResponse[]> chickenRemaining = getAuthorized(
+                productsUrl + "/" + chickenId + "/stock",
+                StockEntryResponse[].class
+        );
+        ResponseEntity<StockEntryResponse[]> beansRemaining = getAuthorized(
+                productsUrl + "/" + beansId + "/stock",
+                StockEntryResponse[].class
+        );
+        ResponseEntity<StockEntryResponse[]> riceRemaining = getAuthorized(
+                productsUrl + "/" + riceId + "/stock",
+                StockEntryResponse[].class
+        );
+        assertThat(chickenRemaining.getBody()).isEmpty();
+        assertThat(beansRemaining.getBody()).isEmpty();
+        assertThat(riceRemaining.getBody()).isEmpty();
+    }
+
+    @Test
     void proposedWeekMenuShouldRejectRepeatedDayPartsWithinSameDay() {
         String productsUrl = "http://localhost:" + port + "/api/v1/products";
         String dayPartsUrl = "http://localhost:" + port + "/api/v1/proposed-week-menu-day-parts";
@@ -564,17 +689,114 @@ class ProductRestIntegrationTest {
     }
 
     @Test
-    void proposedWeekMenuShouldRejectRangesLongerThanSevenDays() {
+    void proposedWeekMenuShouldRejectRepeatedProductSortOrdersWithinTheSameSection() {
+        String productsUrl = "http://localhost:" + port + "/api/v1/products";
+        String dayPartsUrl = "http://localhost:" + port + "/api/v1/proposed-week-menu-day-parts";
         String proposedMenusUrl = "http://localhost:" + port + "/api/v1/proposed-week-menus";
+        Long yogurtId = createProduct(productsUrl, "Duplicate Sort Yogurt", "Greek yogurt", "59", "3.6", "10", "0.4", "125");
+        Long almondsId = createProduct(productsUrl, "Duplicate Sort Almonds", "Raw almonds", "579", "22", "21", "50", "30");
+        Long lunchDayPartId = createDayPart(dayPartsUrl, "Lunch duplicate sort", "Main meal of the day", 10);
 
-        ResponseEntity<String> rejectedMenu = postAuthorized(
+        ResponseEntity<ProposedWeekMenuResponse> createdMenu = postAuthorized(
                 proposedMenusUrl,
-                new CreateProposedWeekMenuRequest(LocalDate.of(2026, 6, 15), LocalDate.of(2026, 6, 22)),
+                new CreateProposedWeekMenuRequest(LocalDate.of(2026, 6, 15), LocalDate.of(2026, 6, 21)),
+                ProposedWeekMenuResponse.class
+        );
+        assertThat(createdMenu.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<String> rejectedMenu = restTemplate.exchange(
+                proposedMenusUrl + "/" + createdMenu.getBody().id() + "/days",
+                HttpMethod.PUT,
+                authorizedEntity(new UpsertProposedWeekMenuDayRequest(
+                        LocalDate.of(2026, 6, 15),
+                        List.of(
+                                new ProposedWeekMenuSectionRequest(
+                                        lunchDayPartId,
+                                        List.of(
+                                                new ProposedWeekMenuProductRequest(yogurtId, new BigDecimal("1"), null, 10),
+                                                new ProposedWeekMenuProductRequest(almondsId, new BigDecimal("2"), null, 10)
+                                        )
+                                )
+                        )
+                )),
                 String.class
         );
 
         assertThat(rejectedMenu.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(rejectedMenu.getBody()).contains("cannot span more than 7 days");
+        assertThat(rejectedMenu.getBody()).contains("Product sortOrder must be unique within each section");
+    }
+
+    @Test
+    void proposedWeekMenuShouldAcceptRepeatedSortOrdersAcrossDifferentSectionsAndUniqueSortOrdersWithinEachSection() {
+        String productsUrl = "http://localhost:" + port + "/api/v1/products";
+        String dayPartsUrl = "http://localhost:" + port + "/api/v1/proposed-week-menu-day-parts";
+        String proposedMenusUrl = "http://localhost:" + port + "/api/v1/proposed-week-menus";
+        Long yogurtId = createProduct(productsUrl, "Valid Sort Yogurt", "Greek yogurt", "59", "3.6", "10", "0.4", "125");
+        Long almondsId = createProduct(productsUrl, "Valid Sort Almonds", "Raw almonds", "579", "22", "21", "50", "30");
+        Long lunchDayPartId = createDayPart(dayPartsUrl, "Lunch valid sort", "Main meal of the day", 10);
+        Long snackDayPartId = createDayPart(dayPartsUrl, "Snack valid sort", "Light meal between main meals", 20);
+
+        ResponseEntity<ProposedWeekMenuResponse> createdMenu = postAuthorized(
+                proposedMenusUrl,
+                new CreateProposedWeekMenuRequest(LocalDate.of(2026, 6, 15), LocalDate.of(2026, 6, 21)),
+                ProposedWeekMenuResponse.class
+        );
+        assertThat(createdMenu.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<ProposedWeekMenuResponse> updatedMenu = restTemplate.exchange(
+                proposedMenusUrl + "/" + createdMenu.getBody().id() + "/days",
+                HttpMethod.PUT,
+                authorizedEntity(new UpsertProposedWeekMenuDayRequest(
+                        LocalDate.of(2026, 6, 15),
+                        List.of(
+                                new ProposedWeekMenuSectionRequest(
+                                        lunchDayPartId,
+                                        List.of(
+                                                new ProposedWeekMenuProductRequest(yogurtId, new BigDecimal("1"), null, 10),
+                                                new ProposedWeekMenuProductRequest(almondsId, new BigDecimal("2"), null, 20)
+                                        )
+                                ),
+                                new ProposedWeekMenuSectionRequest(
+                                        snackDayPartId,
+                                        List.of(new ProposedWeekMenuProductRequest(yogurtId, new BigDecimal("1"), null, 10))
+                                )
+                        )
+                )),
+                ProposedWeekMenuResponse.class
+        );
+
+        assertThat(updatedMenu.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(updatedMenu.getBody()).isNotNull();
+        assertThat(updatedMenu.getBody().days()).hasSize(1);
+        assertThat(updatedMenu.getBody().days().getFirst().sections()).hasSize(2);
+        assertThat(updatedMenu.getBody().days().getFirst().sections().getFirst().products())
+                .extracting(ProposedWeekMenuProductResponse::sortOrder)
+                .containsExactly(10, 20);
+    }
+
+    @Test
+    void proposedWeekMenuShouldAcceptInclusiveWeekRangeAndRejectLongerRanges() {
+        String proposedMenusUrl = "http://localhost:" + port + "/api/v1/proposed-week-menus";
+
+        ResponseEntity<ProposedWeekMenuResponse> acceptedMenu = postAuthorized(
+                proposedMenusUrl,
+                new CreateProposedWeekMenuRequest(LocalDate.of(2026, 6, 15), LocalDate.of(2026, 6, 22)),
+                ProposedWeekMenuResponse.class
+        );
+
+        assertThat(acceptedMenu.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(acceptedMenu.getBody()).isNotNull();
+        assertThat(acceptedMenu.getBody().startDate()).isEqualTo(LocalDate.of(2026, 6, 15));
+        assertThat(acceptedMenu.getBody().endDate()).isEqualTo(LocalDate.of(2026, 6, 22));
+
+        ResponseEntity<String> rejectedMenu = postAuthorized(
+                proposedMenusUrl,
+                new CreateProposedWeekMenuRequest(LocalDate.of(2026, 6, 15), LocalDate.of(2026, 6, 23)),
+                String.class
+        );
+
+        assertThat(rejectedMenu.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(rejectedMenu.getBody()).contains("cannot span more than 8 days");
     }
 
     @Test
@@ -660,6 +882,98 @@ class ProductRestIntegrationTest {
         assertThat(appleStockAfterDelete.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(appleStockAfterDelete.getBody()).isNotNull();
         assertThat(appleStockAfterDelete.getBody()).isEmpty();
+    }
+
+    @Test
+    void stockEntryUpdateShouldReplaceEditableFieldsAndValidatePayloads() {
+        String productsUrl = "http://localhost:" + port + "/api/v1/products";
+        String stockUrl = "http://localhost:" + port + "/api/v1/stock";
+        Long appleId = createProduct(productsUrl, "Update Apple", "Fresh apple", "52", "14", "0.3", "0.2");
+
+        ResponseEntity<StockEntryResponse> createdStock = postAuthorized(
+                productsUrl + "/" + appleId + "/stock",
+                new CreateStockEntryRequest(new BigDecimal("5"), new BigDecimal("4.99"), LocalDate.of(2026, 6, 14), LocalDate.of(2026, 6, 10)),
+                StockEntryResponse.class
+        );
+        assertThat(createdStock.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(createdStock.getBody()).isNotNull();
+        Long stockEntryId = createdStock.getBody().id();
+
+        ResponseEntity<StockEntryResponse> updatedStock = restTemplate.exchange(
+                stockUrl + "/" + stockEntryId,
+                HttpMethod.PUT,
+                authorizedEntity(new UpdateStockEntryRequest(
+                        new BigDecimal("7.25"),
+                        new BigDecimal("5.49"),
+                        LocalDate.of(2026, 6, 25),
+                        LocalDate.of(2026, 6, 11)
+                )),
+                StockEntryResponse.class
+        );
+        assertThat(updatedStock.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(updatedStock.getBody()).isNotNull();
+        assertThat(updatedStock.getBody().id()).isEqualTo(stockEntryId);
+        assertThat(updatedStock.getBody().productId()).isEqualTo(appleId);
+        assertThat(updatedStock.getBody().quantity()).isEqualByComparingTo("7.25");
+        assertThat(updatedStock.getBody().price()).isEqualByComparingTo("5.49");
+        assertThat(updatedStock.getBody().expirationDate()).isEqualTo(LocalDate.of(2026, 6, 25));
+        assertThat(updatedStock.getBody().entryDate()).isEqualTo(LocalDate.of(2026, 6, 11));
+
+        ResponseEntity<String> invalidQuantity = restTemplate.exchange(
+                stockUrl + "/" + stockEntryId,
+                HttpMethod.PUT,
+                authorizedEntity(new UpdateStockEntryRequest(
+                        BigDecimal.ZERO,
+                        new BigDecimal("5.49"),
+                        LocalDate.of(2026, 6, 25),
+                        LocalDate.of(2026, 6, 11)
+                )),
+                String.class
+        );
+        assertThat(invalidQuantity.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(invalidQuantity.getBody()).contains("quantity");
+
+        ResponseEntity<String> invalidPrice = restTemplate.exchange(
+                stockUrl + "/" + stockEntryId,
+                HttpMethod.PUT,
+                authorizedEntity(new UpdateStockEntryRequest(
+                        new BigDecimal("7.25"),
+                        new BigDecimal("-1"),
+                        LocalDate.of(2026, 6, 25),
+                        LocalDate.of(2026, 6, 11)
+                )),
+                String.class
+        );
+        assertThat(invalidPrice.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(invalidPrice.getBody()).contains("price");
+
+        ResponseEntity<String> missingEntryDate = restTemplate.exchange(
+                stockUrl + "/" + stockEntryId,
+                HttpMethod.PUT,
+                authorizedEntity(new UpdateStockEntryRequest(
+                        new BigDecimal("7.25"),
+                        new BigDecimal("5.49"),
+                        LocalDate.of(2026, 6, 25),
+                        null
+                )),
+                String.class
+        );
+        assertThat(missingEntryDate.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(missingEntryDate.getBody()).contains("entryDate");
+
+        ResponseEntity<String> notFound = restTemplate.exchange(
+                stockUrl + "/999999999",
+                HttpMethod.PUT,
+                authorizedEntity(new UpdateStockEntryRequest(
+                        new BigDecimal("7.25"),
+                        new BigDecimal("5.49"),
+                        LocalDate.of(2026, 6, 25),
+                        LocalDate.of(2026, 6, 11)
+                )),
+                String.class
+        );
+        assertThat(notFound.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(notFound.getBody()).contains("Stock entry not found");
     }
 
     @Test

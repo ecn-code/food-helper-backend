@@ -147,6 +147,16 @@ CREATE INDEX IF NOT EXISTS idx_proposed_week_menu_day_parts_sort_order ON propos
 CREATE INDEX IF NOT EXISTS idx_proposed_week_menu_sections_day_id ON proposed_week_menu_sections(day_id);
 CREATE INDEX IF NOT EXISTS idx_proposed_week_menu_products_section_id ON proposed_week_menu_products(section_id);
 
+CREATE TABLE IF NOT EXISTS current_week_menus (
+    id BIGSERIAL PRIMARY KEY,
+    proposed_week_menu_id BIGINT NOT NULL UNIQUE,
+    snapshot_json TEXT NOT NULL,
+    CONSTRAINT fk_current_week_menus_proposed_menu
+        FOREIGN KEY (proposed_week_menu_id)
+        REFERENCES proposed_week_menus(id)
+        ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS app_users (
     id BIGSERIAL PRIMARY KEY,
     username VARCHAR(80) NOT NULL UNIQUE,

@@ -31,6 +31,20 @@ public class StockService {
                 .build());
     }
 
+    public StockEntry update(Long stockEntryId, BigDecimal quantity, BigDecimal price, LocalDate expirationDate, LocalDate entryDate) {
+        validatePositiveQuantity(quantity);
+        validatePrice(price);
+        if (entryDate == null) {
+            throw new IllegalArgumentException("Entry date is required");
+        }
+        return stockRepository.update(stockEntryId, StockEntry.builder()
+                .quantity(quantity)
+                .price(scale(price))
+                .expirationDate(expirationDate)
+                .entryDate(entryDate)
+                .build());
+    }
+
     public StockEntry addQuantity(Long stockEntryId, BigDecimal quantity) {
         validatePositiveQuantity(quantity);
         return stockRepository.addQuantity(stockEntryId, quantity);

@@ -9,11 +9,14 @@ import lombok.Value;
 @Value
 @Builder(toBuilder = true)
 @Jacksonized
-public class ProposedWeekMenu {
+public class CurrentWeekMenu {
     Long id;
+    Long proposedWeekMenuId;
     LocalDate startDate;
     LocalDate endDate;
     List<ProposedWeekMenuDay> days;
     NutritionalValues nutritionalValues;
     ProposedWeekMenuStockSummary stockSummary;
+    List<CurrentWeekMenuUsedStock> usedStock;
+    List<CurrentWeekMenuShoppingListItem> shoppingList;
 }

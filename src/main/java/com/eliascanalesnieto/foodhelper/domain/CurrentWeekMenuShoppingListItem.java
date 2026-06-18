@@ -1,7 +1,6 @@
 package com.eliascanalesnieto.foodhelper.domain;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import lombok.Builder;
 import lombok.extern.jackson.Jacksonized;
 import lombok.Value;
@@ -9,7 +8,8 @@ import lombok.Value;
 @Value
 @Builder(toBuilder = true)
 @Jacksonized
-public class ProposedWeekMenuStockSummaryDayCalories {
-    LocalDate date;
-    BigDecimal calories;
+public class CurrentWeekMenuShoppingListItem {
+    Long productId;
+    String productName;
+    BigDecimal missingUnits;
 }

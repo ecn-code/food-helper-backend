@@ -353,6 +353,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /api/v1/stock/{stockEntryId}:
+    put:
+      tags:
+        - Stock
+      summary: Update stock entry
+      description: Updates the editable fields of an existing stock entry: quantity, price, expiration date, and entry date. The linked product stays unchanged.
+      operationId: updateStockEntry
+      parameters:
+        - name: stockEntryId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStockEntryRequest'
+            examples:
+              default:
+                value:
+                  quantity: 7.25
+                  price: 5.49
+                  expirationDate: 2026-06-25
+                  entryDate: 2026-06-11
+      responses:
+        '200':
+          description: Stock entry updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockEntryResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Stock entry not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /api/v1/stock:
     get:
       tags:
@@ -702,7 +748,7 @@ paths:
       tags:
         - Proposed week menus
       summary: Create proposed week menu
-      description: Starts an empty proposed week menu with a date range. The range must fit within a single week, and proposed menus can contain only the days planned so far.
+      description: Starts an empty proposed week menu with an inclusive date range. The range may cover up to 8 calendar days, such as Monday to Monday, and proposed menus can contain only the days planned so far.
       operationId: createProposedWeekMenu
       requestBody:
         required: true
@@ -714,7 +760,7 @@ paths:
               default:
                 value:
                   startDate: 2026-06-15
-                  endDate: 2026-06-21
+                  endDate: 2026-06-22
       responses:
         '201':
           description: Proposed week menu created
@@ -760,7 +806,7 @@ paths:
       tags:
         - Proposed week menus
       summary: Create or replace proposed day menu
-      description: Creates or replaces one proposed day menu. Sections and products keep the explicit order supplied in the request.
+      description: Creates or replaces one proposed day menu. Sections and products keep the explicit order supplied in the request, and product sortOrder values must be unique within each section.
       operationId: upsertProposedWeekMenuDay
       parameters:
         - name: id
@@ -786,6 +832,9 @@ paths:
                           units: 1
                           grams: 200
                           sortOrder: 10
+                        - productId: 3
+                          units: 1
+                          sortOrder: 20
                     - dayPartId: 2
                       products:
                         - productId: 2
@@ -806,6 +855,118 @@ paths:
                 $ref: '#/components/schemas/ApiError'
         '404':
           description: Proposed week menu or product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/proposed-week-menus/{id}/publish:
+    post:
+      tags:
+        - Proposed week menus
+      summary: Publish proposed week menu
+      description: Consumes available stock for the proposed week menu, creates an established week snapshot, and stores the missing products as a shopping list.
+      operationId: publishProposedWeekMenu
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '201':
+          description: Established week menu created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentWeekMenuResponse'
+        '404':
+          description: Proposed week menu not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/established-week-menus/{id}:
+    get:
+      tags:
+        - Established week menus
+      summary: Get established week menu
+      description: Returns one established week menu snapshot with ordered days, nutritional totals, the stock summary captured at publication time, the consumed stock entries, and the shopping list for missing products.
+      operationId: getCurrentWeekMenu
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Established week menu returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentWeekMenuResponse'
+        '404':
+          description: Established week menu not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/established-week-menus/{id}/used-stock:
+    get:
+      tags:
+        - Established week menus
+      summary: List used stock for established week menu
+      description: Returns the stock entries consumed when the established week menu was published, ordered by the original stock allocation.
+      operationId: listCurrentWeekMenuUsedStock
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Consumed stock entries returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CurrentWeekMenuUsedStockResponse'
+        '404':
+          description: Established week menu not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/established-week-menus/{id}/shopping-list:
+    get:
+      tags:
+        - Established week menus
+      summary: List shopping list for established week menu
+      description: Returns the products and missing units that were not covered by stock when the established week menu was published.
+      operationId: listCurrentWeekMenuShoppingList
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Shopping list returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CurrentWeekMenuShoppingListItemResponse'
+        '404':
+          description: Established week menu not found
           content:
             application/json:
               schema:
@@ -1105,6 +1266,34 @@ components:
         photo:
           $ref: '#/components/schemas/PhotoUploadRequest'
     CreateStockEntryRequest:
+      type: object
+      required:
+        - quantity
+        - price
+        - entryDate
+      properties:
+        quantity:
+          type: number
+          exclusiveMinimum: 0
+          description: Available quantity for this stock entry
+          example: 6.5
+        price:
+          type: number
+          minimum: 0
+          description: Price paid for this stock entry
+          example: 4.99
+        expirationDate:
+          type: string
+          format: date
+          nullable: true
+          description: Stock expiration date when available
+          example: 2026-06-20
+        entryDate:
+          type: string
+          format: date
+          description: Date when the stock entry was received
+          example: 2026-06-10
+    UpdateStockEntryRequest:
       type: object
       required:
         - quantity
@@ -1553,7 +1742,7 @@ components:
           type: number
           example: 4
     CreateProposedWeekMenuRequest:
-      description: Payload for starting an empty proposed week menu. The date range cannot span more than 7 days.
+      description: Payload for starting an empty proposed week menu. The inclusive date range cannot span more than 8 calendar days.
       type: object
       required:
         - startDate
@@ -1568,7 +1757,7 @@ components:
           type: string
           format: date
           description: Last date covered by the proposed menu
-          example: 2026-06-21
+          example: 2026-06-22
     UpsertProposedWeekMenuDayRequest:
       type: object
       required:
@@ -1600,7 +1789,7 @@ components:
         products:
           type: array
           minItems: 1
-          description: Ordered products consumed in this section
+          description: Ordered products consumed in this section. Each product sortOrder must be unique within the section.
           items:
             $ref: '#/components/schemas/ProposedWeekMenuProductRequest'
     ProposedWeekMenuProductRequest:
@@ -1630,7 +1819,7 @@ components:
           type: integer
           format: int32
           minimum: 0
-          description: Explicit display order within the section
+          description: Explicit display order within the section. Must be unique among products in the same section.
           example: 10
     ProposedWeekMenuResponse:
       type: object
@@ -1649,7 +1838,7 @@ components:
           type: string
           format: date
           description: Last date covered by the proposed menu
-          example: 2026-06-21
+          example: 2026-06-22
         days:
           type: array
           description: Existing proposed day menus. A proposed week menu may start empty.
@@ -1659,6 +1848,48 @@ components:
           $ref: '#/components/schemas/NutritionalValuesResponse'
         stockSummary:
           $ref: '#/components/schemas/ProposedWeekMenuStockSummaryResponse'
+    CurrentWeekMenuResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Current menu identifier
+          example: 1
+        proposedWeekMenuId:
+          type: integer
+          format: int64
+          description: Proposed menu identifier used to create the established week
+          example: 5
+        startDate:
+          type: string
+          format: date
+          description: First date covered by the established week
+          example: 2026-06-15
+        endDate:
+          type: string
+          format: date
+          description: Last date covered by the established week
+          example: 2026-06-22
+        days:
+          type: array
+          description: Saved day menus in the established week
+          items:
+            $ref: '#/components/schemas/ProposedWeekMenuDayResponse'
+        nutritionalValues:
+          $ref: '#/components/schemas/NutritionalValuesResponse'
+        stockSummary:
+          $ref: '#/components/schemas/ProposedWeekMenuStockSummaryResponse'
+        usedStock:
+          type: array
+          description: Stock entries consumed to satisfy the established week
+          items:
+            $ref: '#/components/schemas/CurrentWeekMenuUsedStockResponse'
+        shoppingList:
+          type: array
+          description: Products still missing after consuming stock
+          items:
+            $ref: '#/components/schemas/CurrentWeekMenuShoppingListItemResponse'
     ProposedWeekMenuStockSummaryResponse:
       type: object
       properties:
@@ -1858,10 +2089,66 @@ components:
         sortOrder:
           type: integer
           format: int32
-          description: Explicit display order within the section
+          description: Explicit display order within the section. Values are unique within the section.
           example: 10
         nutritionalValues:
           $ref: '#/components/schemas/NutritionalValuesResponse'
+    CurrentWeekMenuUsedStockResponse:
+      type: object
+      properties:
+        stockEntryId:
+          type: integer
+          format: int64
+          description: Stock entry identifier
+          example: 7
+        productId:
+          type: integer
+          format: int64
+          description: Product identifier
+          example: 1
+        productName:
+          type: string
+          description: Product name
+          example: Apple
+        usedUnits:
+          type: number
+          description: Quantity consumed from the stock entry
+          example: 1.5
+        price:
+          type: number
+          description: Price paid for one unit in this stock entry
+          example: 2.49
+        totalCost:
+          type: number
+          description: Total cost of the consumed quantity
+          example: 3.74
+        expirationDate:
+          type: string
+          format: date
+          nullable: true
+          description: Stock expiration date when available
+          example: 2026-06-20
+        entryDate:
+          type: string
+          format: date
+          description: Date when the stock entry was received
+          example: 2026-06-10
+    CurrentWeekMenuShoppingListItemResponse:
+      type: object
+      properties:
+        productId:
+          type: integer
+          format: int64
+          description: Product identifier
+          example: 1
+        productName:
+          type: string
+          description: Product name
+          example: Apple
+        missingUnits:
+          type: number
+          description: Units still missing after consuming available stock
+          example: 2
     NutritionalValuesResponse:
       type: object
       properties:
