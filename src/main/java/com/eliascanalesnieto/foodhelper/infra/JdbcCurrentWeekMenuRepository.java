@@ -3,6 +3,7 @@ package com.eliascanalesnieto.foodhelper.infra;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuRepository;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuResponse;
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
+import java.util.List;
 import java.sql.PreparedStatement;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -25,20 +26,23 @@ public class JdbcCurrentWeekMenuRepository implements CurrentWeekMenuRepository 
                     INSERT INTO current_week_menus (proposed_week_menu_id, snapshot_json)
                     VALUES (?, ?)
                     """, new String[]{"id"});
-            ps.setLong(1, menu.proposedWeekMenuId());
+            ps.setLong(1, menu.planningId());
             ps.setString(2, objectMapper.writeValueAsString(menu));
             return ps;
         }, keyHolder);
         CurrentWeekMenuResponse persisted = new CurrentWeekMenuResponse(
                 keyHolder.getKey().longValue(),
-                menu.proposedWeekMenuId(),
+                menu.planningId(),
+                menu.payerUserId(),
+                menu.payerUsername(),
                 menu.startDate(),
                 menu.endDate(),
                 menu.days(),
                 menu.nutritionalValues(),
                 menu.stockSummary(),
                 menu.usedStock(),
-                menu.shoppingList()
+                menu.shoppingList(),
+                menu.nutritionalRules()
         );
         jdbcTemplate.update(
                 "UPDATE current_week_menus SET snapshot_json = ? WHERE id = ?",
@@ -66,11 +70,22 @@ public class JdbcCurrentWeekMenuRepository implements CurrentWeekMenuRepository 
                 """, proposedWeekMenuId);
     }
 
+    @Override
+    public List<CurrentWeekMenuResponse> findAll() {
+        return jdbcTemplate.query("""
+                        SELECT snapshot_json
+                        FROM current_week_menus
+                        ORDER BY id
+                        """,
+                (rs, rowNum) -> objectMapper.readValue(rs.getString("snapshot_json"), CurrentWeekMenuResponse.class)
+        );
+    }
+
     private CurrentWeekMenuResponse load(String sql, Long value) {
         String snapshot = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString("snapshot_json"), value)
                 .stream()
                 .findFirst()
-                .orElseThrow(() -> new ResourceNotFoundException("Established week menu not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Menu not found"));
         return objectMapper.readValue(snapshot, CurrentWeekMenuResponse.class);
     }
 }

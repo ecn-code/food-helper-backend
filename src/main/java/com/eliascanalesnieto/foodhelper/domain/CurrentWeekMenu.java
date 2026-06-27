@@ -12,6 +12,8 @@ import lombok.Value;
 public class CurrentWeekMenu {
     Long id;
     Long proposedWeekMenuId;
+    Long payerUserId;
+    String payerUsername;
     LocalDate startDate;
     LocalDate endDate;
     List<ProposedWeekMenuDay> days;

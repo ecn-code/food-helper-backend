@@ -1,5 +1,6 @@
 package com.eliascanalesnieto.foodhelper.presentation;
 
+import com.eliascanalesnieto.foodhelper.application.NutritionalRulesService;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenu;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDay;
@@ -10,9 +11,13 @@ import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummary;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummaryCalories;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummaryDayCalories;
 import org.springframework.stereotype.Component;
+import lombok.RequiredArgsConstructor;
 
 @Component
+@RequiredArgsConstructor
 public class ProposedWeekMenuApiMapper {
+    private final NutritionalRulesService nutritionalRulesService;
+
     public ProposedWeekMenuResponse toResponse(ProposedWeekMenu menu) {
         return new ProposedWeekMenuResponse(
                 menu.getId(),
@@ -20,7 +25,8 @@ public class ProposedWeekMenuApiMapper {
                 menu.getEndDate(),
                 menu.getDays().stream().map(this::toResponse).toList(),
                 toResponse(menu.getNutritionalValues()),
-                toResponse(menu.getStockSummary())
+                toResponse(menu.getStockSummary()),
+                nutritionalRulesService.evaluate(menu.getNutritionalValues(), menu.getDays().size())
         );
     }
 

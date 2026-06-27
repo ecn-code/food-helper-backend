@@ -2,7 +2,7 @@ package com.eliascanalesnieto.foodhelper.presentation;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-@Schema(name = "ProposedWeekMenuDayPartResponse", description = "API representation of one reusable day part configuration")
+@Schema(name = "PlanningDayPartResponse", description = "API representation of one reusable day part configuration")
 public record ProposedWeekMenuDayPartResponse(
         @Schema(description = "Day part identifier", example = "1")
         Long id,

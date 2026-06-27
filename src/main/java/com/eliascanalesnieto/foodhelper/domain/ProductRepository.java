@@ -10,13 +10,23 @@ public interface ProductRepository {
 
     List<Product> findAll();
 
-    List<Product> findPage(int offset, int limit);
+    default List<Product> findPage(int offset, int limit) {
+        return findPage(offset, limit, ProductSearchCriteria.empty());
+    }
 
-    long count();
+    List<Product> findPage(int offset, int limit, ProductSearchCriteria searchCriteria);
+
+    default long count() {
+        return count(ProductSearchCriteria.empty());
+    }
+
+    long count(ProductSearchCriteria searchCriteria);
 
     Product findById(Long id);
 
     List<Product> findByIds(Collection<Long> ids);
+
+    Collection<Long> findProductIdsBySupermarket(Long supermarketId, Collection<Long> productIds);
 
     void delete(Long id);
 }

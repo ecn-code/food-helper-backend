@@ -8,6 +8,7 @@ import com.eliascanalesnieto.foodhelper.domain.Recipe;
 import com.eliascanalesnieto.foodhelper.domain.RecipeDerivedProduct;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
 import com.eliascanalesnieto.foodhelper.domain.StockEntry;
+import com.eliascanalesnieto.foodhelper.domain.Supermarket;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -19,6 +20,8 @@ public abstract class ProductApiMapper {
 
     @Mapping(target = "photo", expression = "java(toSignedPhotoUrl(product.getPhoto()))")
     public abstract ProductResponse toResponse(Product product);
+
+    public abstract SupermarketResponse toResponse(Supermarket supermarket);
 
     public abstract NutritionalValuesResponse toResponse(NutritionalValues nutritionalValues);
 

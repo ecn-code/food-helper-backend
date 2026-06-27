@@ -3,8 +3,10 @@ package com.eliascanalesnieto.foodhelper.application;
 import com.eliascanalesnieto.foodhelper.domain.Media;
 import com.eliascanalesnieto.foodhelper.domain.MediaUpload;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
+import com.eliascanalesnieto.foodhelper.domain.ProductSearchCriteria;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
+import com.eliascanalesnieto.foodhelper.domain.SupermarketRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
@@ -16,10 +18,17 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ProductService {
     private final ProductRepository repository;
+    private final SupermarketRepository supermarketRepository;
     private final MediaService mediaService;
 
     @Transactional
     public Product create(String name, String description, BigDecimal gramsPerUnit, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, BigDecimal defaultPrice, MediaUpload photoUpload) {
+        return create(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, defaultPrice, photoUpload, List.of());
+    }
+
+    @Transactional
+    public Product create(String name, String description, BigDecimal gramsPerUnit, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, BigDecimal defaultPrice, MediaUpload photoUpload, List<Long> supermarketIds) {
+        var supermarkets = supermarketRepository.findByIds(supermarketIds == null ? List.of() : supermarketIds);
         Media photo = mediaService.createOptimized(photoUpload);
         Product created = repository.create(Product.builder()
                 .name(name)
@@ -28,6 +37,7 @@ public class ProductService {
                 .defaultPrice(scaleOptional(defaultPrice))
                 .nutritionalValues(buildNutritionalValues(calories, carbohydrates, proteins, fats))
                 .photo(photo)
+                .supermarkets(supermarkets)
                 .build());
         return created.toBuilder()
                 .photo(photo)
@@ -36,7 +46,13 @@ public class ProductService {
 
     @Transactional
     public Product update(Long id, String name, String description, BigDecimal gramsPerUnit, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, BigDecimal defaultPrice, MediaUpload photoUpload) {
+        return update(id, name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, defaultPrice, photoUpload, List.of());
+    }
+
+    @Transactional
+    public Product update(Long id, String name, String description, BigDecimal gramsPerUnit, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, BigDecimal defaultPrice, MediaUpload photoUpload, List<Long> supermarketIds) {
         Product existing = repository.findById(id);
+        var supermarkets = supermarketRepository.findByIds(supermarketIds == null ? List.of() : supermarketIds);
         Media photo = photoUpload == null ? existing.getPhoto() : mediaService.createOptimized(photoUpload);
         BigDecimal resolvedDefaultPrice = defaultPrice == null ? existing.getDefaultPrice() : scaleOptional(defaultPrice);
         Product updated = repository.update(id, Product.builder()
@@ -46,6 +62,7 @@ public class ProductService {
                 .defaultPrice(resolvedDefaultPrice)
                 .nutritionalValues(buildNutritionalValues(calories, carbohydrates, proteins, fats))
                 .photo(photo)
+                .supermarkets(supermarkets)
                 .build());
         if (photoUpload != null && existing.getPhoto() != null) {
             mediaService.delete(existing.getPhoto().getId());
@@ -62,8 +79,13 @@ public class ProductService {
 
     @Transactional(readOnly = true)
     public PageResult<Product> findPage(PaginationRequest pagination) {
-        List<Product> items = repository.findPage(pagination.offset(), pagination.size());
-        return new PageResult<>(items, pagination.page(), pagination.size(), repository.count());
+        return findPage(pagination, ProductSearchCriteria.empty());
+    }
+
+    @Transactional(readOnly = true)
+    public PageResult<Product> findPage(PaginationRequest pagination, ProductSearchCriteria searchCriteria) {
+        List<Product> items = repository.findPage(pagination.offset(), pagination.size(), searchCriteria);
+        return new PageResult<>(items, pagination.page(), pagination.size(), repository.count(searchCriteria));
     }
 
     @Transactional

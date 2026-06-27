@@ -7,9 +7,9 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.util.List;
 
-@Schema(name = "UpsertProposedWeekMenuDayRequest", description = "Payload for creating or replacing one day inside a proposed week menu")
+@Schema(name = "UpsertPlannedDayRequest", description = "Payload for creating or replacing one day inside a planning")
 public record UpsertProposedWeekMenuDayRequest(
-        @Schema(description = "Date of the proposed day menu", example = "2026-06-15")
+        @Schema(description = "Date of the planned day", example = "2026-06-15")
         @NotNull LocalDate date,
         @Schema(description = "Configured day parts selected for the day. Each day part can appear only once.")
         @NotEmpty List<@Valid ProposedWeekMenuSectionRequest> sections

@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.math.BigDecimal;
 
-@Schema(name = "ProposedWeekMenuProductRequest", description = "Ordered product consumed in one proposed menu section")
+@Schema(name = "PlanningProductRequest", description = "Ordered product consumed in one planning section")
 public record ProposedWeekMenuProductRequest(
         @Schema(description = "Product identifier", example = "1")
         @NotNull Long productId,

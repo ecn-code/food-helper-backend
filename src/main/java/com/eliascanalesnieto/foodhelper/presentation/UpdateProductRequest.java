@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.math.BigDecimal;
+import java.util.List;
 
 @Schema(name = "UpdateProductRequest", description = "Payload for updating a product")
 public record UpdateProductRequest(
@@ -27,7 +28,9 @@ public record UpdateProductRequest(
         @Schema(description = "Optional default price for this product", example = "2.79", nullable = true)
         @PositiveOrZero BigDecimal defaultPrice,
         @Schema(description = "Optional product photo that will be compressed before storage")
-        @Valid PhotoUploadRequest photo
+        @Valid PhotoUploadRequest photo,
+        @Schema(description = "Supermarket identifiers where the product is available", example = "[1, 2]")
+        List<Long> supermarketIds
 ) {
     public UpdateProductRequest(
             String name,
@@ -38,7 +41,7 @@ public record UpdateProductRequest(
             BigDecimal proteins,
             BigDecimal fats
     ) {
-        this(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, null, null);
+        this(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, null, null, List.of());
     }
 
     public UpdateProductRequest(
@@ -51,7 +54,7 @@ public record UpdateProductRequest(
             BigDecimal fats,
             PhotoUploadRequest photo
     ) {
-        this(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, null, photo);
+        this(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, null, photo, List.of());
     }
 
     public UpdateProductRequest(
@@ -64,6 +67,20 @@ public record UpdateProductRequest(
             BigDecimal fats,
             BigDecimal defaultPrice
     ) {
-        this(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, defaultPrice, null);
+        this(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, defaultPrice, null, List.of());
+    }
+
+    public UpdateProductRequest(
+            String name,
+            String description,
+            BigDecimal gramsPerUnit,
+            BigDecimal calories,
+            BigDecimal carbohydrates,
+            BigDecimal proteins,
+            BigDecimal fats,
+            BigDecimal defaultPrice,
+            List<Long> supermarketIds
+    ) {
+        this(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, defaultPrice, null, supermarketIds);
     }
 }

@@ -4,19 +4,21 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDate;
 import java.util.List;
 
-@Schema(name = "ProposedWeekMenuResponse", description = "API representation of a proposed week menu")
+@Schema(name = "PlanningResponse", description = "API representation of menu planning for a flexible date range")
 public record ProposedWeekMenuResponse(
-        @Schema(description = "Proposed menu identifier", example = "1")
+        @Schema(description = "Planning identifier", example = "1")
         Long id,
-        @Schema(description = "First date covered by the proposed menu", example = "2026-06-15")
+        @Schema(description = "First date covered by planning", example = "2026-06-15")
         LocalDate startDate,
-        @Schema(description = "Last date covered by the proposed menu", example = "2026-06-22")
+        @Schema(description = "Last date covered by planning", example = "2026-06-22")
         LocalDate endDate,
-        @Schema(description = "Existing proposed day menus. A proposed week menu may start empty.")
+        @Schema(description = "Existing planned days. Planning may start empty.")
         List<ProposedWeekMenuDayResponse> days,
-        @Schema(description = "Nutritional totals for the whole proposed menu")
+        @Schema(description = "Nutritional totals for all planned days")
         NutritionalValuesResponse nutritionalValues,
-        @Schema(description = "Preview of stock requirements and calorie coverage for the proposed week")
-        ProposedWeekMenuStockSummaryResponse stockSummary
+        @Schema(description = "Preview of stock requirements and calorie coverage for the planning period")
+        ProposedWeekMenuStockSummaryResponse stockSummary,
+        @Schema(description = "Average daily nutrition evaluated against the saved rules")
+        NutritionalRulesEvaluationResponse nutritionalRules
 ) {
 }

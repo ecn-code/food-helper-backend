@@ -4,8 +4,10 @@ import com.eliascanalesnieto.foodhelper.application.PageResult;
 import com.eliascanalesnieto.foodhelper.application.PaginationRequest;
 import com.eliascanalesnieto.foodhelper.application.ProductService;
 import com.eliascanalesnieto.foodhelper.application.StatsService;
+import com.eliascanalesnieto.foodhelper.domain.ProductSearchCriteria;
 import com.eliascanalesnieto.foodhelper.presentation.error.ApiError;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -37,19 +39,53 @@ public class ProductController {
     @GetMapping
     @Operation(
             summary = "List products",
-            description = "Returns a paginated list of products ordered by identifier ascending."
+            description = "Returns a paginated list of products ordered by identifier ascending. Optional filters are combined with AND, use inclusive min/max ranges, and search matches product name and description."
     )
-    @ApiResponse(responseCode = "200", description = "Products returned",
-            content = @Content(schema = @Schema(implementation = ProductPageResponse.class)))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Products returned",
+                    content = @Content(schema = @Schema(implementation = ProductPageResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid query parameters",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
     public ProductPageResponse findAll(
-            @io.swagger.v3.oas.annotations.Parameter(description = "Zero-based page number", example = "0")
+            @Parameter(description = "Zero-based page number", example = "0")
             @RequestParam(defaultValue = "0")
             int page,
-            @io.swagger.v3.oas.annotations.Parameter(description = "Number of items per page, between 1 and 100", example = "20")
+            @Parameter(description = "Number of items per page, between 1 and 100", example = "20")
             @RequestParam(defaultValue = "20")
-            int size
+            int size,
+            @Parameter(description = "Free text search applied to product name and description after trimming and lowercasing", example = "apple")
+            @RequestParam(required = false)
+            String search,
+            @Parameter(description = "Minimum calories per 100 grams, inclusive", example = "50")
+            @RequestParam(required = false)
+            java.math.BigDecimal caloriesMin,
+            @Parameter(description = "Maximum calories per 100 grams, inclusive", example = "200")
+            @RequestParam(required = false)
+            java.math.BigDecimal caloriesMax,
+            @Parameter(description = "Minimum carbohydrates per 100 grams, inclusive", example = "10")
+            @RequestParam(required = false)
+            java.math.BigDecimal carbohydratesMin,
+            @Parameter(description = "Maximum carbohydrates per 100 grams, inclusive", example = "30")
+            @RequestParam(required = false)
+            java.math.BigDecimal carbohydratesMax,
+            @Parameter(description = "Minimum proteins per 100 grams, inclusive", example = "1")
+            @RequestParam(required = false)
+            java.math.BigDecimal proteinsMin,
+            @Parameter(description = "Maximum proteins per 100 grams, inclusive", example = "40")
+            @RequestParam(required = false)
+            java.math.BigDecimal proteinsMax,
+            @Parameter(description = "Minimum fats per 100 grams, inclusive", example = "0")
+            @RequestParam(required = false)
+            java.math.BigDecimal fatsMin,
+            @Parameter(description = "Maximum fats per 100 grams, inclusive", example = "10")
+            @RequestParam(required = false)
+            java.math.BigDecimal fatsMax
     ) {
-        PageResult<com.eliascanalesnieto.foodhelper.domain.Product> result = service.findPage(PaginationRequest.of(page, size));
+        PageResult<com.eliascanalesnieto.foodhelper.domain.Product> result = service.findPage(
+                PaginationRequest.of(page, size),
+                ProductSearchCriteria.of(search, caloriesMin, caloriesMax, carbohydratesMin, carbohydratesMax, proteinsMin, proteinsMax, fatsMin, fatsMax)
+        );
         return new ProductPageResponse(result.items().stream()
                 .map(mapper::toResponse)
                 .toList(), result.page(), result.size(), result.totalElements(), result.totalPages());
@@ -70,12 +106,14 @@ public class ProductController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
             summary = "Create product",
-            description = "Creates a product with name, description, nutritional values, and an optional default price."
+            description = "Creates a product with name, description, nutritional values, an optional default price, and zero or more supermarket assignments."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Product created",
                     content = @Content(schema = @Schema(implementation = ProductResponse.class))),
             @ApiResponse(responseCode = "400", description = "Invalid request",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "404", description = "Assigned supermarket not found",
                     content = @Content(schema = @Schema(implementation = ApiError.class))),
             @ApiResponse(responseCode = "409", description = "Conflict while creating the product",
                     content = @Content(schema = @Schema(implementation = ApiError.class)))
@@ -90,21 +128,22 @@ public class ProductController {
                 request.proteins(),
                 request.fats(),
                 request.defaultPrice(),
-                request.photo() == null ? null : request.photo().toDomain()
+                request.photo() == null ? null : request.photo().toDomain(),
+                request.supermarketIds()
         ));
     }
 
     @PutMapping("/{id}")
     @Operation(
             summary = "Update product",
-            description = "Updates an existing product, replaces its nutritional data, and can change its optional default price."
+            description = "Updates an existing product, replaces its nutritional data and supermarket assignments, and can change its optional default price."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Product updated",
                     content = @Content(schema = @Schema(implementation = ProductResponse.class))),
             @ApiResponse(responseCode = "400", description = "Invalid request",
                     content = @Content(schema = @Schema(implementation = ApiError.class))),
-            @ApiResponse(responseCode = "404", description = "Product not found",
+            @ApiResponse(responseCode = "404", description = "Product or assigned supermarket not found",
                     content = @Content(schema = @Schema(implementation = ApiError.class))),
             @ApiResponse(responseCode = "409", description = "Conflict while updating the product",
                     content = @Content(schema = @Schema(implementation = ApiError.class)))
@@ -120,7 +159,8 @@ public class ProductController {
                 request.proteins(),
                 request.fats(),
                 request.defaultPrice(),
-                request.photo() == null ? null : request.photo().toDomain()
+                request.photo() == null ? null : request.photo().toDomain(),
+                request.supermarketIds()
         ));
     }
 

@@ -40,22 +40,31 @@ Function definition:
 - `PUT /api/v1/products/{id}`
 - `DELETE /api/v1/products/{id}`
 - `GET /api/v1/products?page=&size=`
+- `GET /api/v1/supermarkets`
+- `GET /api/v1/supermarkets/{id}`
+- `POST /api/v1/supermarkets`
+- `PUT /api/v1/supermarkets/{id}`
+- `DELETE /api/v1/supermarkets/{id}`
 - `GET /api/v1/recipes?page=&size=`
 - `GET /api/v1/recipes/stats`
 - `POST /api/v1/recipes`
 - `PUT /api/v1/recipes/{id}`
 - `DELETE /api/v1/recipes/{id}`
 - `POST /api/v1/recipes/{id}/derived-product`
-- `POST /api/v1/proposed-week-menus`
-- `GET /api/v1/proposed-week-menus/{id}`
-- `PUT /api/v1/proposed-week-menus/{id}/days`
-- `POST /api/v1/proposed-week-menus/{id}/publish`
-- `GET /api/v1/established-week-menus/{id}`
-- `GET /api/v1/established-week-menus/{id}/used-stock`
-- `GET /api/v1/established-week-menus/{id}/shopping-list`
-- `GET /api/v1/proposed-week-menu-day-parts`
-- `POST /api/v1/proposed-week-menu-day-parts`
-- `PUT /api/v1/proposed-week-menu-day-parts/{id}`
+- `POST /api/v1/planning`
+- `GET /api/v1/planning/{id}`
+- `PUT /api/v1/planning/{id}/days`
+- `POST /api/v1/planning/{id}/menu`
+- `GET /api/v1/planning/day-parts`
+- `POST /api/v1/planning/day-parts`
+- `PUT /api/v1/planning/day-parts/{id}`
+- `GET /api/v1/menus/{id}`
+- `GET /api/v1/menus/{id}/used-stock`
+- `GET /api/v1/menus/{id}/shopping-list?supermarketId=`
+- `POST /api/v1/menus/{id}/close`
+- `GET /api/v1/menus/{id}/stats`
+- `GET /api/v1/nutritional-rules`
+- `PUT /api/v1/nutritional-rules`
 - `POST /api/v1/products/{productId}/stock`
 - `GET /api/v1/products/{productId}/stock`
 - `GET /api/v1/stock`
@@ -65,11 +74,15 @@ Function definition:
 
 `Product` nutritional values are stored per 100 grams.
 
+`Products` can be assigned to zero or more supermarkets. The supermarket catalog uses case-insensitive unique names, and an assigned supermarket cannot be deleted.
+
 `Recipe` nutritional values are calculated from assigned ingredient grams and kept synchronized with the derived product created through `POST /api/v1/recipes/{id}/derived-product`.
 
-`Proposed week menus` are draft weekly plans with a start date, an end date, optional planned days, and selected reusable day parts for each planned day. Day parts are configured separately with a name, description, and sort order. The inclusive date range must span at most 8 calendar days so a Friday-to-Friday or Monday-to-Monday menu is valid. Product grams can be supplied explicitly or inferred from `gramsPerUnit * units`, and nutritional totals are calculated for each product, section, day, and proposed menu. A day cannot repeat the same day part.
+`Planning` covers a flexible inclusive date range of up to 16 days and may contain only the days planned so far. Each day selects reusable day parts with ordered products. Product grams can be supplied explicitly or inferred from `gramsPerUnit * units`, and nutritional totals are calculated for each product, section, day, and planning period. A day cannot repeat the same day part.
 
-`Established week menus` are created by publishing a proposed week menu. Publication freezes the menu snapshot, captures the nutritional totals and covered cost, consumes matching stock entries in FIFO order by expiration date, deletes any stock entry that reaches zero, and stores the missing quantities as a shopping list. The consumed stock can be queried later through the established week endpoints.
+`Menus` are created from planning. Creating a menu freezes the snapshot, captures nutritional totals and covered cost, consumes matching stock entries in FIFO order by expiration date, deletes entries that reach zero, and stores missing quantities as a shopping list. The shopping-list endpoint returns every missing product or filters them by `supermarketId`; reading it never changes stock or the saved menu. After its end date, closing the menu persists period and month stats and blocks further planning edits.
+
+`Nutritional rules` store optional daily minimums and maximums for calories, carbohydrates, proteins, and fats. Planning and menu responses include each nutrient's average per planned day and whether it is below, within, or above the configured range.
 
 `Stock` is stored as independent stock entries linked to products. Each entry keeps a positive quantity, a required entry date, and an optional expiration date. When a removal leaves a stock entry at zero, that entry is deleted.
 
@@ -84,10 +97,12 @@ Available OpenAPI groups:
 - `health`
 - `media`
 - `products`
+- `supermarkets`
 - `recipes`
 - `stock`
-- `proposed-week-menus`
-- `established-week-menus`
+- `planning`
+- `menus`
+- `nutritional-rules`
 
 Every new endpoint, and every change to request or response data in an existing endpoint, must be documented in Swagger/OpenAPI within the same change.
 

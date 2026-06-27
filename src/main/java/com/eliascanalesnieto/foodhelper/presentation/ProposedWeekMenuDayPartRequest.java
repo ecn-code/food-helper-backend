@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 
-@Schema(name = "ProposedWeekMenuDayPartRequest", description = "Payload for creating or updating a reusable day part configuration")
+@Schema(name = "PlanningDayPartRequest", description = "Payload for creating or updating a reusable day part configuration")
 public record ProposedWeekMenuDayPartRequest(
         @Schema(description = "Day part name", example = "Lunch")
         @NotBlank String name,

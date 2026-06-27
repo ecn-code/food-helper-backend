@@ -22,15 +22,15 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/proposed-week-menu-day-parts")
+@RequestMapping("/api/v1/planning/day-parts")
 @RequiredArgsConstructor
-@Tag(name = "Proposed week menu day parts", description = "Configure reusable day parts used by proposed menus")
+@Tag(name = "Planning", description = "Configure reusable day parts used by planning")
 public class ProposedWeekMenuDayPartController {
     private final ProposedWeekMenuDayPartService service;
 
     @GetMapping
     @Operation(
-            summary = "List proposed week menu day parts",
+            summary = "List planning day parts",
             description = "Returns all reusable day parts ordered by the configured sort order and identifier."
     )
     @ApiResponse(responseCode = "200", description = "Day parts returned")
@@ -41,8 +41,8 @@ public class ProposedWeekMenuDayPartController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
-            summary = "Create proposed week menu day part",
-            description = "Creates a reusable day part that can later be referenced by proposed menu days."
+            summary = "Create planning day part",
+            description = "Creates a reusable day part that can later be referenced by planned days."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Day part created",
@@ -56,7 +56,7 @@ public class ProposedWeekMenuDayPartController {
 
     @PutMapping("/{id}")
     @Operation(
-            summary = "Update proposed week menu day part",
+            summary = "Update planning day part",
             description = "Updates an existing reusable day part configuration."
     )
     @ApiResponses({

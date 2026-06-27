@@ -3,7 +3,7 @@ package com.eliascanalesnieto.foodhelper.presentation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 
-@Schema(name = "ProposedWeekMenuProductResponse", description = "API representation of one ordered proposed menu product")
+@Schema(name = "PlanningProductResponse", description = "API representation of one ordered planning product")
 public record ProposedWeekMenuProductResponse(
         @Schema(description = "Product identifier", example = "1")
         Long productId,

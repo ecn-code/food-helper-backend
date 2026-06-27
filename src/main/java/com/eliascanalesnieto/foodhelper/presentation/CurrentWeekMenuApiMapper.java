@@ -1,23 +1,31 @@
 package com.eliascanalesnieto.foodhelper.presentation;
 
+import com.eliascanalesnieto.foodhelper.application.NutritionalRulesService;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenu;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuShoppingListItem;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuUsedStock;
 import org.springframework.stereotype.Component;
+import lombok.RequiredArgsConstructor;
 
 @Component
+@RequiredArgsConstructor
 public class CurrentWeekMenuApiMapper {
+    private final NutritionalRulesService nutritionalRulesService;
+
     public CurrentWeekMenuResponse toResponse(CurrentWeekMenu menu) {
         return new CurrentWeekMenuResponse(
                 menu.getId(),
                 menu.getProposedWeekMenuId(),
+                menu.getPayerUserId(),
+                menu.getPayerUsername(),
                 menu.getStartDate(),
                 menu.getEndDate(),
                 menu.getDays().stream().map(this::toResponse).toList(),
                 toResponse(menu.getNutritionalValues()),
                 toResponse(menu.getStockSummary()),
                 menu.getUsedStock().stream().map(this::toResponse).toList(),
-                menu.getShoppingList().stream().map(this::toResponse).toList()
+                menu.getShoppingList().stream().map(this::toResponse).toList(),
+                nutritionalRulesService.evaluate(menu.getNutritionalValues(), menu.getDays().size())
         );
     }
 

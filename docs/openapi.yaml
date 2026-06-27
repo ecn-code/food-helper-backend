@@ -11,14 +11,20 @@ tags:
     description: User registration and stateless JWT login
   - name: Products
     description: Create, update, delete, and inspect product statistics
+  - name: Supermarkets
+    description: Manage supermarkets associated with products and shopping lists
   - name: Stock
     description: Manage stock entries and inspect inventory ordered by expiration
+  - name: User money boxes
+    description: Inspect user money boxes and register signed money movements
   - name: Recipes
     description: List, create, update, delete, derive product, and inspect recipe statistics
-  - name: Proposed week menus
-    description: Draft weekly menu planning before a menu becomes final
-  - name: Proposed week menu day parts
-    description: Configure reusable day parts used by proposed menus
+  - name: Planning
+    description: Plan menus and configure reusable day parts for flexible date ranges
+  - name: Menus
+    description: Inspect menus created from planning
+  - name: Nutritional rules
+    description: Configure daily nutritional minimums and maximums
   - name: Media
     description: Download stored media files
   - name: Health
@@ -93,12 +99,148 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /api/v1/supermarkets:
+    get:
+      tags:
+        - Supermarkets
+      summary: List supermarkets
+      operationId: listSupermarkets
+      responses:
+        '200':
+          description: Supermarkets returned in name order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SupermarketResponse'
+    post:
+      tags:
+        - Supermarkets
+      summary: Create supermarket
+      operationId: createSupermarket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupermarketRequest'
+      responses:
+        '201':
+          description: Supermarket created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupermarketResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Supermarket name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/supermarkets/{id}:
+    get:
+      tags:
+        - Supermarkets
+      summary: Get supermarket
+      operationId: getSupermarket
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Supermarket returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupermarketResponse'
+        '404':
+          description: Supermarket not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    put:
+      tags:
+        - Supermarkets
+      summary: Update supermarket
+      operationId: updateSupermarket
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupermarketRequest'
+      responses:
+        '200':
+          description: Supermarket updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupermarketResponse'
+        '404':
+          description: Supermarket not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Supermarket name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      tags:
+        - Supermarkets
+      summary: Delete supermarket
+      description: Deletes a supermarket only when it is not assigned to products.
+      operationId: deleteSupermarket
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Supermarket deleted
+        '404':
+          description: Supermarket not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Supermarket is assigned to products
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /api/v1/products:
     get:
       tags:
         - Products
       summary: List products
-      description: Returns a paginated list of products ordered by identifier ascending.
+      description: Returns a paginated list of products ordered by identifier ascending. Optional filters are combined with AND, min/max values are inclusive, and search matches product name and description.
       operationId: listProducts
       parameters:
         - name: page
@@ -117,6 +259,69 @@ paths:
             type: integer
             format: int32
             default: 20
+        - name: search
+          in: query
+          required: false
+          description: Free text search applied to product name and description after trimming and lowercasing
+          example: apple
+          schema:
+            type: string
+        - name: caloriesMin
+          in: query
+          required: false
+          description: Minimum calories per 100 grams, inclusive
+          example: 50
+          schema:
+            type: number
+        - name: caloriesMax
+          in: query
+          required: false
+          description: Maximum calories per 100 grams, inclusive
+          example: 200
+          schema:
+            type: number
+        - name: carbohydratesMin
+          in: query
+          required: false
+          description: Minimum carbohydrates per 100 grams, inclusive
+          example: 10
+          schema:
+            type: number
+        - name: carbohydratesMax
+          in: query
+          required: false
+          description: Maximum carbohydrates per 100 grams, inclusive
+          example: 30
+          schema:
+            type: number
+        - name: proteinsMin
+          in: query
+          required: false
+          description: Minimum proteins per 100 grams, inclusive
+          example: 1
+          schema:
+            type: number
+        - name: proteinsMax
+          in: query
+          required: false
+          description: Maximum proteins per 100 grams, inclusive
+          example: 40
+          schema:
+            type: number
+        - name: fatsMin
+          in: query
+          required: false
+          description: Minimum fats per 100 grams, inclusive
+          example: 0
+          schema:
+            type: number
+        - name: fatsMax
+          in: query
+          required: false
+          description: Maximum fats per 100 grams, inclusive
+          example: 10
+          schema:
+            type: number
       responses:
         '200':
           description: Products returned
@@ -128,7 +333,7 @@ paths:
       tags:
         - Products
       summary: Create product
-      description: Creates a product with name, description, nutritional values per 100 grams, and an optional default price.
+      description: Creates a product with name, description, nutritional values per 100 grams, an optional default price, and zero or more supermarket assignments.
       operationId: createProduct
       requestBody:
         required: true
@@ -147,6 +352,7 @@ paths:
                   proteins: 0.3
                   fats: 0.2
                   defaultPrice: 2.49
+                  supermarketIds: [1, 2]
                   photo:
                     fileName: apple.png
                     contentType: image/png
@@ -160,6 +366,12 @@ paths:
                 $ref: '#/components/schemas/ProductResponse'
         '400':
           description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Assigned supermarket not found
           content:
             application/json:
               schema:
@@ -189,7 +401,7 @@ paths:
       tags:
         - Products
       summary: Update product
-      description: Updates an existing product, replaces its nutritional data per 100 grams, and can change its optional default price.
+      description: Updates an existing product and replaces its nutritional data and supermarket assignments.
       operationId: updateProduct
       parameters:
         - name: id
@@ -215,6 +427,7 @@ paths:
                   proteins: 0.4
                   fats: 0.1
                   defaultPrice: 2.79
+                  supermarketIds: [2]
                   photo:
                     fileName: green-apple.png
                     contentType: image/png
@@ -233,7 +446,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '404':
-          description: Product not found
+          description: Product or assigned supermarket not found
           content:
             application/json:
               schema:
@@ -358,7 +571,7 @@ paths:
       tags:
         - Stock
       summary: Update stock entry
-      description: Updates the editable fields of an existing stock entry: quantity, price, expiration date, and entry date. The linked product stays unchanged.
+      description: "Updates the editable fields of an existing stock entry: quantity, price, expiration date, and entry date. The linked product stays unchanged."
       operationId: updateStockEntry
       parameters:
         - name: stockEntryId
@@ -743,44 +956,158 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /api/v1/proposed-week-menus:
+  /api/v1/users/{userId}/money-box:
+    get:
+      tags:
+        - User money boxes
+      summary: Get user money box
+      description: Returns the user's current money box balance and signed movements ordered from newest to oldest.
+      operationId: getUserMoneyBox
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Money box returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserMoneyBoxResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/users/{userId}/money-box/movements:
     post:
       tags:
-        - Proposed week menus
-      summary: Create proposed week menu
-      description: Starts an empty proposed week menu with an inclusive date range. The range may cover up to 8 calendar days, such as Monday to Monday, and proposed menus can contain only the days planned so far.
-      operationId: createProposedWeekMenu
+        - User money boxes
+      summary: Add user money movement
+      description: Adds a signed money movement to the user's money box. Positive amounts increase the balance and negative amounts decrease it.
+      operationId: addUserMoneyMovement
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateProposedWeekMenuRequest'
+              $ref: '#/components/schemas/CreateUserMoneyMovementRequest'
             examples:
-              default:
+              addMoney:
                 value:
-                  startDate: 2026-06-15
-                  endDate: 2026-06-22
+                  amount: 25.00
+                  description: Initial contribution
+              subtractMoney:
+                value:
+                  amount: -12.50
+                  description: Grocery adjustment
       responses:
         '201':
-          description: Proposed week menu created
+          description: Money movement created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProposedWeekMenuResponse'
+                $ref: '#/components/schemas/UserMoneyMovementResponse'
         '400':
           description: Invalid request
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /api/v1/proposed-week-menus/{id}:
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/nutritional-rules:
     get:
       tags:
-        - Proposed week menus
-      summary: Get proposed week menu
-      description: Returns one proposed week menu with ordered days, sections, products, nutritional totals, and a stock preview summary.
-      operationId: getProposedWeekMenu
+        - Nutritional rules
+      summary: Get nutritional rules
+      description: Returns the saved daily minimum and maximum for each nutrient. Unconfigured limits are null.
+      operationId: getNutritionalRules
+      responses:
+        '200':
+          description: Nutritional rules returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NutritionalRulesResponse'
+    put:
+      tags:
+        - Nutritional rules
+      summary: Save nutritional rules
+      description: Replaces the daily limits. Each nutrient may define a minimum, a maximum, both, or neither.
+      operationId: saveNutritionalRules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveNutritionalRulesRequest'
+      responses:
+        '200':
+          description: Nutritional rules saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NutritionalRulesResponse'
+        '400':
+          description: Invalid limits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/planning:
+    post:
+      tags:
+        - Planning
+      summary: Create planning
+      description: Starts an empty planning with an inclusive date range. The range may cover up to 16 calendar days, and planning can contain only the days planned so far.
+      operationId: createPlanning
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlanningRequest'
+            examples:
+              default:
+                value:
+                  startDate: 2026-06-15
+                  endDate: 2026-06-30
+      responses:
+        '201':
+          description: Planning created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanningResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/planning/{id}:
+    get:
+      tags:
+        - Planning
+      summary: Get planning
+      description: Returns one planning with ordered days, sections, products, nutritional totals, and a stock preview summary.
+      operationId: getPlanning
       parameters:
         - name: id
           in: path
@@ -790,24 +1117,24 @@ paths:
             format: int64
       responses:
         '200':
-          description: Proposed week menu returned
+          description: Planning returned
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProposedWeekMenuResponse'
+                $ref: '#/components/schemas/PlanningResponse'
         '404':
-          description: Proposed week menu not found
+          description: Planning not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /api/v1/proposed-week-menus/{id}/days:
+  /api/v1/planning/{id}/days:
     put:
       tags:
-        - Proposed week menus
-      summary: Create or replace proposed day menu
-      description: Creates or replaces one proposed day menu. Sections and products keep the explicit order supplied in the request, and product sortOrder values must be unique within each section.
-      operationId: upsertProposedWeekMenuDay
+        - Planning
+      summary: Create or replace planned day
+      description: Creates or replaces one planned day. Sections and products keep the explicit order supplied in the request, and product sortOrder values must be unique within each section.
+      operationId: upsertPlanningDay
       parameters:
         - name: id
           in: path
@@ -820,7 +1147,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpsertProposedWeekMenuDayRequest'
+              $ref: '#/components/schemas/UpsertPlannedDayRequest'
             examples:
               default:
                 value:
@@ -842,11 +1169,11 @@ paths:
                           sortOrder: 10
       responses:
         '200':
-          description: Proposed week menu updated
+          description: Planning updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProposedWeekMenuResponse'
+                $ref: '#/components/schemas/PlanningResponse'
         '400':
           description: Invalid request
           content:
@@ -854,18 +1181,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '404':
-          description: Proposed week menu or product not found
+          description: Planning or product not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /api/v1/proposed-week-menus/{id}/publish:
+  /api/v1/planning/{id}/menu:
     post:
       tags:
-        - Proposed week menus
-      summary: Publish proposed week menu
-      description: Consumes available stock for the proposed week menu, creates an established week snapshot, and stores the missing products as a shopping list.
-      operationId: publishProposedWeekMenu
+        - Planning
+      summary: Create menu from planning
+      description: Consumes available stock, creates a menu snapshot, stores missing products as a shopping list, and subtracts the estimated cost from the selected payer user's money box.
+      operationId: createMenuFromPlanning
       parameters:
         - name: id
           in: path
@@ -873,26 +1200,42 @@ paths:
           schema:
             type: integer
             format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMenuRequest'
+            examples:
+              default:
+                value:
+                  payerUserId: 1
       responses:
         '201':
-          description: Established week menu created
+          description: Menu created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CurrentWeekMenuResponse'
-        '404':
-          description: Proposed week menu not found
+                $ref: '#/components/schemas/MenuResponse'
+        '400':
+          description: Invalid request
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /api/v1/established-week-menus/{id}:
+        '404':
+          description: Planning or payer user not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/menus/{id}:
     get:
       tags:
-        - Established week menus
-      summary: Get established week menu
-      description: Returns one established week menu snapshot with ordered days, nutritional totals, the stock summary captured at publication time, the consumed stock entries, and the shopping list for missing products.
-      operationId: getCurrentWeekMenu
+        - Menus
+      summary: Get menu
+      description: Returns one menu snapshot with ordered days, nutritional totals, rule evaluation, stock summary, consumed stock, and missing products.
+      operationId: getMenu
       parameters:
         - name: id
           in: path
@@ -902,24 +1245,24 @@ paths:
             format: int64
       responses:
         '200':
-          description: Established week menu returned
+          description: Menu returned
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CurrentWeekMenuResponse'
+                $ref: '#/components/schemas/MenuResponse'
         '404':
-          description: Established week menu not found
+          description: Menu not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /api/v1/established-week-menus/{id}/used-stock:
+  /api/v1/menus/{id}/used-stock:
     get:
       tags:
-        - Established week menus
-      summary: List used stock for established week menu
-      description: Returns the stock entries consumed when the established week menu was published, ordered by the original stock allocation.
-      operationId: listCurrentWeekMenuUsedStock
+        - Menus
+      summary: List used stock for menu
+      description: Returns the stock entries consumed when the menu was created, ordered by the original stock allocation.
+      operationId: listMenuUsedStock
       parameters:
         - name: id
           in: path
@@ -935,24 +1278,31 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/CurrentWeekMenuUsedStockResponse'
+                  $ref: '#/components/schemas/MenuUsedStockResponse'
         '404':
-          description: Established week menu not found
+          description: Menu not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /api/v1/established-week-menus/{id}/shopping-list:
+  /api/v1/menus/{id}/shopping-list:
     get:
       tags:
-        - Established week menus
-      summary: List shopping list for established week menu
-      description: Returns the products and missing units that were not covered by stock when the established week menu was published.
-      operationId: listCurrentWeekMenuShoppingList
+        - Menus
+      summary: List shopping list for menu
+      description: Returns the products and missing units saved after applying stock when the menu was created. An optional supermarket filter only returns products available there. This operation does not recalculate the menu, consume stock, or persist a supermarket selection.
+      operationId: listMenuShoppingList
       parameters:
         - name: id
           in: path
           required: true
+          schema:
+            type: integer
+            format: int64
+        - name: supermarketId
+          in: query
+          required: false
+          description: Optional supermarket identifier used to filter available products
           schema:
             type: integer
             format: int64
@@ -964,20 +1314,80 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/CurrentWeekMenuShoppingListItemResponse'
+                  $ref: '#/components/schemas/MenuShoppingListItemResponse'
         '404':
-          description: Established week menu not found
+          description: Menu or supermarket not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /api/v1/proposed-week-menu-day-parts:
+  /api/v1/menus/{id}/close:
+    post:
+      tags:
+        - Menus
+      summary: Close menu
+      description: Closes a menu after its end date, saves period and month statistics, and blocks further planning edits.
+      operationId: closeMenu
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Menu closed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuStatsResponse'
+        '400':
+          description: Menu cannot be closed yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Menu not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/menus/{id}/stats:
     get:
       tags:
-        - Proposed week menu day parts
-      summary: List proposed week menu day parts
+        - Menus
+      summary: Get menu stats
+      description: Returns the saved period and month statistics captured when the menu was closed.
+      operationId: getMenuStats
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Menu stats returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuStatsResponse'
+        '404':
+          description: Menu stats not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/planning/day-parts:
+    get:
+      tags:
+        - Planning
+      summary: List planning day parts
       description: Returns all reusable day parts ordered by the configured sort order and identifier.
-      operationId: listProposedWeekMenuDayParts
+      operationId: listPlanningDayParts
       responses:
         '200':
           description: Day parts returned
@@ -986,19 +1396,19 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/ProposedWeekMenuDayPartResponse'
+                  $ref: '#/components/schemas/PlanningDayPartResponse'
     post:
       tags:
-        - Proposed week menu day parts
-      summary: Create proposed week menu day part
-      description: Creates a reusable day part that can later be referenced by proposed menu days.
-      operationId: createProposedWeekMenuDayPart
+        - Planning
+      summary: Create planning day part
+      description: Creates a reusable day part that can later be referenced by planning days.
+      operationId: createPlanningDayPart
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProposedWeekMenuDayPartRequest'
+              $ref: '#/components/schemas/PlanningDayPartRequest'
             examples:
               default:
                 value:
@@ -1011,20 +1421,20 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProposedWeekMenuDayPartResponse'
+                $ref: '#/components/schemas/PlanningDayPartResponse'
         '400':
           description: Invalid request
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
-  /api/v1/proposed-week-menu-day-parts/{id}:
+  /api/v1/planning/day-parts/{id}:
     put:
       tags:
-        - Proposed week menu day parts
-      summary: Update proposed week menu day part
+        - Planning
+      summary: Update planning day part
       description: Updates an existing reusable day part configuration.
-      operationId: updateProposedWeekMenuDayPart
+      operationId: updatePlanningDayPart
       parameters:
         - name: id
           in: path
@@ -1037,7 +1447,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProposedWeekMenuDayPartRequest'
+              $ref: '#/components/schemas/PlanningDayPartRequest'
             examples:
               default:
                 value:
@@ -1050,7 +1460,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProposedWeekMenuDayPartResponse'
+                $ref: '#/components/schemas/PlanningDayPartResponse'
         '400':
           description: Invalid request
           content:
@@ -1265,6 +1675,12 @@ components:
           example: 0.2
         photo:
           $ref: '#/components/schemas/PhotoUploadRequest'
+        supermarketIds:
+          type: array
+          description: Supermarket identifiers where the product is available
+          items:
+            type: integer
+            format: int64
     CreateStockEntryRequest:
       type: object
       required:
@@ -1367,6 +1783,34 @@ components:
               description: Signed photo URL that expires with the authentication token lifetime
               example: /api/v1/media/12?expiresAt=1781611200&signature=5f2a...
             - type: 'null'
+        supermarkets:
+          type: array
+          description: Supermarkets where the product is available
+          items:
+            $ref: '#/components/schemas/SupermarketResponse'
+    SupermarketRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 150
+          description: Unique supermarket name
+          example: Mercadona
+    SupermarketResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Supermarket identifier
+          example: 1
+        name:
+          type: string
+          description: Supermarket name
+          example: Mercadona
     ProductPageResponse:
       type: object
       properties:
@@ -1741,8 +2185,148 @@ components:
         unitsProduced:
           type: number
           example: 4
-    CreateProposedWeekMenuRequest:
-      description: Payload for starting an empty proposed week menu. The inclusive date range cannot span more than 8 calendar days.
+    CreateUserMoneyMovementRequest:
+      description: Signed money movement to add to a user's money box.
+      type: object
+      required:
+        - amount
+      properties:
+        amount:
+          type: number
+          description: Signed amount. Positive values add money and negative values subtract money.
+          example: -12.50
+        description:
+          type: string
+          description: Optional movement description
+          example: Weekly groceries
+    UserMoneyMovementResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Movement identifier
+          example: 1
+        userId:
+          type: integer
+          format: int64
+          description: User identifier that owns the movement
+          example: 1
+        amount:
+          type: number
+          description: Signed movement amount. Positive values add money and negative values subtract money.
+          example: -12.50
+        description:
+          type: string
+          description: Movement description
+          example: Menu #7
+        menuId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Menu related to this movement when it was generated by a menu cost
+          example: 7
+        createdAt:
+          type: string
+          format: date-time
+          description: UTC instant when the movement was created
+    UserMoneyBoxResponse:
+      type: object
+      properties:
+        userId:
+          type: integer
+          format: int64
+          description: User identifier
+          example: 1
+        username:
+          type: string
+          description: Username
+          example: elias
+        balance:
+          type: number
+          description: Current balance calculated from all signed movements
+          example: 87.50
+        movements:
+          type: array
+          description: Movements ordered from newest to oldest
+          items:
+            $ref: '#/components/schemas/UserMoneyMovementResponse'
+    NutrientRuleRequest:
+      type: object
+      properties:
+        minimum:
+          type: number
+          minimum: 0
+          nullable: true
+          description: Inclusive daily minimum
+        maximum:
+          type: number
+          minimum: 0
+          nullable: true
+          description: Inclusive daily maximum
+    SaveNutritionalRulesRequest:
+      type: object
+      required: [calories, carbohydrates, proteins, fats]
+      properties:
+        calories:
+          $ref: '#/components/schemas/NutrientRuleRequest'
+        carbohydrates:
+          $ref: '#/components/schemas/NutrientRuleRequest'
+        proteins:
+          $ref: '#/components/schemas/NutrientRuleRequest'
+        fats:
+          $ref: '#/components/schemas/NutrientRuleRequest'
+    NutrientRuleResponse:
+      type: object
+      properties:
+        minimum:
+          type: number
+          nullable: true
+        maximum:
+          type: number
+          nullable: true
+    NutritionalRulesResponse:
+      type: object
+      properties:
+        calories:
+          $ref: '#/components/schemas/NutrientRuleResponse'
+        carbohydrates:
+          $ref: '#/components/schemas/NutrientRuleResponse'
+        proteins:
+          $ref: '#/components/schemas/NutrientRuleResponse'
+        fats:
+          $ref: '#/components/schemas/NutrientRuleResponse'
+    NutrientRuleEvaluationResponse:
+      type: object
+      properties:
+        value:
+          type: number
+          description: Observed average per planned day
+        minimum:
+          type: number
+          nullable: true
+        maximum:
+          type: number
+          nullable: true
+        status:
+          type: string
+          enum: [BELOW_MINIMUM, WITHIN_RANGE, ABOVE_MAXIMUM, NOT_CONFIGURED]
+    NutritionalRulesEvaluationResponse:
+      type: object
+      properties:
+        plannedDays:
+          type: integer
+          format: int32
+        calories:
+          $ref: '#/components/schemas/NutrientRuleEvaluationResponse'
+        carbohydrates:
+          $ref: '#/components/schemas/NutrientRuleEvaluationResponse'
+        proteins:
+          $ref: '#/components/schemas/NutrientRuleEvaluationResponse'
+        fats:
+          $ref: '#/components/schemas/NutrientRuleEvaluationResponse'
+    CreatePlanningRequest:
+      description: Payload for starting an empty planning. The inclusive date range cannot span more than 16 calendar days.
       type: object
       required:
         - startDate
@@ -1751,14 +2335,25 @@ components:
         startDate:
           type: string
           format: date
-          description: First date covered by the proposed menu
+          description: First date covered by the planning
           example: 2026-06-15
         endDate:
           type: string
           format: date
-          description: Last date covered by the proposed menu
-          example: 2026-06-22
-    UpsertProposedWeekMenuDayRequest:
+          description: Last date covered by the planning
+          example: 2026-06-30
+    CreateMenuRequest:
+      description: Request used to establish a planning and assign its cost.
+      type: object
+      required:
+        - payerUserId
+      properties:
+        payerUserId:
+          type: integer
+          format: int64
+          description: User identifier that assumes the menu period cost
+          example: 1
+    UpsertPlannedDayRequest:
       type: object
       required:
         - date
@@ -1767,15 +2362,15 @@ components:
         date:
           type: string
           format: date
-          description: Date of the proposed day menu
+          description: Date of the planned day
           example: 2026-06-15
         sections:
           type: array
           minItems: 1
           description: Configured day parts selected for the day. Each day part can appear only once.
           items:
-            $ref: '#/components/schemas/ProposedWeekMenuSectionRequest'
-    ProposedWeekMenuSectionRequest:
+            $ref: '#/components/schemas/PlanningSectionRequest'
+    PlanningSectionRequest:
       type: object
       required:
         - dayPartId
@@ -1791,8 +2386,8 @@ components:
           minItems: 1
           description: Ordered products consumed in this section. Each product sortOrder must be unique within the section.
           items:
-            $ref: '#/components/schemas/ProposedWeekMenuProductRequest'
-    ProposedWeekMenuProductRequest:
+            $ref: '#/components/schemas/PlanningProductRequest'
+    PlanningProductRequest:
       type: object
       required:
         - productId
@@ -1821,34 +2416,36 @@ components:
           minimum: 0
           description: Explicit display order within the section. Must be unique among products in the same section.
           example: 10
-    ProposedWeekMenuResponse:
+    PlanningResponse:
       type: object
       properties:
         id:
           type: integer
           format: int64
-          description: Proposed menu identifier
+          description: Planning identifier
           example: 1
         startDate:
           type: string
           format: date
-          description: First date covered by the proposed menu
+          description: First date covered by the planning
           example: 2026-06-15
         endDate:
           type: string
           format: date
-          description: Last date covered by the proposed menu
+          description: Last date covered by the planning
           example: 2026-06-22
         days:
           type: array
-          description: Existing proposed day menus. A proposed week menu may start empty.
+          description: Existing planned days. Planning may start empty.
           items:
-            $ref: '#/components/schemas/ProposedWeekMenuDayResponse'
+            $ref: '#/components/schemas/PlanningDayResponse'
         nutritionalValues:
           $ref: '#/components/schemas/NutritionalValuesResponse'
         stockSummary:
-          $ref: '#/components/schemas/ProposedWeekMenuStockSummaryResponse'
-    CurrentWeekMenuResponse:
+          $ref: '#/components/schemas/PlanningStockSummaryResponse'
+        nutritionalRules:
+          $ref: '#/components/schemas/NutritionalRulesEvaluationResponse'
+    MenuResponse:
       type: object
       properties:
         id:
@@ -1856,41 +2453,103 @@ components:
           format: int64
           description: Current menu identifier
           example: 1
-        proposedWeekMenuId:
+        planningId:
           type: integer
           format: int64
-          description: Proposed menu identifier used to create the established week
+          description: Planning identifier used to create the menu
           example: 5
+        payerUserId:
+          type: integer
+          format: int64
+          description: User identifier that assumes the menu period cost
+          example: 1
+        payerUsername:
+          type: string
+          description: Username that assumes the menu period cost
+          example: elias
         startDate:
           type: string
           format: date
-          description: First date covered by the established week
+          description: First date covered by the menu period
           example: 2026-06-15
         endDate:
           type: string
           format: date
-          description: Last date covered by the established week
+          description: Last date covered by the menu period
           example: 2026-06-22
         days:
           type: array
-          description: Saved day menus in the established week
+          description: Saved day menus in the menu period
           items:
-            $ref: '#/components/schemas/ProposedWeekMenuDayResponse'
+            $ref: '#/components/schemas/PlanningDayResponse'
         nutritionalValues:
           $ref: '#/components/schemas/NutritionalValuesResponse'
         stockSummary:
-          $ref: '#/components/schemas/ProposedWeekMenuStockSummaryResponse'
+          $ref: '#/components/schemas/PlanningStockSummaryResponse'
         usedStock:
           type: array
-          description: Stock entries consumed to satisfy the established week
+          description: Stock entries consumed to satisfy the menu period
           items:
-            $ref: '#/components/schemas/CurrentWeekMenuUsedStockResponse'
+            $ref: '#/components/schemas/MenuUsedStockResponse'
         shoppingList:
           type: array
           description: Products still missing after consuming stock
           items:
-            $ref: '#/components/schemas/CurrentWeekMenuShoppingListItemResponse'
-    ProposedWeekMenuStockSummaryResponse:
+            $ref: '#/components/schemas/MenuShoppingListItemResponse'
+        nutritionalRules:
+          $ref: '#/components/schemas/NutritionalRulesEvaluationResponse'
+    MenuStatsResponse:
+      type: object
+      properties:
+        menuId:
+          type: integer
+          format: int64
+          description: Menu identifier
+          example: 1
+        period:
+          $ref: '#/components/schemas/MenuPeriodStatsResponse'
+        month:
+          $ref: '#/components/schemas/MenuPeriodStatsResponse'
+    MenuPeriodStatsResponse:
+      type: object
+      properties:
+        maxDay:
+          $ref: '#/components/schemas/MenuPeriodStatsDayResponse'
+        minDay:
+          $ref: '#/components/schemas/MenuPeriodStatsDayResponse'
+        averageCalories:
+          type: number
+          description: Average calories per day in the period
+          example: 1450.25
+        averageCarbohydrates:
+          type: number
+          description: Average carbohydrates per day in the period
+          example: 120.5
+        averageProteins:
+          type: number
+          description: Average proteins per day in the period
+          example: 80.1
+        averageFats:
+          type: number
+          description: Average fats per day in the period
+          example: 45.75
+        moneySpent:
+          type: number
+          description: Money spent in the period
+          example: 32.4
+    MenuPeriodStatsDayResponse:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          description: Day date
+          example: 2026-06-21
+        calories:
+          type: number
+          description: Calories for that day
+          example: 1450.25
+    PlanningStockSummaryResponse:
       type: object
       properties:
         plannedDays:
@@ -1904,7 +2563,7 @@ components:
           description: Distinct products used across all planned days
           example: 8
         calories:
-          $ref: '#/components/schemas/ProposedWeekMenuStockSummaryCaloriesResponse'
+          $ref: '#/components/schemas/PlanningStockSummaryCaloriesResponse'
         estimatedCost:
           type: number
           description: Total estimated cost covered by available stock
@@ -1913,8 +2572,8 @@ components:
           type: array
           description: Per-product stock coverage requirements
           items:
-            $ref: '#/components/schemas/ProposedWeekMenuStockRequirementResponse'
-    ProposedWeekMenuStockSummaryCaloriesResponse:
+            $ref: '#/components/schemas/PlanningStockRequirementResponse'
+    PlanningStockSummaryCaloriesResponse:
       type: object
       properties:
         averagePerPlannedDay:
@@ -1922,10 +2581,10 @@ components:
           description: Average calories per planned day
           example: 1234.56
         maxDay:
-          $ref: '#/components/schemas/ProposedWeekMenuStockSummaryDayCaloriesResponse'
+          $ref: '#/components/schemas/PlanningStockSummaryDayCaloriesResponse'
         minDay:
-          $ref: '#/components/schemas/ProposedWeekMenuStockSummaryDayCaloriesResponse'
-    ProposedWeekMenuStockSummaryDayCaloriesResponse:
+          $ref: '#/components/schemas/PlanningStockSummaryDayCaloriesResponse'
+    PlanningStockSummaryDayCaloriesResponse:
       type: object
       properties:
         date:
@@ -1937,7 +2596,7 @@ components:
           type: number
           description: Calories for the day
           example: 1450.25
-    ProposedWeekMenuStockRequirementResponse:
+    PlanningStockRequirementResponse:
       type: object
       properties:
         productId:
@@ -1951,7 +2610,7 @@ components:
           example: Apple
         requiredUnits:
           type: number
-          description: Total units required by the proposed menu
+          description: Total units required by the planning
           example: 4.5
         availableUnits:
           type: number
@@ -1969,27 +2628,27 @@ components:
           type: number
           description: Estimated cost for the covered units
           example: 12.75
-    ProposedWeekMenuDayResponse:
+    PlanningDayResponse:
       type: object
       properties:
         id:
           type: integer
           format: int64
-          description: Proposed day identifier
+          description: Planned day identifier
           example: 1
         date:
           type: string
           format: date
-          description: Date of the proposed day menu
+          description: Date of the planned day
           example: 2026-06-15
         sections:
           type: array
           description: Configured day parts selected for the day
           items:
-            $ref: '#/components/schemas/ProposedWeekMenuSectionResponse'
+            $ref: '#/components/schemas/PlanningSectionResponse'
         nutritionalValues:
           $ref: '#/components/schemas/NutritionalValuesResponse'
-    ProposedWeekMenuSectionResponse:
+    PlanningSectionResponse:
       type: object
       properties:
         id:
@@ -2019,10 +2678,10 @@ components:
           type: array
           description: Ordered products consumed in this section
           items:
-            $ref: '#/components/schemas/ProposedWeekMenuProductResponse'
+            $ref: '#/components/schemas/PlanningProductResponse'
         nutritionalValues:
           $ref: '#/components/schemas/NutritionalValuesResponse'
-    ProposedWeekMenuDayPartRequest:
+    PlanningDayPartRequest:
       type: object
       required:
         - name
@@ -2045,7 +2704,7 @@ components:
           minimum: 0
           description: Explicit display order among day parts
           example: 20
-    ProposedWeekMenuDayPartResponse:
+    PlanningDayPartResponse:
       type: object
       properties:
         id:
@@ -2066,7 +2725,7 @@ components:
           format: int32
           description: Explicit display order among day parts
           example: 20
-    ProposedWeekMenuProductResponse:
+    PlanningProductResponse:
       type: object
       properties:
         productId:
@@ -2093,7 +2752,7 @@ components:
           example: 10
         nutritionalValues:
           $ref: '#/components/schemas/NutritionalValuesResponse'
-    CurrentWeekMenuUsedStockResponse:
+    MenuUsedStockResponse:
       type: object
       properties:
         stockEntryId:
@@ -2133,7 +2792,7 @@ components:
           format: date
           description: Date when the stock entry was received
           example: 2026-06-10
-    CurrentWeekMenuShoppingListItemResponse:
+    MenuShoppingListItemResponse:
       type: object
       properties:
         productId:

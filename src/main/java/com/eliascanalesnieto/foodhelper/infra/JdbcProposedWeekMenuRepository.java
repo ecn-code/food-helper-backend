@@ -54,7 +54,7 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
                         """,
                 menuRowMapper(),
                 id
-        ).stream().findFirst().orElseThrow(() -> new ResourceNotFoundException("Proposed week menu not found"));
+        ).stream().findFirst().orElseThrow(() -> new ResourceNotFoundException("Planning not found"));
         return menu.toBuilder()
                 .days(findDays(id))
                 .build();
@@ -65,7 +65,7 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
     public ProposedWeekMenu upsertDay(Long menuId, ProposedWeekMenuDay day) {
         ProposedWeekMenu menu = findById(menuId);
         if (day.getDate().isBefore(menu.getStartDate()) || day.getDate().isAfter(menu.getEndDate())) {
-            throw new IllegalArgumentException("Day date must be inside the proposed week menu range");
+            throw new IllegalArgumentException("Day date must be inside the planning range");
         }
 
         Long dayId = jdbcTemplate.query("""

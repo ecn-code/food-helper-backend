@@ -22,9 +22,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/proposed-week-menus")
+@RequestMapping("/api/v1/planning")
 @RequiredArgsConstructor
-@Tag(name = "Proposed week menus", description = "Draft weekly menu planning operations before a menu becomes final")
+@Tag(name = "Planning", description = "Plan a menu for any date range before creating it")
 public class ProposedWeekMenuController {
     private final ProposedWeekMenuService service;
     private final CurrentWeekMenuService currentWeekMenuService;
@@ -33,11 +33,11 @@ public class ProposedWeekMenuController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
-            summary = "Create proposed week menu",
-            description = "Starts an empty proposed week menu with an inclusive date range. The range may cover up to 8 calendar days, such as Monday to Monday, and proposed menus can contain only the days planned so far."
+            summary = "Create planning",
+            description = "Starts empty menu planning for an inclusive date range of up to 16 calendar days. Planning may contain fewer days than the date range."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Proposed week menu created",
+            @ApiResponse(responseCode = "201", description = "Planning created",
                     content = @Content(schema = @Schema(implementation = ProposedWeekMenuResponse.class))),
             @ApiResponse(responseCode = "400", description = "Invalid request",
                     content = @Content(schema = @Schema(implementation = ApiError.class)))
@@ -48,13 +48,13 @@ public class ProposedWeekMenuController {
 
     @GetMapping("/{id}")
     @Operation(
-            summary = "Get proposed week menu",
-            description = "Returns one proposed week menu with ordered days, configured day parts, products, nutritional totals, and a stock preview summary."
+            summary = "Get planning",
+            description = "Returns planning with ordered days, configured day parts, products, nutritional totals, rule evaluation, and a stock preview."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Proposed week menu returned",
+            @ApiResponse(responseCode = "200", description = "Planning returned",
                     content = @Content(schema = @Schema(implementation = ProposedWeekMenuResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Proposed week menu not found",
+            @ApiResponse(responseCode = "404", description = "Planning not found",
                     content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
     public ProposedWeekMenuResponse findById(@PathVariable Long id) {
@@ -63,15 +63,15 @@ public class ProposedWeekMenuController {
 
     @PutMapping("/{id}/days")
     @Operation(
-            summary = "Create or replace proposed day menu",
-            description = "Creates or replaces one proposed day menu. Each selected day part can appear only once and products keep their explicit order, which must be unique within each section."
+            summary = "Create or replace planned day",
+            description = "Creates or replaces one planned day. Each selected day part can appear only once and products keep their explicit order, which must be unique within each section."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Proposed week menu updated",
+            @ApiResponse(responseCode = "200", description = "Planning updated",
                     content = @Content(schema = @Schema(implementation = ProposedWeekMenuResponse.class))),
             @ApiResponse(responseCode = "400", description = "Invalid request",
                     content = @Content(schema = @Schema(implementation = ApiError.class))),
-            @ApiResponse(responseCode = "404", description = "Proposed week menu or product not found",
+            @ApiResponse(responseCode = "404", description = "Planning or product not found",
                     content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
     public ProposedWeekMenuResponse upsertDay(
@@ -81,19 +81,24 @@ public class ProposedWeekMenuController {
         return mapper.toResponse(service.upsertDay(id, mapper.toDomain(request)));
     }
 
-    @PostMapping("/{id}/publish")
+    @PostMapping("/{id}/menu")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
-            summary = "Publish proposed week menu",
-            description = "Consumes available stock for the proposed week menu, creates an established week snapshot, and stores the missing products as a shopping list."
+            summary = "Create menu from planning",
+            description = "Consumes available stock, creates a menu snapshot, stores missing products as a shopping list, and subtracts the estimated cost from the selected payer user's money box."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Established week menu created",
+            @ApiResponse(responseCode = "201", description = "Menu created",
                     content = @Content(schema = @Schema(implementation = CurrentWeekMenuResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Proposed week menu not found",
+            @ApiResponse(responseCode = "400", description = "Invalid request",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "404", description = "Planning or payer user not found",
                     content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    public CurrentWeekMenuResponse publish(@PathVariable Long id) {
-        return currentWeekMenuService.publishFromProposed(id);
+    public CurrentWeekMenuResponse establish(
+            @PathVariable Long id,
+            @Valid @RequestBody EstablishProposedWeekMenuRequest request
+    ) {
+        return currentWeekMenuService.establishFromProposed(id, request.payerUserId());
     }
 }

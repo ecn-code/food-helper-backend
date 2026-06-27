@@ -4,7 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.util.List;
 
-@Schema(name = "ProposedWeekMenuStockSummaryResponse", description = "Preview of stock needs and nutritional coverage for the proposed week menu")
+@Schema(name = "PlanningStockSummaryResponse", description = "Preview of stock needs and nutritional coverage for the planning")
 public record ProposedWeekMenuStockSummaryResponse(
         @Schema(description = "Days in the menu that already have at least one saved day", example = "3")
         Integer plannedDays,

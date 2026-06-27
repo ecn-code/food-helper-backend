@@ -1,5 +1,6 @@
 package com.eliascanalesnieto.foodhelper.domain;
 
+import java.util.List;
 import lombok.Builder;
 import lombok.Value;
 
@@ -13,4 +14,6 @@ public class Product {
     java.math.BigDecimal defaultPrice;
     NutritionalValues nutritionalValues;
     Media photo;
+    @Builder.Default
+    List<Supermarket> supermarkets = List.of();
 }

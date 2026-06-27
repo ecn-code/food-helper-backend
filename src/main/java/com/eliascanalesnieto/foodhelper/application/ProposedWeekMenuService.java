@@ -12,6 +12,7 @@ import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockRequirement;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummary;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummaryCalories;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummaryDayCalories;
+import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuStatsRepository;
 import com.eliascanalesnieto.foodhelper.domain.StockEntry;
 import com.eliascanalesnieto.foodhelper.domain.StockRepository;
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
@@ -38,11 +39,12 @@ public class ProposedWeekMenuService {
     private static final BigDecimal ZERO = new BigDecimal("0.00");
     private static final BigDecimal DEFAULT_UNITS = BigDecimal.ONE;
     private static final int SCALE = 2;
-    private static final long MAX_MENU_DAYS = 8;
+    private static final long MAX_MENU_DAYS = 16;
 
     private final ProposedWeekMenuRepository menuRepository;
     private final ProductRepository productRepository;
     private final StockRepository stockRepository;
+    private final CurrentWeekMenuStatsRepository currentWeekMenuStatsRepository;
 
     @Transactional
     public ProposedWeekMenu create(LocalDate startDate, LocalDate endDate) {
@@ -50,7 +52,7 @@ public class ProposedWeekMenuService {
             throw new IllegalArgumentException("End date must be on or after start date");
         }
         if (ChronoUnit.DAYS.between(startDate, endDate) + 1 > MAX_MENU_DAYS) {
-            throw new IllegalArgumentException("Proposed week menu cannot span more than 8 days");
+            throw new IllegalArgumentException("Planning cannot span more than 16 days");
         }
         return enrich(menuRepository.create(ProposedWeekMenu.builder()
                 .startDate(startDate)
@@ -66,10 +68,20 @@ public class ProposedWeekMenuService {
 
     @Transactional
     public ProposedWeekMenu upsertDay(Long menuId, ProposedWeekMenuDay day) {
+        ensureMenuIsOpen(menuId);
         validateDayParts(day);
         validateProductSortOrders(day);
         ProposedWeekMenuDay completedDay = completeDefaultGrams(day);
         return enrich(menuRepository.upsertDay(menuId, completedDay));
+    }
+
+    private void ensureMenuIsOpen(Long menuId) {
+        try {
+            currentWeekMenuStatsRepository.findByProposedWeekMenuId(menuId);
+            throw new IllegalArgumentException("Planning is already closed");
+        } catch (ResourceNotFoundException ignored) {
+            // Planning is still open for edits or has not been closed yet.
+        }
     }
 
     private void validateDayParts(ProposedWeekMenuDay day) {

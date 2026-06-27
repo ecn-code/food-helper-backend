@@ -2,6 +2,7 @@ package com.eliascanalesnieto.foodhelper.presentation;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
+import java.util.List;
 
 @Schema(name = "ProductResponse", description = "API representation of a product")
 public record ProductResponse(
@@ -18,6 +19,8 @@ public record ProductResponse(
         @Schema(description = "Product nutritional values")
         NutritionalValuesResponse nutritionalValues,
         @Schema(description = "Optional signed photo URL that expires with the authentication token lifetime", example = "/api/v1/media/12?expiresAt=1781611200&signature=5f2a...")
-        String photo
+        String photo,
+        @Schema(description = "Supermarkets where the product is available")
+        List<SupermarketResponse> supermarkets
 ) {
 }

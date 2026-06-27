@@ -4,10 +4,13 @@ import com.eliascanalesnieto.foodhelper.domain.Media;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
+import com.eliascanalesnieto.foodhelper.domain.ProductSearchCriteria;
+import com.eliascanalesnieto.foodhelper.domain.Supermarket;
 import com.eliascanalesnieto.foodhelper.presentation.error.DuplicateResourceException;
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -61,7 +64,8 @@ public class JdbcProductRepository implements ProductRepository {
                     mediaId(product)
             ));
             NutritionalValuesEntity savedValues = upsertNutritionalValues(savedProduct.id(), product.getNutritionalValues());
-            return toDomain(savedProduct, savedValues);
+            replaceSupermarkets(savedProduct.id(), product.getSupermarkets());
+            return toDomain(savedProduct, savedValues, product.getSupermarkets());
         } catch (DataIntegrityViolationException ex) {
             throw new DuplicateResourceException("Product name already exists");
         }
@@ -83,7 +87,8 @@ public class JdbcProductRepository implements ProductRepository {
                     mediaId(product)
             ));
             NutritionalValuesEntity savedValues = upsertNutritionalValues(id, product.getNutritionalValues());
-            return toDomain(savedProduct, savedValues);
+            replaceSupermarkets(id, product.getSupermarkets());
+            return toDomain(savedProduct, savedValues, product.getSupermarkets());
         } catch (DataIntegrityViolationException ex) {
             throw new DuplicateResourceException("Product name already exists");
         }
@@ -99,28 +104,41 @@ public class JdbcProductRepository implements ProductRepository {
         if (products.isEmpty()) {
             throw new ResourceNotFoundException("Product not found");
         }
-        return products.getFirst();
+        return attachSupermarkets(products.getFirst());
     }
 
     @Override
     public List<Product> findAll() {
-        return jdbcTemplate.query(SELECT_PRODUCTS_WITH_VALUES + " ORDER BY p.id", productRowMapper());
+        return jdbcTemplate.query(SELECT_PRODUCTS_WITH_VALUES + " ORDER BY p.id", productRowMapper()).stream()
+                .map(this::attachSupermarkets)
+                .toList();
     }
 
     @Override
-    public List<Product> findPage(int offset, int limit) {
+    public List<Product> findPage(int offset, int limit, ProductSearchCriteria searchCriteria) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("limit", limit)
+                .addValue("offset", offset);
+        StringBuilder sql = new StringBuilder(SELECT_PRODUCTS_WITH_VALUES);
+        appendFilters(sql, params, searchCriteria);
+        sql.append(" ORDER BY p.id LIMIT :limit OFFSET :offset");
         return jdbcTemplate.query(
-                SELECT_PRODUCTS_WITH_VALUES + " ORDER BY p.id LIMIT :limit OFFSET :offset",
-                new MapSqlParameterSource()
-                        .addValue("limit", limit)
-                        .addValue("offset", offset),
+                sql.toString(),
+                params,
                 productRowMapper()
-        );
+        ).stream().map(this::attachSupermarkets).toList();
     }
 
     @Override
-    public long count() {
-        return productRepository.count();
+    public long count(ProductSearchCriteria searchCriteria) {
+        MapSqlParameterSource params = new MapSqlParameterSource();
+        StringBuilder sql = new StringBuilder("""
+                SELECT COUNT(*)
+                FROM products p
+                JOIN nutritional_values nv ON nv.product_id = p.id
+                """);
+        appendFilters(sql, params, searchCriteria);
+        return jdbcTemplate.queryForObject(sql.toString(), params, Long.class);
     }
 
     @Override
@@ -131,6 +149,25 @@ public class JdbcProductRepository implements ProductRepository {
         return new LinkedHashSet<>(ids).stream()
                 .map(this::findById)
                 .toList();
+    }
+
+    @Override
+    public Collection<Long> findProductIdsBySupermarket(Long supermarketId, Collection<Long> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbcTemplate.queryForList("""
+                        SELECT product_id
+                        FROM product_supermarkets
+                        WHERE supermarket_id = :supermarketId
+                          AND product_id IN (:productIds)
+                        ORDER BY product_id
+                        """,
+                new MapSqlParameterSource()
+                        .addValue("supermarketId", supermarketId)
+                        .addValue("productIds", productIds),
+                Long.class
+        );
     }
 
     @Override
@@ -152,7 +189,7 @@ public class JdbcProductRepository implements ProductRepository {
         );
     }
 
-    private Product toDomain(ProductEntity product, NutritionalValuesEntity values) {
+    private Product toDomain(ProductEntity product, NutritionalValuesEntity values, List<Supermarket> supermarkets) {
         return Product.builder()
                 .id(product.id())
                 .name(product.name())
@@ -162,6 +199,7 @@ public class JdbcProductRepository implements ProductRepository {
                 .photo(product.mediaId() == null ? null : Media.builder()
                         .id(product.mediaId())
                         .build())
+                .supermarkets(supermarkets == null ? List.of() : supermarkets)
                 .nutritionalValues(NutritionalValues.builder()
                         .productId(values.productId())
                         .calories(values.calories())
@@ -210,6 +248,49 @@ public class JdbcProductRepository implements ProductRepository {
                 .build();
     }
 
+    private Product attachSupermarkets(Product product) {
+        return product.toBuilder()
+                .supermarkets(findSupermarkets(product.getId()))
+                .build();
+    }
+
+    private List<Supermarket> findSupermarkets(Long productId) {
+        return jdbcTemplate.query("""
+                        SELECT s.id, s.name
+                        FROM supermarkets s
+                        INNER JOIN product_supermarkets ps ON ps.supermarket_id = s.id
+                        WHERE ps.product_id = :productId
+                        ORDER BY LOWER(s.name), s.id
+                        """,
+                new MapSqlParameterSource("productId", productId),
+                (rs, rowNum) -> Supermarket.builder()
+                        .id(rs.getLong("id"))
+                        .name(rs.getString("name"))
+                        .build()
+        );
+    }
+
+    private void replaceSupermarkets(Long productId, List<Supermarket> supermarkets) {
+        jdbcTemplate.update(
+                "DELETE FROM product_supermarkets WHERE product_id = :productId",
+                new MapSqlParameterSource("productId", productId)
+        );
+        if (supermarkets == null) {
+            return;
+        }
+        supermarkets.stream()
+                .map(Supermarket::getId)
+                .distinct()
+                .forEach(supermarketId -> jdbcTemplate.update("""
+                                INSERT INTO product_supermarkets (product_id, supermarket_id)
+                                VALUES (:productId, :supermarketId)
+                                """,
+                        new MapSqlParameterSource()
+                                .addValue("productId", productId)
+                                .addValue("supermarketId", supermarketId)
+                ));
+    }
+
     private Long mediaId(Product product) {
         return product.getPhoto() == null ? null : product.getPhoto().getId();
     }
@@ -227,5 +308,40 @@ public class JdbcProductRepository implements ProductRepository {
                 .width(rs.getInt("width"))
                 .height(rs.getInt("height"))
                 .build();
+    }
+
+    private void appendFilters(StringBuilder sql, MapSqlParameterSource params, ProductSearchCriteria searchCriteria) {
+        List<String> conditions = new ArrayList<>();
+        if (searchCriteria != null && searchCriteria.hasFilters()) {
+            if (searchCriteria.search() != null) {
+                conditions.add("(LOWER(p.name) LIKE :search OR LOWER(p.description) LIKE :search)");
+                params.addValue("search", "%" + searchCriteria.search() + "%");
+            }
+            addRangeCondition(conditions, params, "calories", "nv.calories", searchCriteria.caloriesMin(), searchCriteria.caloriesMax());
+            addRangeCondition(conditions, params, "carbohydrates", "nv.carbohydrates", searchCriteria.carbohydratesMin(), searchCriteria.carbohydratesMax());
+            addRangeCondition(conditions, params, "proteins", "nv.proteins", searchCriteria.proteinsMin(), searchCriteria.proteinsMax());
+            addRangeCondition(conditions, params, "fats", "nv.fats", searchCriteria.fatsMin(), searchCriteria.fatsMax());
+        }
+        if (!conditions.isEmpty()) {
+            sql.append(" WHERE ").append(String.join(" AND ", conditions));
+        }
+    }
+
+    private void addRangeCondition(
+            List<String> conditions,
+            MapSqlParameterSource params,
+            String filterName,
+            String column,
+            java.math.BigDecimal min,
+            java.math.BigDecimal max
+    ) {
+        if (min != null) {
+            conditions.add(column + " >= :" + filterName + "Min");
+            params.addValue(filterName + "Min", min);
+        }
+        if (max != null) {
+            conditions.add(column + " <= :" + filterName + "Max");
+            params.addValue(filterName + "Max", max);
+        }
     }
 }

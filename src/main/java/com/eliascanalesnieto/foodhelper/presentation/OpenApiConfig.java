@@ -55,6 +55,11 @@ public class OpenApiConfig {
     }
 
     @Bean
+    GroupedOpenApi supermarketsApi() {
+        return groupedApi("supermarkets", "Supermarkets", "/api/v1/supermarkets", "/api/v1/supermarkets/**").build();
+    }
+
+    @Bean
     GroupedOpenApi recipesApi() {
         return groupedApi("recipes", "Recipes", "/api/v1/recipes", "/api/v1/recipes/**").build();
     }
@@ -65,25 +70,33 @@ public class OpenApiConfig {
     }
 
     @Bean
-    GroupedOpenApi proposedWeekMenusApi() {
+    GroupedOpenApi usersApi() {
+        return groupedApi("users", "Users", "/api/v1/users/**").build();
+    }
+
+    @Bean
+    GroupedOpenApi planningApi() {
         return groupedApi(
-                "proposed-week-menus",
-                "Proposed week menus",
-                "/api/v1/proposed-week-menus",
-                "/api/v1/proposed-week-menus/**",
-                "/api/v1/proposed-week-menu-day-parts",
-                "/api/v1/proposed-week-menu-day-parts/**"
+                "planning",
+                "Planning",
+                "/api/v1/planning",
+                "/api/v1/planning/**"
         ).build();
     }
 
     @Bean
-    GroupedOpenApi currentWeekMenusApi() {
+    GroupedOpenApi menusApi() {
         return groupedApi(
-                "established-week-menus",
-                "Established week menus",
-                "/api/v1/established-week-menus",
-                "/api/v1/established-week-menus/**"
+                "menus",
+                "Menus",
+                "/api/v1/menus",
+                "/api/v1/menus/**"
         ).build();
+    }
+
+    @Bean
+    GroupedOpenApi nutritionalRulesApi() {
+        return groupedApi("nutritional-rules", "Nutritional rules", "/api/v1/nutritional-rules").build();
     }
 
     private GroupedOpenApi.Builder groupedApi(String group, String displayName, String... pathsToMatch) {

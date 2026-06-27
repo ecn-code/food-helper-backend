@@ -4,7 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-@Schema(name = "ProposedWeekMenuStockSummaryDayCaloriesResponse", description = "Calories for one planned day in the proposed week menu")
+@Schema(name = "PlanningStockSummaryDayCaloriesResponse", description = "Calories for one planned day in the planning")
 public record ProposedWeekMenuStockSummaryDayCaloriesResponse(
         @Schema(description = "Day date", example = "2026-06-15")
         LocalDate date,

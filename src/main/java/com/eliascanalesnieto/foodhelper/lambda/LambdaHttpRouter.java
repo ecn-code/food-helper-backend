@@ -6,6 +6,7 @@ import com.eliascanalesnieto.foodhelper.application.AuthService;
 import com.eliascanalesnieto.foodhelper.application.JwtService;
 import com.eliascanalesnieto.foodhelper.application.MediaService;
 import com.eliascanalesnieto.foodhelper.application.MediaUrlService;
+import com.eliascanalesnieto.foodhelper.application.NutritionalRulesService;
 import com.eliascanalesnieto.foodhelper.application.PageResult;
 import com.eliascanalesnieto.foodhelper.application.PaginationRequest;
 import com.eliascanalesnieto.foodhelper.application.ProductService;
@@ -14,14 +15,19 @@ import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
 import com.eliascanalesnieto.foodhelper.application.RecipeService;
 import com.eliascanalesnieto.foodhelper.application.StatsService;
 import com.eliascanalesnieto.foodhelper.application.StockService;
+import com.eliascanalesnieto.foodhelper.application.SupermarketService;
+import com.eliascanalesnieto.foodhelper.application.UserMoneyService;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
+import com.eliascanalesnieto.foodhelper.domain.ProductSearchCriteria;
 import com.eliascanalesnieto.foodhelper.presentation.AdjustStockQuantityRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateProductRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateProposedWeekMenuRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeDerivedProductRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateStockEntryRequest;
+import com.eliascanalesnieto.foodhelper.presentation.CreateUserMoneyMovementRequest;
+import com.eliascanalesnieto.foodhelper.presentation.EstablishProposedWeekMenuRequest;
 import com.eliascanalesnieto.foodhelper.presentation.LoginRequest;
 import com.eliascanalesnieto.foodhelper.presentation.ProductApiMapper;
 import com.eliascanalesnieto.foodhelper.presentation.ProductPageResponse;
@@ -29,6 +35,9 @@ import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuApiMapper;
 import com.eliascanalesnieto.foodhelper.presentation.RecipeIngredientAssignmentRequest;
 import com.eliascanalesnieto.foodhelper.presentation.RecipePageResponse;
 import com.eliascanalesnieto.foodhelper.presentation.RegisterRequest;
+import com.eliascanalesnieto.foodhelper.presentation.SaveNutritionalRulesRequest;
+import com.eliascanalesnieto.foodhelper.presentation.SupermarketRequest;
+import com.eliascanalesnieto.foodhelper.presentation.SupermarketResponse;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateStockEntryRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpsertProposedWeekMenuDayRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateRecipeRequest;
@@ -42,6 +51,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.math.BigDecimal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
@@ -57,8 +67,11 @@ public class LambdaHttpRouter {
     private final ProductService service;
     private final RecipeService recipeService;
     private final StockService stockService;
+    private final SupermarketService supermarketService;
     private final ProposedWeekMenuService proposedWeekMenuService;
     private final CurrentWeekMenuService currentWeekMenuService;
+    private final UserMoneyService userMoneyService;
+    private final NutritionalRulesService nutritionalRulesService;
     private final StatsService statsService;
     private final AuthService authService;
     private final JwtService jwtService;
@@ -130,24 +143,55 @@ public class LambdaHttpRouter {
                     body.proteins(),
                     body.fats(),
                     body.defaultPrice(),
-                    body.photo() == null ? null : body.photo().toDomain()
+                    body.photo() == null ? null : body.photo().toDomain(),
+                    body.supermarketIds()
             );
             return json(201, mapper.toResponse(created));
         }
 
         if ("GET".equals(method) && "/api/v1/products".equals(path)) {
-            return json(200, toProductPage(service.findPage(parsePagination(request))));
+            return json(200, toProductPage(service.findPage(parsePagination(request), parseProductSearchCriteria(request))));
         }
 
-        if ("POST".equals(method) && "/api/v1/proposed-week-menus".equals(path)) {
+        if ("GET".equals(method) && "/api/v1/supermarkets".equals(path)) {
+            return json(200, supermarketService.findAll().stream()
+                    .map(supermarket -> new SupermarketResponse(supermarket.getId(), supermarket.getName()))
+                    .toList());
+        }
+
+        if ("POST".equals(method) && "/api/v1/supermarkets".equals(path)) {
+            SupermarketRequest body = readBody(request.getBody(), SupermarketRequest.class);
+            var supermarket = supermarketService.create(body.name());
+            return json(201, new SupermarketResponse(supermarket.getId(), supermarket.getName()));
+        }
+
+        if (path != null && path.startsWith("/api/v1/supermarkets/")) {
+            Long id = parseId(path);
+            if ("GET".equals(method)) {
+                var supermarket = supermarketService.findById(id);
+                return json(200, new SupermarketResponse(supermarket.getId(), supermarket.getName()));
+            }
+            if ("PUT".equals(method)) {
+                SupermarketRequest body = readBody(request.getBody(), SupermarketRequest.class);
+                var supermarket = supermarketService.update(id, body.name());
+                return json(200, new SupermarketResponse(supermarket.getId(), supermarket.getName()));
+            }
+            if ("DELETE".equals(method)) {
+                supermarketService.delete(id);
+                return new APIGatewayProxyResponseEvent().withStatusCode(204).withHeaders(defaultHeaders());
+            }
+        }
+
+        if ("POST".equals(method) && "/api/v1/planning".equals(path)) {
             CreateProposedWeekMenuRequest body = parseProposedWeekMenuCreate(request.getBody());
             return json(201, proposedWeekMenuMapper.toResponse(proposedWeekMenuService.create(body.startDate(), body.endDate())));
         }
 
-        if (path != null && path.startsWith("/api/v1/proposed-week-menus/") && path.endsWith("/publish")) {
+        if (path != null && path.startsWith("/api/v1/planning/") && path.endsWith("/menu")) {
             Long id = parseId(path.substring(0, path.lastIndexOf('/')));
             if ("POST".equals(method)) {
-                return json(201, currentWeekMenuService.publishFromProposed(id));
+                EstablishProposedWeekMenuRequest body = parseEstablishProposedWeekMenu(request.getBody());
+                return json(201, currentWeekMenuService.establishFromProposed(id, body.payerUserId()));
             }
         }
 
@@ -214,7 +258,8 @@ public class LambdaHttpRouter {
                         body.proteins(),
                         body.fats(),
                         body.defaultPrice(),
-                        body.photo() == null ? null : body.photo().toDomain()
+                        body.photo() == null ? null : body.photo().toDomain(),
+                        body.supermarketIds()
                 )));
             }
             if ("DELETE".equals(method)) {
@@ -250,7 +295,7 @@ public class LambdaHttpRouter {
             }
         }
 
-        if (path != null && path.startsWith("/api/v1/proposed-week-menus/")) {
+        if (path != null && path.startsWith("/api/v1/planning/")) {
             if (path.endsWith("/days")) {
                 Long id = parseId(path.substring(0, path.lastIndexOf('/')));
                 if ("PUT".equals(method)) {
@@ -264,7 +309,19 @@ public class LambdaHttpRouter {
             }
         }
 
-        if (path != null && path.startsWith("/api/v1/established-week-menus/")) {
+        if (path != null && path.startsWith("/api/v1/menus/")) {
+            if (path.endsWith("/close")) {
+                Long id = parseId(path.substring(0, path.lastIndexOf('/')));
+                if ("POST".equals(method)) {
+                    return json(200, currentWeekMenuService.close(id));
+                }
+            }
+            if (path.endsWith("/stats")) {
+                Long id = parseId(path.substring(0, path.lastIndexOf('/')));
+                if ("GET".equals(method)) {
+                    return json(200, currentWeekMenuService.findStatsById(id));
+                }
+            }
             if (path.endsWith("/used-stock")) {
                 Long id = parseId(path.substring(0, path.lastIndexOf('/')));
                 if ("GET".equals(method)) {
@@ -274,12 +331,39 @@ public class LambdaHttpRouter {
             if (path.endsWith("/shopping-list")) {
                 Long id = parseId(path.substring(0, path.lastIndexOf('/')));
                 if ("GET".equals(method)) {
-                    return json(200, currentWeekMenuService.findById(id).shoppingList());
+                    return json(200, currentWeekMenuService.findShoppingList(
+                            id,
+                            parseOptionalLong(queryParam(request, "supermarketId"), "supermarketId")
+                    ));
                 }
             }
             Long id = parseId(path);
             if ("GET".equals(method)) {
                 return json(200, currentWeekMenuService.findById(id));
+            }
+        }
+
+        if (path != null && path.startsWith("/api/v1/users/") && path.endsWith("/money-box")) {
+            Long userId = parseId(path.substring(0, path.lastIndexOf('/')));
+            if ("GET".equals(method)) {
+                return json(200, userMoneyService.findMoneyBox(userId));
+            }
+        }
+
+        if ("GET".equals(method) && "/api/v1/nutritional-rules".equals(path)) {
+            return json(200, nutritionalRulesService.find());
+        }
+
+        if ("PUT".equals(method) && "/api/v1/nutritional-rules".equals(path)) {
+            return json(200, nutritionalRulesService.save(readBody(request.getBody(), SaveNutritionalRulesRequest.class)));
+        }
+
+        if (path != null && path.startsWith("/api/v1/users/") && path.endsWith("/money-box/movements")) {
+            String userMoneyBoxPath = path.substring(0, path.lastIndexOf('/'));
+            Long userId = parseId(userMoneyBoxPath.substring(0, userMoneyBoxPath.lastIndexOf('/')));
+            if ("POST".equals(method)) {
+                CreateUserMoneyMovementRequest body = parseCreateUserMoneyMovement(request.getBody());
+                return json(201, userMoneyService.addMovement(userId, body.amount(), body.description()));
             }
         }
 
@@ -354,6 +438,14 @@ public class LambdaHttpRouter {
         return readBody(body, UpsertProposedWeekMenuDayRequest.class);
     }
 
+    private EstablishProposedWeekMenuRequest parseEstablishProposedWeekMenu(String body) {
+        return readBody(body, EstablishProposedWeekMenuRequest.class);
+    }
+
+    private CreateUserMoneyMovementRequest parseCreateUserMoneyMovement(String body) {
+        return readBody(body, CreateUserMoneyMovementRequest.class);
+    }
+
     private UpdateRecipeRequest parseRecipeUpdate(String body) {
         return readBody(body, UpdateRecipeRequest.class);
     }
@@ -381,12 +473,48 @@ public class LambdaHttpRouter {
         );
     }
 
+    private ProductSearchCriteria parseProductSearchCriteria(APIGatewayProxyRequestEvent request) {
+        return ProductSearchCriteria.of(
+                queryParam(request, "search"),
+                parseOptionalBigDecimal(queryParam(request, "caloriesMin"), "caloriesMin"),
+                parseOptionalBigDecimal(queryParam(request, "caloriesMax"), "caloriesMax"),
+                parseOptionalBigDecimal(queryParam(request, "carbohydratesMin"), "carbohydratesMin"),
+                parseOptionalBigDecimal(queryParam(request, "carbohydratesMax"), "carbohydratesMax"),
+                parseOptionalBigDecimal(queryParam(request, "proteinsMin"), "proteinsMin"),
+                parseOptionalBigDecimal(queryParam(request, "proteinsMax"), "proteinsMax"),
+                parseOptionalBigDecimal(queryParam(request, "fatsMin"), "fatsMin"),
+                parseOptionalBigDecimal(queryParam(request, "fatsMax"), "fatsMax")
+        );
+    }
+
     private Integer parseOptionalInteger(String value, String name) {
         if (!StringUtils.hasText(value)) {
             return null;
         }
         try {
             return Integer.parseInt(value);
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Invalid " + name);
+        }
+    }
+
+    private Long parseOptionalLong(String value, String name) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Invalid " + name);
+        }
+    }
+
+    private BigDecimal parseOptionalBigDecimal(String value, String name) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return new BigDecimal(value);
         } catch (NumberFormatException ex) {
             throw new IllegalArgumentException("Invalid " + name);
         }

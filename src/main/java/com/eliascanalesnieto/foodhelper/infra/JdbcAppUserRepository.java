@@ -3,6 +3,7 @@ package com.eliascanalesnieto.foodhelper.infra;
 import com.eliascanalesnieto.foodhelper.domain.AppUser;
 import com.eliascanalesnieto.foodhelper.domain.AppUserRepository;
 import com.eliascanalesnieto.foodhelper.presentation.error.DuplicateResourceException;
+import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -25,6 +26,13 @@ public class JdbcAppUserRepository implements AppUserRepository {
         } catch (DataIntegrityViolationException ex) {
             throw new DuplicateResourceException("Username already exists");
         }
+    }
+
+    @Override
+    public AppUser findById(Long id) {
+        return userRepository.findById(id)
+                .map(this::toDomain)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
     }
 
     @Override

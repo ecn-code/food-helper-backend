@@ -4,7 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-@Schema(name = "CurrentWeekMenuUsedStockResponse", description = "Stock entry consumption record for an established week menu")
+@Schema(name = "MenuUsedStockResponse", description = "Stock entry consumption record for a menu")
 public record CurrentWeekMenuUsedStockResponse(
         @Schema(description = "Stock entry identifier", example = "7")
         Long stockEntryId,

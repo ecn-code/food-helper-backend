@@ -13,6 +13,7 @@ import com.eliascanalesnieto.foodhelper.domain.MediaUpload;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
+import com.eliascanalesnieto.foodhelper.domain.SupermarketRepository;
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
 import java.math.BigDecimal;
 import java.util.List;
@@ -28,6 +29,9 @@ class ProductServiceTest {
 
     @Mock
     private ProductRepository repository;
+
+    @Mock
+    private SupermarketRepository supermarketRepository;
 
     @Mock
     private MediaService mediaService;

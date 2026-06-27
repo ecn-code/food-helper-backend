@@ -29,6 +29,30 @@ CREATE TABLE IF NOT EXISTS nutritional_values (
         ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS supermarkets (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(150) NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_supermarkets_name_lower
+    ON supermarkets (LOWER(name));
+
+CREATE TABLE IF NOT EXISTS product_supermarkets (
+    product_id BIGINT NOT NULL,
+    supermarket_id BIGINT NOT NULL,
+    CONSTRAINT pk_product_supermarkets PRIMARY KEY (product_id, supermarket_id),
+    CONSTRAINT fk_product_supermarkets_product
+        FOREIGN KEY (product_id)
+        REFERENCES products(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_product_supermarkets_supermarket
+        FOREIGN KEY (supermarket_id)
+        REFERENCES supermarkets(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_supermarkets_supermarket_id
+    ON product_supermarkets(supermarket_id);
+
 CREATE TABLE IF NOT EXISTS recipes (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(150) NOT NULL UNIQUE,
@@ -157,11 +181,68 @@ CREATE TABLE IF NOT EXISTS current_week_menus (
         ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS current_week_menu_stats (
+    current_week_menu_id BIGINT PRIMARY KEY,
+    stats_json TEXT NOT NULL,
+    closed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT fk_current_week_menu_stats_menu
+        FOREIGN KEY (current_week_menu_id)
+        REFERENCES current_week_menus(id)
+        ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS app_users (
     id BIGSERIAL PRIMARY KEY,
     username VARCHAR(80) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS user_money_movements (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    amount NUMERIC(12, 2) NOT NULL,
+    description VARCHAR(255),
+    current_week_menu_id BIGINT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT fk_user_money_movements_user
+        FOREIGN KEY (user_id)
+        REFERENCES app_users(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_user_money_movements_current_week_menu
+        FOREIGN KEY (current_week_menu_id)
+        REFERENCES current_week_menus(id)
+        ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_money_movements_user_created
+    ON user_money_movements(user_id, created_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS nutritional_rules (
+    id SMALLINT PRIMARY KEY,
+    calories_minimum NUMERIC(10,2),
+    calories_maximum NUMERIC(10,2),
+    carbohydrates_minimum NUMERIC(10,2),
+    carbohydrates_maximum NUMERIC(10,2),
+    proteins_minimum NUMERIC(10,2),
+    proteins_maximum NUMERIC(10,2),
+    fats_minimum NUMERIC(10,2),
+    fats_maximum NUMERIC(10,2),
+    CONSTRAINT chk_nutritional_rules_singleton CHECK (id = 1),
+    CONSTRAINT chk_nutritional_rules_non_negative CHECK (
+        (calories_minimum IS NULL OR calories_minimum >= 0) AND
+        (calories_maximum IS NULL OR calories_maximum >= 0) AND
+        (carbohydrates_minimum IS NULL OR carbohydrates_minimum >= 0) AND
+        (carbohydrates_maximum IS NULL OR carbohydrates_maximum >= 0) AND
+        (proteins_minimum IS NULL OR proteins_minimum >= 0) AND
+        (proteins_maximum IS NULL OR proteins_maximum >= 0) AND
+        (fats_minimum IS NULL OR fats_minimum >= 0) AND
+        (fats_maximum IS NULL OR fats_maximum >= 0)
+    ),
+    CONSTRAINT chk_nutritional_rules_calories CHECK (calories_minimum IS NULL OR calories_maximum IS NULL OR calories_minimum <= calories_maximum),
+    CONSTRAINT chk_nutritional_rules_carbohydrates CHECK (carbohydrates_minimum IS NULL OR carbohydrates_maximum IS NULL OR carbohydrates_minimum <= carbohydrates_maximum),
+    CONSTRAINT chk_nutritional_rules_proteins CHECK (proteins_minimum IS NULL OR proteins_maximum IS NULL OR proteins_minimum <= proteins_maximum),
+    CONSTRAINT chk_nutritional_rules_fats CHECK (fats_minimum IS NULL OR fats_maximum IS NULL OR fats_minimum <= fats_maximum)
 );
 
 DO $$
