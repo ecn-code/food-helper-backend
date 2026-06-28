@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,6 +30,21 @@ public class ProposedWeekMenuController {
     private final ProposedWeekMenuService service;
     private final CurrentWeekMenuService currentWeekMenuService;
     private final ProposedWeekMenuApiMapper mapper;
+
+    @GetMapping
+    @Operation(
+            summary = "List planning",
+            description = "Returns compact planning summaries ordered by start date descending. Full days, products, and calculations are available from the detail endpoint."
+    )
+    @ApiResponse(responseCode = "200", description = "Planning summaries returned")
+    public List<PlanningSummaryResponse> findAll() {
+        return service.findAllSummaries().stream()
+                .map(summary -> new PlanningSummaryResponse(
+                        summary.id(), summary.startDate(), summary.endDate(), summary.plannedDays(),
+                        summary.state(), summary.menuId()
+                ))
+                .toList();
+    }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -85,7 +101,7 @@ public class ProposedWeekMenuController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
             summary = "Create menu from planning",
-            description = "Consumes available stock, creates a menu snapshot, stores missing products as a shopping list, and subtracts the estimated cost from the selected payer user's money box."
+            description = "Consumes the user-confirmed stock allocation, or automatically uses the earliest expiration date when no allocation is supplied. It creates a menu snapshot, stores missing products as a shopping list, and subtracts the applied stock cost from the selected payer user's money box."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Menu created",
@@ -99,6 +115,10 @@ public class ProposedWeekMenuController {
             @PathVariable Long id,
             @Valid @RequestBody EstablishProposedWeekMenuRequest request
     ) {
-        return currentWeekMenuService.establishFromProposed(id, request.payerUserId());
+        return currentWeekMenuService.establishFromProposed(
+                id,
+                request.payerUserId(),
+                request.stockAllocations()
+        );
     }
 }

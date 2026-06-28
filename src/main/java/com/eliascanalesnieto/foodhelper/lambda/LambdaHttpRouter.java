@@ -17,16 +17,21 @@ import com.eliascanalesnieto.foodhelper.application.StatsService;
 import com.eliascanalesnieto.foodhelper.application.StockService;
 import com.eliascanalesnieto.foodhelper.application.SupermarketService;
 import com.eliascanalesnieto.foodhelper.application.UserMoneyService;
+import com.eliascanalesnieto.foodhelper.application.UserWeightService;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
 import com.eliascanalesnieto.foodhelper.domain.ProductSearchCriteria;
+import com.eliascanalesnieto.foodhelper.domain.RecipeSearchCriteria;
 import com.eliascanalesnieto.foodhelper.presentation.AdjustStockQuantityRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateProductRequest;
+import com.eliascanalesnieto.foodhelper.presentation.CreateMoneyBoxRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateProposedWeekMenuRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeDerivedProductRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateStockEntryRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateUserMoneyMovementRequest;
+import com.eliascanalesnieto.foodhelper.presentation.CreateUserWeightRequest;
+import com.eliascanalesnieto.foodhelper.presentation.CloseCurrentWeekMenuRequest;
 import com.eliascanalesnieto.foodhelper.presentation.EstablishProposedWeekMenuRequest;
 import com.eliascanalesnieto.foodhelper.presentation.LoginRequest;
 import com.eliascanalesnieto.foodhelper.presentation.ProductApiMapper;
@@ -39,6 +44,7 @@ import com.eliascanalesnieto.foodhelper.presentation.SaveNutritionalRulesRequest
 import com.eliascanalesnieto.foodhelper.presentation.SupermarketRequest;
 import com.eliascanalesnieto.foodhelper.presentation.SupermarketResponse;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateStockEntryRequest;
+import com.eliascanalesnieto.foodhelper.presentation.UpdateUserWeightRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpsertProposedWeekMenuDayRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateProductRequest;
@@ -46,6 +52,7 @@ import com.eliascanalesnieto.foodhelper.presentation.error.DuplicateResourceExce
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
 import jakarta.validation.Validator;
 import java.time.LocalDate;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.Arrays;
 import java.util.List;
@@ -71,6 +78,7 @@ public class LambdaHttpRouter {
     private final ProposedWeekMenuService proposedWeekMenuService;
     private final CurrentWeekMenuService currentWeekMenuService;
     private final UserMoneyService userMoneyService;
+    private final UserWeightService userWeightService;
     private final NutritionalRulesService nutritionalRulesService;
     private final StatsService statsService;
     private final AuthService authService;
@@ -187,11 +195,19 @@ public class LambdaHttpRouter {
             return json(201, proposedWeekMenuMapper.toResponse(proposedWeekMenuService.create(body.startDate(), body.endDate())));
         }
 
+        if ("GET".equals(method) && "/api/v1/planning".equals(path)) {
+            return json(200, proposedWeekMenuService.findAllSummaries());
+        }
+
         if (path != null && path.startsWith("/api/v1/planning/") && path.endsWith("/menu")) {
             Long id = parseId(path.substring(0, path.lastIndexOf('/')));
             if ("POST".equals(method)) {
                 EstablishProposedWeekMenuRequest body = parseEstablishProposedWeekMenu(request.getBody());
-                return json(201, currentWeekMenuService.establishFromProposed(id, body.payerUserId()));
+                return json(201, currentWeekMenuService.establishFromProposed(
+                        id,
+                        body.payerUserId(),
+                        body.stockAllocations()
+                ));
             }
         }
 
@@ -207,7 +223,10 @@ public class LambdaHttpRouter {
         }
 
         if ("GET".equals(method) && "/api/v1/recipes".equals(path)) {
-            return json(200, toRecipePage(recipeService.findPage(parsePagination(request))));
+            return json(200, toRecipePage(recipeService.findPage(
+                    parsePagination(request),
+                    parseRecipeSearchCriteria(request)
+            )));
         }
 
         if ("GET".equals(method) && "/api/v1/recipes/stats".equals(path)) {
@@ -309,11 +328,16 @@ public class LambdaHttpRouter {
             }
         }
 
+        if ("GET".equals(method) && "/api/v1/menus".equals(path)) {
+            return json(200, currentWeekMenuService.findAll());
+        }
+
         if (path != null && path.startsWith("/api/v1/menus/")) {
             if (path.endsWith("/close")) {
                 Long id = parseId(path.substring(0, path.lastIndexOf('/')));
                 if ("POST".equals(method)) {
-                    return json(200, currentWeekMenuService.close(id));
+                    CloseCurrentWeekMenuRequest body = readBody(request.getBody(), CloseCurrentWeekMenuRequest.class);
+                    return json(200, currentWeekMenuService.close(id, body.personIds()));
                 }
             }
             if (path.endsWith("/stats")) {
@@ -340,6 +364,113 @@ public class LambdaHttpRouter {
             Long id = parseId(path);
             if ("GET".equals(method)) {
                 return json(200, currentWeekMenuService.findById(id));
+            }
+            if ("DELETE".equals(method)) {
+                currentWeekMenuService.undo(id);
+                return new APIGatewayProxyResponseEvent().withStatusCode(204).withHeaders(defaultHeaders());
+            }
+        }
+
+        if ("GET".equals(method) && "/api/v1/users".equals(path)) {
+            return json(200, currentWeekMenuService.findPeople());
+        }
+
+        if ("GET".equals(method) && "/api/v1/money-boxes".equals(path)) {
+            return json(200, userMoneyService.findAllMoneyBoxes());
+        }
+
+        if ("POST".equals(method) && "/api/v1/money-boxes".equals(path)) {
+            CreateMoneyBoxRequest body = readBody(request.getBody(), CreateMoneyBoxRequest.class);
+            return json(201, userMoneyService.createManualMoneyBox(body.name()));
+        }
+
+        if (path != null && path.matches("/api/v1/money-boxes/\\d+/movements/\\d+")) {
+            String[] segments = path.split("/");
+            Long moneyBoxId = Long.parseLong(segments[4]);
+            Long movementId = Long.parseLong(segments[6]);
+            if ("DELETE".equals(method)) {
+                userMoneyService.deleteMoneyBoxMovement(moneyBoxId, movementId);
+                return new APIGatewayProxyResponseEvent().withStatusCode(204).withHeaders(defaultHeaders());
+            }
+        }
+
+        if (path != null && path.matches("/api/v1/money-boxes/\\d+/movements")) {
+            Long moneyBoxId = Long.parseLong(path.split("/")[4]);
+            if ("POST".equals(method)) {
+                CreateUserMoneyMovementRequest body = parseCreateUserMoneyMovement(request.getBody());
+                return json(201, userMoneyService.addMoneyBoxMovement(
+                        moneyBoxId,
+                        body.amount(),
+                        body.description()
+                ));
+            }
+        }
+
+        if (path != null && path.matches("/api/v1/money-boxes/\\d+")) {
+            Long moneyBoxId = parseId(path);
+            if ("GET".equals(method)) {
+                return json(200, userMoneyService.findMoneyBoxById(moneyBoxId));
+            }
+            if ("DELETE".equals(method)) {
+                userMoneyService.deleteMoneyBox(moneyBoxId);
+                return new APIGatewayProxyResponseEvent().withStatusCode(204).withHeaders(defaultHeaders());
+            }
+        }
+
+        if ("GET".equals(method) && path != null && path.matches("/api/v1/users/\\d+/menu-history/monthly")) {
+            Long personId = Long.parseLong(path.split("/")[4]);
+            return json(200, currentWeekMenuService.findMonthlyHistory(
+                    personId,
+                    parseRequiredInt(queryParam(request, "year"), "year"),
+                    parseRequiredInt(queryParam(request, "month"), "month")
+            ));
+        }
+
+        if ("GET".equals(method) && path != null && path.matches("/api/v1/users/\\d+/menu-history/annual")) {
+            Long personId = Long.parseLong(path.split("/")[4]);
+            return json(200, currentWeekMenuService.findAnnualHistory(
+                    personId,
+                    parseRequiredInt(queryParam(request, "year"), "year")
+            ));
+        }
+
+        if (path != null && path.matches("/api/v1/users/\\d+/weights/stats")) {
+            Long userId = Long.parseLong(path.split("/")[4]);
+            if ("GET".equals(method)) {
+                return json(200, userWeightService.findStats(
+                        userId,
+                        parseRequiredInstant(queryParam(request, "from"), "from"),
+                        parseRequiredInstant(queryParam(request, "to"), "to")
+                ));
+            }
+        }
+
+        if (path != null && path.matches("/api/v1/users/\\d+/weights/\\d+")) {
+            String[] pathParts = path.split("/");
+            Long userId = Long.parseLong(pathParts[4]);
+            Long weightId = Long.parseLong(pathParts[6]);
+            if ("PUT".equals(method)) {
+                UpdateUserWeightRequest body = readBody(request.getBody(), UpdateUserWeightRequest.class);
+                return json(200, userWeightService.update(userId, weightId, body.weight(), body.recordedAt()));
+            }
+            if ("DELETE".equals(method)) {
+                userWeightService.delete(userId, weightId);
+                return new APIGatewayProxyResponseEvent().withStatusCode(204).withHeaders(defaultHeaders());
+            }
+        }
+
+        if (path != null && path.matches("/api/v1/users/\\d+/weights")) {
+            Long userId = Long.parseLong(path.split("/")[4]);
+            if ("POST".equals(method)) {
+                CreateUserWeightRequest body = readBody(request.getBody(), CreateUserWeightRequest.class);
+                return json(201, userWeightService.create(userId, body.weight(), body.recordedAt()));
+            }
+            if ("GET".equals(method)) {
+                return json(200, userWeightService.findByPeriod(
+                        userId,
+                        parseRequiredInstant(queryParam(request, "from"), "from"),
+                        parseRequiredInstant(queryParam(request, "to"), "to")
+                ));
             }
         }
 
@@ -487,6 +618,21 @@ public class LambdaHttpRouter {
         );
     }
 
+    private RecipeSearchCriteria parseRecipeSearchCriteria(APIGatewayProxyRequestEvent request) {
+        return new RecipeSearchCriteria(
+                queryParam(request, "search"),
+                parseOptionalBigDecimal(queryParam(request, "caloriesMin"), "caloriesMin"),
+                parseOptionalBigDecimal(queryParam(request, "caloriesMax"), "caloriesMax"),
+                parseOptionalBigDecimal(queryParam(request, "carbohydratesMin"), "carbohydratesMin"),
+                parseOptionalBigDecimal(queryParam(request, "carbohydratesMax"), "carbohydratesMax"),
+                parseOptionalBigDecimal(queryParam(request, "proteinsMin"), "proteinsMin"),
+                parseOptionalBigDecimal(queryParam(request, "proteinsMax"), "proteinsMax"),
+                parseOptionalBigDecimal(queryParam(request, "fatsMin"), "fatsMin"),
+                parseOptionalBigDecimal(queryParam(request, "fatsMax"), "fatsMax"),
+                parseOptionalBoolean(queryParam(request, "hasDerivedProduct"), "hasDerivedProduct")
+        );
+    }
+
     private Integer parseOptionalInteger(String value, String name) {
         if (!StringUtils.hasText(value)) {
             return null;
@@ -518,6 +664,15 @@ public class LambdaHttpRouter {
         } catch (NumberFormatException ex) {
             throw new IllegalArgumentException("Invalid " + name);
         }
+    }
+
+    private Boolean parseOptionalBoolean(String value, String name) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        if ("true".equalsIgnoreCase(value)) return true;
+        if ("false".equalsIgnoreCase(value)) return false;
+        throw new IllegalArgumentException("Invalid " + name);
     }
 
     private <T> T readBody(String body, Class<T> type) {
@@ -654,6 +809,28 @@ public class LambdaHttpRouter {
                     .toList();
         } catch (NumberFormatException ex) {
             throw new IllegalArgumentException("Invalid productIds");
+        }
+    }
+
+    private int parseRequiredInt(String value, String name) {
+        if (!StringUtils.hasText(value)) {
+            throw new IllegalArgumentException(name + " is required");
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Invalid " + name);
+        }
+    }
+
+    private Instant parseRequiredInstant(String value, String name) {
+        if (!StringUtils.hasText(value)) {
+            throw new IllegalArgumentException(name + " is required");
+        }
+        try {
+            return Instant.parse(value);
+        } catch (java.time.format.DateTimeParseException ex) {
+            throw new IllegalArgumentException("Invalid " + name);
         }
     }
 }

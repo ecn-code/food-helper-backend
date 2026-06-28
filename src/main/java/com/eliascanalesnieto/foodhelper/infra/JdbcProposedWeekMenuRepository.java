@@ -7,6 +7,8 @@ import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDayPartRepository
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuProduct;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuSection;
+import com.eliascanalesnieto.foodhelper.domain.PlanningState;
+import com.eliascanalesnieto.foodhelper.domain.PlanningSummary;
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
 import java.sql.Date;
 import java.sql.PreparedStatement;
@@ -58,6 +60,36 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
         return menu.toBuilder()
                 .days(findDays(id))
                 .build();
+    }
+
+    @Override
+    public List<PlanningSummary> findAllSummaries() {
+        return jdbcTemplate.query("""
+                        SELECT pwm.id,
+                               pwm.start_date,
+                               pwm.end_date,
+                               COUNT(DISTINCT pwmd.id) AS planned_days,
+                               cwm.id AS menu_id,
+                               CASE
+                                   WHEN cwms.current_week_menu_id IS NOT NULL THEN 'CLOSED'
+                                   WHEN cwm.id IS NOT NULL THEN 'ESTABLISHED'
+                                   ELSE 'DRAFT'
+                               END AS state
+                        FROM proposed_week_menus pwm
+                        LEFT JOIN proposed_week_menu_days pwmd ON pwmd.menu_id = pwm.id
+                        LEFT JOIN current_week_menus cwm ON cwm.proposed_week_menu_id = pwm.id
+                        LEFT JOIN current_week_menu_stats cwms ON cwms.current_week_menu_id = cwm.id
+                        GROUP BY pwm.id, pwm.start_date, pwm.end_date, cwm.id, cwms.current_week_menu_id
+                        ORDER BY pwm.start_date DESC, pwm.id DESC
+                        """,
+                (rs, rowNum) -> new PlanningSummary(
+                        rs.getLong("id"),
+                        rs.getDate("start_date").toLocalDate(),
+                        rs.getDate("end_date").toLocalDate(),
+                        rs.getInt("planned_days"),
+                        PlanningState.valueOf(rs.getString("state")),
+                        rs.getObject("menu_id", Long.class)
+                ));
     }
 
     @Override

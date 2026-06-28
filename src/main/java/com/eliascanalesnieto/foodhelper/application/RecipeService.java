@@ -9,6 +9,7 @@ import com.eliascanalesnieto.foodhelper.domain.Recipe;
 import com.eliascanalesnieto.foodhelper.domain.RecipeDerivedProduct;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
 import com.eliascanalesnieto.foodhelper.domain.RecipeRepository;
+import com.eliascanalesnieto.foodhelper.domain.RecipeSearchCriteria;
 import com.eliascanalesnieto.foodhelper.presentation.error.DuplicateResourceException;
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
 import java.math.BigDecimal;
@@ -74,11 +75,16 @@ public class RecipeService {
 
     @Transactional(readOnly = true)
     public PageResult<Recipe> findPage(PaginationRequest pagination) {
-        List<Recipe> items = recipeRepository.findPage(pagination.offset(), pagination.size()).stream()
+        return findPage(pagination, RecipeSearchCriteria.empty());
+    }
+
+    @Transactional(readOnly = true)
+    public PageResult<Recipe> findPage(PaginationRequest pagination, RecipeSearchCriteria criteria) {
+        List<Recipe> items = recipeRepository.findPage(pagination.offset(), pagination.size(), criteria).stream()
                 .map(this::enrichRecipe)
                 .map(this::attachDerivedProduct)
                 .toList();
-        return new PageResult<>(items, pagination.page(), pagination.size(), recipeRepository.count());
+        return new PageResult<>(items, pagination.page(), pagination.size(), recipeRepository.count(criteria));
     }
 
     @Transactional(readOnly = true)

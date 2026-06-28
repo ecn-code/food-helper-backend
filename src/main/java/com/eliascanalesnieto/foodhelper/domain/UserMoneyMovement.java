@@ -9,6 +9,7 @@ import lombok.Value;
 @Builder
 public class UserMoneyMovement {
     Long id;
+    Long moneyBoxId;
     Long userId;
     BigDecimal amount;
     String description;

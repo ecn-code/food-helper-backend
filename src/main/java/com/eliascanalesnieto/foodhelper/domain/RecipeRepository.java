@@ -9,7 +9,11 @@ public interface RecipeRepository {
 
     List<Recipe> findPage(int offset, int limit);
 
+    List<Recipe> findPage(int offset, int limit, RecipeSearchCriteria criteria);
+
     long count();
+
+    long count(RecipeSearchCriteria criteria);
 
     Recipe create(Recipe recipe);
 

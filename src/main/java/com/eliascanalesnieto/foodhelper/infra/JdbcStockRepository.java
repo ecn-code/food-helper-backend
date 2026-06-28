@@ -2,9 +2,11 @@ package com.eliascanalesnieto.foodhelper.infra;
 
 import com.eliascanalesnieto.foodhelper.domain.StockEntry;
 import com.eliascanalesnieto.foodhelper.domain.StockRepository;
+import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuUsedStock;
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.sql.Types;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -87,6 +89,24 @@ public class JdbcStockRepository implements StockRepository {
                 existingEntry.expirationDate(),
                 existingEntry.entryDate()
         ));
+    }
+
+    @Override
+    @Transactional
+    public void restore(CurrentWeekMenuUsedStock usedStock) {
+        jdbcClient.sql("""
+                INSERT INTO stock_entries (id, product_id, quantity, price, expiration_date, entry_date)
+                VALUES (:id, :productId, :quantity, :price, :expirationDate, :entryDate)
+                ON CONFLICT (id) DO UPDATE
+                SET quantity = stock_entries.quantity + EXCLUDED.quantity
+                """)
+                .param("id", usedStock.getStockEntryId())
+                .param("productId", usedStock.getProductId())
+                .param("quantity", usedStock.getUsedUnits())
+                .param("price", usedStock.getPrice())
+                .param("expirationDate", usedStock.getExpirationDate(), Types.DATE)
+                .param("entryDate", usedStock.getEntryDate())
+                .update();
     }
 
     @Override

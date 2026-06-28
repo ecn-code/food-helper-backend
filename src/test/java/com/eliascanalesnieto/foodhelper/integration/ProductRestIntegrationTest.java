@@ -7,10 +7,14 @@ import com.eliascanalesnieto.foodhelper.infra.NutritionalValuesCrudRepository;
 import com.eliascanalesnieto.foodhelper.infra.NutritionalValuesEntity;
 import com.eliascanalesnieto.foodhelper.presentation.AuthResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CreateProductRequest;
+import com.eliascanalesnieto.foodhelper.presentation.CreateMoneyBoxRequest;
+import com.eliascanalesnieto.foodhelper.presentation.CloseCurrentWeekMenuRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateProposedWeekMenuRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeDerivedProductRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.LoginRequest;
+import com.eliascanalesnieto.foodhelper.presentation.MoneyBoxMovementResponse;
+import com.eliascanalesnieto.foodhelper.presentation.MoneyBoxResponse;
 import com.eliascanalesnieto.foodhelper.presentation.NutrientRuleRequest;
 import com.eliascanalesnieto.foodhelper.presentation.NutritionalRuleStatus;
 import com.eliascanalesnieto.foodhelper.presentation.NutritionalRulesResponse;
@@ -45,16 +49,23 @@ import com.eliascanalesnieto.foodhelper.presentation.SupermarketResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProductStatsSummaryResponse;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateStockEntryRequest;
 import com.eliascanalesnieto.foodhelper.presentation.EstablishProposedWeekMenuRequest;
+import com.eliascanalesnieto.foodhelper.presentation.MenuStockAllocationRequest;
+import com.eliascanalesnieto.foodhelper.presentation.PlanningSummaryResponse;
 import com.eliascanalesnieto.foodhelper.presentation.UpsertProposedWeekMenuDayRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateProductRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UserMoneyBoxResponse;
 import com.eliascanalesnieto.foodhelper.presentation.UserMoneyMovementResponse;
+import com.eliascanalesnieto.foodhelper.presentation.CreateUserWeightRequest;
+import com.eliascanalesnieto.foodhelper.presentation.UserWeightResponse;
+import com.eliascanalesnieto.foodhelper.presentation.UserWeightStatsResponse;
+import com.eliascanalesnieto.foodhelper.presentation.UpdateUserWeightRequest;
 import java.math.BigDecimal;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.time.LocalDate;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -67,7 +78,9 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.client.DefaultResponseErrorHandler;
 import org.springframework.web.client.RestTemplate;
@@ -99,6 +112,9 @@ class ProductRestIntegrationTest {
 
     @Autowired
     private NutritionalValuesCrudRepository nutritionalValuesRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     RestTemplate restTemplate = new RestTemplate();
     private String accessToken;
@@ -426,6 +442,55 @@ class ProductRestIntegrationTest {
     }
 
     @Test
+    void listRecipesShouldApplyAccentInsensitiveTextNutritionalAndDerivedProductFilters() {
+        String suffix = Long.toString(System.nanoTime());
+        String productsUrl = "http://localhost:" + port + "/api/v1/products";
+        String recipesUrl = "http://localhost:" + port + "/api/v1/recipes";
+        Long saffronId = createProduct(
+                productsUrl, "Azafrán " + suffix, "Especia aromática", "120", "20", "8", "4"
+        );
+        RecipeResponse matching = postAuthorized(
+                recipesUrl,
+                new CreateRecipeRequest(
+                        "Paella " + suffix,
+                        "Descripción mediterránea",
+                        "Cocción lenta con caldo.",
+                        List.of(new RecipeIngredientAssignmentRequest(saffronId, new BigDecimal("100")))
+                ),
+                RecipeResponse.class
+        ).getBody();
+        postAuthorized(
+                recipesUrl,
+                new CreateRecipeRequest(
+                        "Other recipe " + suffix,
+                        "Unrelated description",
+                        "Bake briefly.",
+                        List.of(new RecipeIngredientAssignmentRequest(saffronId, new BigDecimal("10")))
+                ),
+                RecipeResponse.class
+        );
+        postAuthorized(
+                recipesUrl + "/" + matching.id() + "/derived-product",
+                new CreateRecipeDerivedProductRequest(new BigDecimal("500"), new BigDecimal("100")),
+                RecipeDerivedProductResponse.class
+        );
+
+        ResponseEntity<RecipePageResponse> filtered = getAuthorized(
+                recipesUrl + "?search=azafran&caloriesMin=100&caloriesMax=130"
+                        + "&carbohydratesMin=20&proteinsMax=8&fatsMin=4&hasDerivedProduct=true",
+                RecipePageResponse.class
+        );
+        assertThat(filtered.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(filtered.getBody().items()).extracting(RecipeResponse::id).containsExactly(matching.id());
+        assertThat(filtered.getBody().totalElements()).isOne();
+
+        assertThat(getAuthorized(recipesUrl + "?caloriesMin=-1", String.class).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(getAuthorized(recipesUrl + "?proteinsMin=20&proteinsMax=10", String.class).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
     void healthShouldBeUp() {
         ResponseEntity<String> response = restTemplate.getForEntity("http://localhost:" + port + "/api/v1/health", String.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -473,7 +538,20 @@ class ProductRestIntegrationTest {
         assertThat(response.getBody()).contains("inclusive date range cannot span more than 16 calendar days");
         assertThat(response.getBody()).contains("/api/v1/users/{userId}/money-box");
         assertThat(response.getBody()).contains("/api/v1/users/{userId}/money-box/movements");
+        assertThat(response.getBody()).contains("/api/v1/users/{userId}/weights");
+        assertThat(response.getBody()).contains("/api/v1/users/{userId}/weights/stats");
+        assertThat(response.getBody()).contains("/api/v1/users/{userId}/weights/{weightId}");
+        assertThat(response.getBody()).contains("UserWeightStatsResponse");
+        assertThat(response.getBody()).contains("/api/v1/money-boxes");
+        assertThat(response.getBody()).contains("/api/v1/money-boxes/{moneyBoxId}");
+        assertThat(response.getBody()).contains("/api/v1/money-boxes/{moneyBoxId}/movements");
+        assertThat(response.getBody()).contains("/api/v1/money-boxes/{moneyBoxId}/movements/{movementId}");
+        assertThat(response.getBody()).contains("deleteManualMoneyBox");
+        assertThat(response.getBody()).contains("deleteMoneyBoxMovement");
+        assertThat(response.getBody()).contains("MoneyBoxResponse");
         assertThat(response.getBody()).contains("payerUserId");
+        assertThat(response.getBody()).contains("stockAllocations");
+        assertThat(response.getBody()).contains("undoMenuCreation");
         assertThat(response.getBody()).contains("/api/v1/auth/register");
         assertThat(response.getBody()).contains("/api/v1/auth/login");
         assertThat(response.getBody()).contains("registrationCode");
@@ -494,9 +572,297 @@ class ProductRestIntegrationTest {
         assertOpenApiGroup("recipes", "/api/v1/recipes", "/api/v1/recipes/stats", "/api/v1/recipes/{id}", "/api/v1/recipes/{id}/derived-product");
         assertOpenApiGroup("stock", "/api/v1/stock", "/api/v1/stock/{stockEntryId}", "/api/v1/stock/{stockEntryId}/add", "/api/v1/stock/{stockEntryId}/remove", "/api/v1/products/{productId}/stock");
         assertOpenApiGroup("users", "/api/v1/users/{userId}/money-box", "/api/v1/users/{userId}/money-box/movements");
+        assertOpenApiGroup(
+                "user-weights",
+                "/api/v1/users/{userId}/weights",
+                "/api/v1/users/{userId}/weights/stats",
+                "/api/v1/users/{userId}/weights/{weightId}"
+        );
+        assertOpenApiGroup("money-boxes", "/api/v1/money-boxes", "/api/v1/money-boxes/{moneyBoxId}", "/api/v1/money-boxes/{moneyBoxId}/movements", "/api/v1/money-boxes/{moneyBoxId}/movements/{movementId}");
         assertOpenApiGroup("planning", "/api/v1/planning", "/api/v1/planning/{id}", "/api/v1/planning/{id}/days", "/api/v1/planning/day-parts");
-        assertOpenApiGroup("menus", "/api/v1/menus/{id}", "/api/v1/menus/{id}/used-stock", "/api/v1/menus/{id}/shopping-list", "/api/v1/menus/{id}/close", "/api/v1/menus/{id}/stats");
+        assertOpenApiGroup("menus", "/api/v1/menus", "/api/v1/menus/{id}", "/api/v1/menus/{id}/used-stock", "/api/v1/menus/{id}/shopping-list", "/api/v1/menus/{id}/close", "/api/v1/menus/{id}/stats");
         assertOpenApiGroup("nutritional-rules", "/api/v1/nutritional-rules");
+    }
+
+    @Test
+    void moneyBoxesShouldMixUserAndManualBoxesAndAcceptManualMovements() {
+        String moneyBoxesUrl = "http://localhost:" + port + "/api/v1/money-boxes";
+        Long userId = authenticatedUserId();
+        String manualName = "Household cash " + System.nanoTime();
+
+        ResponseEntity<MoneyBoxResponse> created = postAuthorized(
+                moneyBoxesUrl,
+                new CreateMoneyBoxRequest(manualName),
+                MoneyBoxResponse.class
+        );
+
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(created.getBody()).isNotNull();
+        assertThat(created.getBody().type()).isEqualTo(com.eliascanalesnieto.foodhelper.domain.MoneyBoxType.MANUAL);
+        assertThat(created.getBody().name()).isEqualTo(manualName);
+        assertThat(created.getBody().userId()).isNull();
+        assertThat(created.getBody().balance()).isEqualByComparingTo("0.00");
+
+        ResponseEntity<MoneyBoxMovementResponse> movement = postAuthorized(
+                moneyBoxesUrl + "/" + created.getBody().id() + "/movements",
+                new CreateUserMoneyMovementRequest(new BigDecimal("35.50"), "Cash reserve"),
+                MoneyBoxMovementResponse.class
+        );
+
+        assertThat(movement.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(movement.getBody()).isNotNull();
+        assertThat(movement.getBody().moneyBoxId()).isEqualTo(created.getBody().id());
+        assertThat(movement.getBody().userId()).isNull();
+
+        ResponseEntity<MoneyBoxResponse> selectedManual = getAuthorized(
+                moneyBoxesUrl + "/" + created.getBody().id(),
+                MoneyBoxResponse.class
+        );
+        assertThat(selectedManual.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(selectedManual.getBody()).isNotNull();
+        assertThat(selectedManual.getBody().balance()).isEqualByComparingTo("35.50");
+        assertThat(selectedManual.getBody().movements()).hasSize(1);
+
+        ResponseEntity<MoneyBoxResponse[]> all = getAuthorized(moneyBoxesUrl, MoneyBoxResponse[].class);
+        assertThat(all.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(all.getBody()).isNotNull();
+        assertThat(all.getBody())
+                .anySatisfy(box -> {
+                    assertThat(box.type()).isEqualTo(com.eliascanalesnieto.foodhelper.domain.MoneyBoxType.USER);
+                    assertThat(box.userId()).isEqualTo(userId);
+                })
+                .anySatisfy(box -> {
+                    assertThat(box.type()).isEqualTo(com.eliascanalesnieto.foodhelper.domain.MoneyBoxType.MANUAL);
+                    assertThat(box.name()).isEqualTo(manualName);
+                    assertThat(box.balance()).isEqualByComparingTo("35.50");
+                    assertThat(box.movements()).hasSize(1);
+                });
+
+        ResponseEntity<UserMoneyBoxResponse> selectedUser = getAuthorized(
+                "http://localhost:" + port + "/api/v1/users/" + userId + "/money-box",
+                UserMoneyBoxResponse.class
+        );
+        assertThat(selectedUser.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(selectedUser.getBody()).isNotNull();
+        assertThat(selectedUser.getBody().userId()).isEqualTo(userId);
+    }
+
+    @Test
+    void moneyBoxDeletesShouldEnforceTypeOwnershipAndMenuLinks() {
+        String moneyBoxesUrl = "http://localhost:" + port + "/api/v1/money-boxes";
+        Long userId = authenticatedUserId();
+        MoneyBoxResponse userMoneyBox = java.util.Arrays.stream(
+                        getAuthorized(moneyBoxesUrl, MoneyBoxResponse[].class).getBody()
+                )
+                .filter(box -> userId.equals(box.userId()))
+                .findFirst()
+                .orElseThrow();
+        MoneyBoxResponse firstBox = postAuthorized(
+                moneyBoxesUrl,
+                new CreateMoneyBoxRequest("Delete box " + System.nanoTime()),
+                MoneyBoxResponse.class
+        ).getBody();
+        MoneyBoxResponse otherBox = postAuthorized(
+                moneyBoxesUrl,
+                new CreateMoneyBoxRequest("Other delete box " + System.nanoTime()),
+                MoneyBoxResponse.class
+        ).getBody();
+        assertThat(firstBox).isNotNull();
+        assertThat(otherBox).isNotNull();
+
+        MoneyBoxMovementResponse removable = postAuthorized(
+                moneyBoxesUrl + "/" + firstBox.id() + "/movements",
+                new CreateUserMoneyMovementRequest(new BigDecimal("12.50"), "Removable"),
+                MoneyBoxMovementResponse.class
+        ).getBody();
+        assertThat(removable).isNotNull();
+
+        ResponseEntity<Void> wrongBox = deleteAuthorized(
+                moneyBoxesUrl + "/" + otherBox.id() + "/movements/" + removable.id(),
+                Void.class
+        );
+        assertThat(wrongBox.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+
+        ResponseEntity<Void> deletedMovement = deleteAuthorized(
+                moneyBoxesUrl + "/" + firstBox.id() + "/movements/" + removable.id(),
+                Void.class
+        );
+        assertThat(deletedMovement.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(getAuthorized(moneyBoxesUrl + "/" + firstBox.id(), MoneyBoxResponse.class).getBody().movements())
+                .isEmpty();
+        assertThat(deleteAuthorized(
+                moneyBoxesUrl + "/" + firstBox.id() + "/movements/" + removable.id(),
+                String.class
+        ).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+
+        Long planningId = jdbcTemplate.queryForObject(
+                "INSERT INTO proposed_week_menus (start_date, end_date) VALUES (CURRENT_DATE, CURRENT_DATE) RETURNING id",
+                Long.class
+        );
+        Long menuId = jdbcTemplate.queryForObject(
+                "INSERT INTO current_week_menus (proposed_week_menu_id, snapshot_json) VALUES (?, '{}') RETURNING id",
+                Long.class,
+                planningId
+        );
+        Long linkedMovementId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO user_money_movements (money_box_id, amount, description, current_week_menu_id)
+                VALUES (?, 8.00, 'Menu cost', ?)
+                RETURNING id
+                """,
+                Long.class,
+                firstBox.id(),
+                menuId
+        );
+
+        ResponseEntity<String> linkedDelete = deleteAuthorized(
+                moneyBoxesUrl + "/" + firstBox.id() + "/movements/" + linkedMovementId,
+                String.class
+        );
+        assertThat(linkedDelete.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(linkedDelete.getBody()).contains("linked");
+
+        assertThat(deleteAuthorized(moneyBoxesUrl + "/" + userMoneyBox.id(), String.class).getStatusCode())
+                .isEqualTo(HttpStatus.CONFLICT);
+        assertThat(deleteAuthorized(moneyBoxesUrl + "/999999999", String.class).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND);
+
+        assertThat(deleteAuthorized(moneyBoxesUrl + "/" + firstBox.id(), Void.class).getStatusCode())
+                .isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(getAuthorized(moneyBoxesUrl + "/" + firstBox.id(), String.class).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM user_money_movements WHERE money_box_id = ?",
+                Integer.class,
+                firstBox.id()
+        )).isZero();
+    }
+
+    @Test
+    void userWeightsShouldStoreDateTimeAndReturnPeriodAndStats() {
+        Long userId = authenticatedUserId();
+        String weightsUrl = "http://localhost:" + port + "/api/v1/users/" + userId + "/weights";
+        Instant beforePeriod = Instant.parse("2026-05-31T23:59:59Z");
+        Instant firstHighest = Instant.parse("2026-06-10T07:30:00Z");
+        Instant lowest = Instant.parse("2026-06-15T18:45:00Z");
+        Instant tiedHighest = Instant.parse("2026-06-20T09:15:00Z");
+
+        postAuthorized(weightsUrl, new CreateUserWeightRequest(new BigDecimal("80.00"), beforePeriod), UserWeightResponse.class);
+        ResponseEntity<UserWeightResponse> created = postAuthorized(
+                weightsUrl,
+                new CreateUserWeightRequest(new BigDecimal("75.40"), firstHighest),
+                UserWeightResponse.class
+        );
+        postAuthorized(weightsUrl, new CreateUserWeightRequest(new BigDecimal("72.10"), lowest), UserWeightResponse.class);
+        postAuthorized(weightsUrl, new CreateUserWeightRequest(new BigDecimal("75.40"), tiedHighest), UserWeightResponse.class);
+
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(created.getBody()).isNotNull();
+        assertThat(created.getBody().weight()).isEqualByComparingTo("75.40");
+        assertThat(created.getBody().recordedAt()).isEqualTo(firstHighest);
+
+        String periodQuery = "?from=2026-06-01T00:00:00Z&to=2026-06-30T23:59:59Z";
+        ResponseEntity<UserWeightResponse[]> period = getAuthorized(weightsUrl + periodQuery, UserWeightResponse[].class);
+
+        assertThat(period.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(period.getBody()).isNotNull();
+        assertThat(period.getBody()).extracting(UserWeightResponse::recordedAt)
+                .containsExactly(firstHighest, lowest, tiedHighest);
+
+        ResponseEntity<UserWeightStatsResponse> stats = getAuthorized(
+                weightsUrl + "/stats" + periodQuery,
+                UserWeightStatsResponse.class
+        );
+
+        assertThat(stats.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(stats.getBody()).isNotNull();
+        assertThat(stats.getBody().highest().weight()).isEqualByComparingTo("75.40");
+        assertThat(stats.getBody().highest().recordedAt()).isEqualTo(firstHighest);
+        assertThat(stats.getBody().lowest().weight()).isEqualByComparingTo("72.10");
+        assertThat(stats.getBody().lowest().recordedAt()).isEqualTo(lowest);
+
+        ResponseEntity<String> invalidPeriod = getAuthorized(
+                weightsUrl + "?from=2026-07-01T00:00:00Z&to=2026-06-01T00:00:00Z",
+                String.class
+        );
+        assertThat(invalidPeriod.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void userWeightsShouldUpdateRecalculateStatsDeleteAndRejectWrongUser() {
+        Long userId = authenticatedUserId();
+        String weightsUrl = "http://localhost:" + port + "/api/v1/users/" + userId + "/weights";
+        String periodQuery = "?from=2026-06-01T00:00:00Z&to=2026-06-30T23:59:59Z";
+        Instant originalAt = Instant.parse("2026-06-05T08:00:00Z");
+        Instant editedAt = Instant.parse("2026-06-25T19:30:00Z");
+
+        ResponseEntity<UserWeightResponse> editable = postAuthorized(
+                weightsUrl,
+                new CreateUserWeightRequest(new BigDecimal("90.00"), originalAt),
+                UserWeightResponse.class
+        );
+        postAuthorized(
+                weightsUrl,
+                new CreateUserWeightRequest(new BigDecimal("75.00"), Instant.parse("2026-06-10T08:00:00Z")),
+                UserWeightResponse.class
+        );
+        assertThat(editable.getBody()).isNotNull();
+        String editableUrl = weightsUrl + "/" + editable.getBody().id();
+
+        ResponseEntity<UserWeightResponse> updated = putAuthorized(
+                editableUrl,
+                new UpdateUserWeightRequest(new BigDecimal("70.25"), editedAt),
+                UserWeightResponse.class
+        );
+        assertThat(updated.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(updated.getBody()).isNotNull();
+        assertThat(updated.getBody().weight()).isEqualByComparingTo("70.25");
+        assertThat(updated.getBody().recordedAt()).isEqualTo(editedAt);
+
+        ResponseEntity<UserWeightResponse[]> reordered = getAuthorized(weightsUrl + periodQuery, UserWeightResponse[].class);
+        assertThat(reordered.getBody()).isNotNull();
+        assertThat(reordered.getBody()).extracting(UserWeightResponse::recordedAt)
+                .containsExactly(Instant.parse("2026-06-10T08:00:00Z"), editedAt);
+
+        ResponseEntity<UserWeightStatsResponse> updatedStats = getAuthorized(
+                weightsUrl + "/stats" + periodQuery,
+                UserWeightStatsResponse.class
+        );
+        assertThat(updatedStats.getBody()).isNotNull();
+        assertThat(updatedStats.getBody().highest().weight()).isEqualByComparingTo("75.00");
+        assertThat(updatedStats.getBody().lowest().weight()).isEqualByComparingTo("70.25");
+
+        ResponseEntity<String> invalid = putAuthorized(
+                editableUrl,
+                new UpdateUserWeightRequest(BigDecimal.ZERO, editedAt),
+                String.class
+        );
+        assertThat(invalid.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+
+        ResponseEntity<AuthResponse> otherUser = restTemplate.postForEntity(
+                "http://localhost:" + port + "/api/v1/auth/register",
+                new RegisterRequest("other-weight-user-" + System.nanoTime(), "secret-password", REGISTRATION_CODE),
+                AuthResponse.class
+        );
+        assertThat(otherUser.getBody()).isNotNull();
+        String wrongUserUrl = "http://localhost:" + port + "/api/v1/users/"
+                + otherUser.getBody().userId() + "/weights/" + editable.getBody().id();
+        assertThat(putAuthorized(
+                wrongUserUrl,
+                new UpdateUserWeightRequest(new BigDecimal("65.00"), editedAt),
+                String.class
+        ).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(deleteAuthorized(wrongUserUrl, String.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+
+        assertThat(deleteAuthorized(editableUrl, Void.class).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        ResponseEntity<UserWeightStatsResponse> statsAfterDelete = getAuthorized(
+                weightsUrl + "/stats" + periodQuery,
+                UserWeightStatsResponse.class
+        );
+        assertThat(statsAfterDelete.getBody()).isNotNull();
+        assertThat(statsAfterDelete.getBody().highest().weight()).isEqualByComparingTo("75.00");
+        assertThat(statsAfterDelete.getBody().lowest().weight()).isEqualByComparingTo("75.00");
+        assertThat(deleteAuthorized(editableUrl, String.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test
@@ -559,6 +925,54 @@ class ProductRestIntegrationTest {
         assertThat(loadedMenu.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(loadedMenu.getBody()).isNotNull();
         assertThat(loadedMenu.getBody().nutritionalValues().fats()).isEqualByComparingTo("30.80");
+    }
+
+    @Test
+    void planningCatalogShouldReturnCompactSummariesOrderedByDateWithDerivedState() {
+        String planningUrl = "http://localhost:" + port + "/api/v1/planning";
+        ProposedWeekMenuResponse draft = postAuthorized(
+                planningUrl,
+                new CreateProposedWeekMenuRequest(LocalDate.of(2040, 3, 1), LocalDate.of(2040, 3, 7)),
+                ProposedWeekMenuResponse.class
+        ).getBody();
+        ProposedWeekMenuResponse establishedPlanning = postAuthorized(
+                planningUrl,
+                new CreateProposedWeekMenuRequest(LocalDate.of(2040, 2, 1), LocalDate.of(2040, 2, 7)),
+                ProposedWeekMenuResponse.class
+        ).getBody();
+        ProposedWeekMenuResponse closedPlanning = postAuthorized(
+                planningUrl,
+                new CreateProposedWeekMenuRequest(LocalDate.of(2020, 1, 1), LocalDate.of(2020, 1, 7)),
+                ProposedWeekMenuResponse.class
+        ).getBody();
+        CurrentWeekMenuResponse established = postAuthorized(
+                planningUrl + "/" + establishedPlanning.id() + "/menu",
+                new EstablishProposedWeekMenuRequest(authenticatedUserId()),
+                CurrentWeekMenuResponse.class
+        ).getBody();
+        CurrentWeekMenuResponse closedMenu = postAuthorized(
+                planningUrl + "/" + closedPlanning.id() + "/menu",
+                new EstablishProposedWeekMenuRequest(authenticatedUserId()),
+                CurrentWeekMenuResponse.class
+        ).getBody();
+        postAuthorized(
+                "http://localhost:" + port + "/api/v1/menus/" + closedMenu.id() + "/close",
+                new CloseCurrentWeekMenuRequest(List.of(authenticatedUserId())),
+                CurrentWeekMenuStatsResponse.class
+        );
+
+        PlanningSummaryResponse[] summaries = getAuthorized(planningUrl, PlanningSummaryResponse[].class).getBody();
+        Map<Long, PlanningSummaryResponse> byId = java.util.Arrays.stream(summaries)
+                .collect(java.util.stream.Collectors.toMap(PlanningSummaryResponse::id, summary -> summary));
+        assertThat(byId.get(draft.id()).state()).isEqualTo(com.eliascanalesnieto.foodhelper.domain.PlanningState.DRAFT);
+        assertThat(byId.get(draft.id()).menuId()).isNull();
+        assertThat(byId.get(establishedPlanning.id()).state()).isEqualTo(com.eliascanalesnieto.foodhelper.domain.PlanningState.ESTABLISHED);
+        assertThat(byId.get(establishedPlanning.id()).menuId()).isEqualTo(established.id());
+        assertThat(byId.get(closedPlanning.id()).state()).isEqualTo(com.eliascanalesnieto.foodhelper.domain.PlanningState.CLOSED);
+        assertThat(byId.get(closedPlanning.id()).menuId()).isEqualTo(closedMenu.id());
+        assertThat(byId.values()).allSatisfy(summary -> assertThat(summary.plannedDays()).isGreaterThanOrEqualTo(0));
+        assertThat(java.util.Arrays.stream(summaries).map(PlanningSummaryResponse::startDate).toList())
+                .isSortedAccordingTo(java.util.Comparator.reverseOrder());
     }
 
     @Test
@@ -797,7 +1211,7 @@ class ProductRestIntegrationTest {
 
         ResponseEntity<CurrentWeekMenuStatsResponse> closed = postAuthorized(
                 currentWeekMenusUrl + "/" + currentWeekId + "/close",
-                null,
+                new CloseCurrentWeekMenuRequest(List.of(authenticatedUserId())),
                 CurrentWeekMenuStatsResponse.class
         );
         assertThat(closed.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -934,11 +1348,57 @@ class ProductRestIntegrationTest {
         ResponseEntity<String> rejectedClose = restTemplate.exchange(
                 "http://localhost:" + port + "/api/v1/menus/" + established.getBody().id() + "/close",
                 HttpMethod.POST,
-                authorizedEntity(null),
+                authorizedEntity(new CloseCurrentWeekMenuRequest(List.of(authenticatedUserId()))),
                 String.class
         );
         assertThat(rejectedClose.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(rejectedClose.getBody()).contains("Menu can only be closed after its end date");
+    }
+
+    @Test
+    void closeShouldRequireExistingPeopleAndRemainIdempotentForMultiplePeople() {
+        String planningUrl = "http://localhost:" + port + "/api/v1/planning";
+        AuthResponse secondPerson = restTemplate.postForEntity(
+                "http://localhost:" + port + "/api/v1/auth/register",
+                new RegisterRequest("second-person-" + System.nanoTime(), "secret-password", REGISTRATION_CODE),
+                AuthResponse.class
+        ).getBody();
+        ProposedWeekMenuResponse planning = postAuthorized(
+                planningUrl,
+                new CreateProposedWeekMenuRequest(LocalDate.of(2019, 1, 1), LocalDate.of(2019, 1, 7)),
+                ProposedWeekMenuResponse.class
+        ).getBody();
+        CurrentWeekMenuResponse menu = postAuthorized(
+                planningUrl + "/" + planning.id() + "/menu",
+                new EstablishProposedWeekMenuRequest(authenticatedUserId()),
+                CurrentWeekMenuResponse.class
+        ).getBody();
+        String closeUrl = "http://localhost:" + port + "/api/v1/menus/" + menu.id() + "/close";
+
+        assertThat(postAuthorized(closeUrl, null, String.class).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(postAuthorized(closeUrl, new CloseCurrentWeekMenuRequest(List.of()), String.class).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(postAuthorized(closeUrl, new CloseCurrentWeekMenuRequest(List.of(999999999L)), String.class).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND);
+
+        CloseCurrentWeekMenuRequest request = new CloseCurrentWeekMenuRequest(
+                List.of(authenticatedUserId(), secondPerson.userId())
+        );
+        CurrentWeekMenuStatsResponse first = postAuthorized(closeUrl, request, CurrentWeekMenuStatsResponse.class).getBody();
+        CurrentWeekMenuStatsResponse repeated = postAuthorized(closeUrl, request, CurrentWeekMenuStatsResponse.class).getBody();
+        assertThat(repeated).isEqualTo(first);
+        assertThat(getAuthorized(
+                "http://localhost:" + port + "/api/v1/users/" + authenticatedUserId()
+                        + "/menu-history/annual?year=2019",
+                com.eliascanalesnieto.foodhelper.presentation.UserMenuHistoryResponse.class
+        ).getBody().menus()).extracting(com.eliascanalesnieto.foodhelper.presentation.UserMenuHistoryEntryResponse::menuId)
+                .contains(menu.id());
+        assertThat(getAuthorized(
+                "http://localhost:" + port + "/api/v1/users/" + secondPerson.userId()
+                        + "/menu-history/annual?year=2019",
+                com.eliascanalesnieto.foodhelper.presentation.UserMenuHistoryResponse.class
+        ).getBody().menus()).extracting(com.eliascanalesnieto.foodhelper.presentation.UserMenuHistoryEntryResponse::menuId)
+                .contains(menu.id());
     }
 
     @Test
@@ -1616,6 +2076,122 @@ class ProductRestIntegrationTest {
         assertThat(menu.getBody().nutritionalRules()).isEqualTo(planned.getBody().nutritionalRules());
     }
 
+    @Test
+    void userConfirmedStockAllocationShouldBeListedAndUndoShouldRestoreStockAndMoney() {
+        String baseUrl = "http://localhost:" + port + "/api/v1";
+        String suffix = Long.toString(System.nanoTime());
+        Long productId = createProduct(
+                baseUrl + "/products", "Allocation product " + suffix,
+                "Product used to verify explicit menu stock allocation", "100", "10", "5", "2"
+        );
+        Long dayPartId = createDayPart(
+                baseUrl + "/planning/day-parts", "Allocation meal " + suffix,
+                "Meal used to verify explicit stock allocation", 1200
+        );
+        ResponseEntity<StockEntryResponse> expiringFirst = postAuthorized(
+                baseUrl + "/products/" + productId + "/stock",
+                new CreateStockEntryRequest(
+                        new BigDecimal("2.00"), new BigDecimal("1.00"),
+                        LocalDate.of(2030, 1, 10), LocalDate.of(2029, 12, 1)
+                ),
+                StockEntryResponse.class
+        );
+        ResponseEntity<StockEntryResponse> userSelected = postAuthorized(
+                baseUrl + "/products/" + productId + "/stock",
+                new CreateStockEntryRequest(
+                        new BigDecimal("2.00"), new BigDecimal("2.00"),
+                        LocalDate.of(2030, 1, 20), LocalDate.of(2029, 12, 2)
+                ),
+                StockEntryResponse.class
+        );
+        ResponseEntity<ProposedWeekMenuResponse> planning = postAuthorized(
+                baseUrl + "/planning",
+                new CreateProposedWeekMenuRequest(LocalDate.of(2030, 1, 1), LocalDate.of(2030, 1, 2)),
+                ProposedWeekMenuResponse.class
+        );
+        restTemplate.exchange(
+                baseUrl + "/planning/" + planning.getBody().id() + "/days",
+                HttpMethod.PUT,
+                authorizedEntity(new UpsertProposedWeekMenuDayRequest(
+                        LocalDate.of(2030, 1, 1),
+                        List.of(new ProposedWeekMenuSectionRequest(
+                                dayPartId,
+                                List.of(new ProposedWeekMenuProductRequest(
+                                        productId, new BigDecimal("2.00"), null, 10
+                                ))
+                        ))
+                )),
+                ProposedWeekMenuResponse.class
+        );
+        BigDecimal balanceBefore = getAuthorized(
+                baseUrl + "/users/" + authenticatedUserId() + "/money-box",
+                UserMoneyBoxResponse.class
+        ).getBody().balance();
+
+        ResponseEntity<CurrentWeekMenuResponse> established = postAuthorized(
+                baseUrl + "/planning/" + planning.getBody().id() + "/menu",
+                new EstablishProposedWeekMenuRequest(
+                        authenticatedUserId(),
+                        List.of(new MenuStockAllocationRequest(
+                                userSelected.getBody().id(), new BigDecimal("2.00")
+                        ))
+                ),
+                CurrentWeekMenuResponse.class
+        );
+
+        assertThat(established.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(established.getBody().usedStock()).singleElement().satisfies(used -> {
+            assertThat(used.stockEntryId()).isEqualTo(userSelected.getBody().id());
+            assertThat(used.usedUnits()).isEqualByComparingTo("2.00");
+        });
+        assertThat(getAuthorized(baseUrl + "/menus", CurrentWeekMenuResponse[].class).getBody())
+                .extracting(CurrentWeekMenuResponse::id)
+                .contains(established.getBody().id());
+        ResponseEntity<StockEntryResponse[]> appliedStock = getAuthorized(
+                baseUrl + "/stock?productIds=" + productId,
+                StockEntryResponse[].class
+        );
+        assertThat(appliedStock.getBody())
+                .filteredOn(stock -> stock.id().equals(expiringFirst.getBody().id()))
+                .singleElement().satisfies(stock -> assertThat(stock.quantity()).isEqualByComparingTo("2.00"));
+        assertThat(appliedStock.getBody())
+                .noneMatch(stock -> stock.id().equals(userSelected.getBody().id()));
+        assertThat(getAuthorized(
+                baseUrl + "/users/" + authenticatedUserId() + "/money-box",
+                UserMoneyBoxResponse.class
+        ).getBody().balance()).isEqualByComparingTo(balanceBefore.subtract(new BigDecimal("4.00")));
+
+        ResponseEntity<Void> undone = restTemplate.exchange(
+                baseUrl + "/menus/" + established.getBody().id(),
+                HttpMethod.DELETE,
+                authorizedEntity(null),
+                Void.class
+        );
+
+        assertThat(undone.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        assertThat(getAuthorized(
+                baseUrl + "/stock?productIds=" + productId,
+                StockEntryResponse[].class
+        ).getBody())
+                .filteredOn(stock -> stock.id().equals(userSelected.getBody().id()))
+                .singleElement().satisfies(stock -> assertThat(stock.quantity()).isEqualByComparingTo("2.00"));
+        assertThat(getAuthorized(
+                baseUrl + "/users/" + authenticatedUserId() + "/money-box",
+                UserMoneyBoxResponse.class
+        ).getBody().balance()).isEqualByComparingTo(balanceBefore);
+        assertThat(getAuthorized(
+                baseUrl + "/menus/" + established.getBody().id(),
+                String.class
+        ).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        ResponseEntity<CurrentWeekMenuResponse> reestablished = postAuthorized(
+                baseUrl + "/planning/" + planning.getBody().id() + "/menu",
+                new EstablishProposedWeekMenuRequest(authenticatedUserId()),
+                CurrentWeekMenuResponse.class
+        );
+        assertThat(reestablished.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(reestablished.getBody().planningId()).isEqualTo(planning.getBody().id());
+    }
+
     private Long createProduct(String productsUrl, String name, String description, String calories, String carbohydrates, String proteins, String fats) {
         return createProduct(productsUrl, name, description, calories, carbohydrates, proteins, fats, "100");
     }
@@ -1673,6 +2249,14 @@ class ProductRestIntegrationTest {
         return restTemplate.exchange(url, HttpMethod.GET, authorizedEntity(null), responseType);
     }
 
+    private <T> ResponseEntity<T> putAuthorized(String url, Object body, Class<T> responseType) {
+        return restTemplate.exchange(url, HttpMethod.PUT, authorizedEntity(body), responseType);
+    }
+
+    private <T> ResponseEntity<T> deleteAuthorized(String url, Class<T> responseType) {
+        return restTemplate.exchange(url, HttpMethod.DELETE, authorizedEntity(null), responseType);
+    }
+
     private void assertOpenApiGroup(String group, String... expectedPaths) {
         ResponseEntity<String> response = restTemplate.getForEntity("http://localhost:" + port + "/v3/api-docs/" + group, String.class);
 
@@ -1684,7 +2268,9 @@ class ProductRestIntegrationTest {
     }
 
     private HttpEntity<Object> authorizedEntity(Object body) {
-        return new HttpEntity<>(body, authHeaders());
+        HttpHeaders headers = authHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        return new HttpEntity<>(body, headers);
     }
 
     private HttpHeaders authHeaders() {

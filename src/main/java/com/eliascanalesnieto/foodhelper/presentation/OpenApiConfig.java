@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.info.Contact;
 import io.swagger.v3.oas.annotations.info.Info;
 import io.swagger.v3.oas.annotations.info.License;
 import io.swagger.v3.oas.annotations.security.SecurityScheme;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.servers.Server;
 import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
 import org.springdoc.core.models.GroupedOpenApi;
@@ -22,7 +23,8 @@ import org.springframework.context.annotation.Configuration;
         ),
         servers = {
                 @Server(url = "/", description = "Current server")
-        }
+        },
+        security = @SecurityRequirement(name = "bearerAuth")
 )
 @SecurityScheme(
         name = "bearerAuth",
@@ -72,6 +74,16 @@ public class OpenApiConfig {
     @Bean
     GroupedOpenApi usersApi() {
         return groupedApi("users", "Users", "/api/v1/users/**").build();
+    }
+
+    @Bean
+    GroupedOpenApi userWeightsApi() {
+        return groupedApi("user-weights", "User weights", "/api/v1/users/*/weights", "/api/v1/users/*/weights/**").build();
+    }
+
+    @Bean
+    GroupedOpenApi moneyBoxesApi() {
+        return groupedApi("money-boxes", "Money boxes", "/api/v1/money-boxes", "/api/v1/money-boxes/**").build();
     }
 
     @Bean

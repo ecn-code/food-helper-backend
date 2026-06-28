@@ -29,7 +29,8 @@ public class MediaController {
     @GetMapping("/{id}")
     @Operation(
             summary = "Download media",
-            description = "Returns the binary content of a stored media file."
+            description = "Returns the binary content of a stored media file when the request has a valid Bearer token or signed URL parameters.",
+            security = {}
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Media returned"),

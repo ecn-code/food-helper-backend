@@ -12,11 +12,15 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestBody;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/v1/menus")
@@ -24,6 +28,17 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Menus", description = "Inspect menu snapshots, consumed stock, missing products, and closure stats")
 public class CurrentWeekMenuController {
     private final CurrentWeekMenuService service;
+
+    @GetMapping
+    @Operation(
+            summary = "List menus",
+            description = "Returns all menus that have been created from planning, ordered by identifier."
+    )
+    @ApiResponse(responseCode = "200", description = "Menus returned",
+            content = @Content(array = @ArraySchema(schema = @Schema(implementation = CurrentWeekMenuResponse.class))))
+    public List<CurrentWeekMenuResponse> findAll() {
+        return service.findAll();
+    }
 
     @GetMapping("/{id}")
     @Operation(
@@ -38,6 +53,24 @@ public class CurrentWeekMenuController {
     })
     public CurrentWeekMenuResponse findById(@PathVariable Long id) {
         return service.findById(id);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
+    @Operation(
+            operationId = "undoMenuCreation",
+            summary = "Undo menu creation",
+            description = "Returns every consumed quantity to its original stock entry, removes the linked money movement, and deletes the open menu so its planning can be established again. Closed menus cannot be undone."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Menu creation undone"),
+            @ApiResponse(responseCode = "400", description = "Closed menu cannot be undone",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "404", description = "Menu not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public void undo(@PathVariable Long id) {
+        service.undo(id);
     }
 
     @GetMapping("/{id}/used-stock")
@@ -77,7 +110,7 @@ public class CurrentWeekMenuController {
     @PostMapping("/{id}/close")
     @Operation(
             summary = "Close menu",
-            description = "Closes a menu after its end date, saves period and month statistics, and blocks further planning edits."
+            description = "Closes a menu after its end date and saves an immutable history snapshot for every selected person."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Menu closed",
@@ -87,8 +120,11 @@ public class CurrentWeekMenuController {
             @ApiResponse(responseCode = "400", description = "Menu cannot be closed yet",
                     content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
-    public CurrentWeekMenuStatsResponse close(@PathVariable Long id) {
-        return service.close(id);
+    public CurrentWeekMenuStatsResponse close(
+            @PathVariable Long id,
+            @Valid @RequestBody CloseCurrentWeekMenuRequest request
+    ) {
+        return service.close(id, request.personIds());
     }
 
     @GetMapping("/{id}/stats")

@@ -81,6 +81,13 @@ public class JdbcCurrentWeekMenuRepository implements CurrentWeekMenuRepository 
         );
     }
 
+    @Override
+    public void delete(Long id) {
+        if (jdbcTemplate.update("DELETE FROM current_week_menus WHERE id = ?", id) == 0) {
+            throw new ResourceNotFoundException("Menu not found");
+        }
+    }
+
     private CurrentWeekMenuResponse load(String sql, Long value) {
         String snapshot = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString("snapshot_json"), value)
                 .stream()

@@ -1,11 +1,15 @@
 package com.eliascanalesnieto.foodhelper.unit;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuStatsRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
+import com.eliascanalesnieto.foodhelper.domain.PlanningState;
+import com.eliascanalesnieto.foodhelper.domain.PlanningSummary;
+import com.eliascanalesnieto.foodhelper.domain.StockRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDay;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuProduct;
@@ -31,6 +35,9 @@ class ProposedWeekMenuServiceTest {
 
     @Mock
     private CurrentWeekMenuStatsRepository currentWeekMenuStatsRepository;
+
+    @Mock
+    private StockRepository stockRepository;
 
     @InjectMocks
     private ProposedWeekMenuService service;
@@ -63,5 +70,19 @@ class ProposedWeekMenuServiceTest {
         assertThatThrownBy(() -> service.upsertDay(1L, day))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Product sortOrder must be unique within each section");
+    }
+
+    @Test
+    void shouldExposeDraftEstablishedAndClosedPlanningStatesFromCatalog() {
+        List<PlanningSummary> summaries = List.of(
+                new PlanningSummary(3L, LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 7), 0, PlanningState.DRAFT, null),
+                new PlanningSummary(2L, LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 7), 4, PlanningState.ESTABLISHED, 20L),
+                new PlanningSummary(1L, LocalDate.of(2026, 5, 1), LocalDate.of(2026, 5, 7), 7, PlanningState.CLOSED, 10L)
+        );
+        when(menuRepository.findAllSummaries()).thenReturn(summaries);
+
+        assertThat(service.findAllSummaries()).containsExactlyElementsOf(summaries);
+        assertThat(service.findAllSummaries()).extracting(PlanningSummary::state)
+                .containsExactly(PlanningState.DRAFT, PlanningState.ESTABLISHED, PlanningState.CLOSED);
     }
 }

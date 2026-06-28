@@ -12,6 +12,7 @@ import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockRequirement;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummary;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummaryCalories;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummaryDayCalories;
+import com.eliascanalesnieto.foodhelper.domain.PlanningSummary;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuStatsRepository;
 import com.eliascanalesnieto.foodhelper.domain.StockEntry;
 import com.eliascanalesnieto.foodhelper.domain.StockRepository;
@@ -64,6 +65,11 @@ public class ProposedWeekMenuService {
     @Transactional(readOnly = true)
     public ProposedWeekMenu findById(Long id) {
         return enrich(menuRepository.findById(id));
+    }
+
+    @Transactional(readOnly = true)
+    public List<PlanningSummary> findAllSummaries() {
+        return menuRepository.findAllSummaries();
     }
 
     @Transactional

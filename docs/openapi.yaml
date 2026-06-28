@@ -6,6 +6,8 @@ info:
 servers:
   - url: /
     description: Current server
+security:
+  - bearerAuth: []
 tags:
   - name: Authentication
     description: User registration and stateless JWT login
@@ -17,6 +19,10 @@ tags:
     description: Manage stock entries and inspect inventory ordered by expiration
   - name: User money boxes
     description: Inspect user money boxes and register signed money movements
+  - name: User weights
+    description: Record user weights and inspect measurements and statistics by period
+  - name: Money boxes
+    description: Manage user-owned and manually created money boxes in one collection
   - name: Recipes
     description: List, create, update, delete, derive product, and inspect recipe statistics
   - name: Planning
@@ -32,6 +38,7 @@ tags:
 paths:
   /api/v1/auth/register:
     post:
+      security: []
       tags:
         - Authentication
       summary: Register user
@@ -70,6 +77,7 @@ paths:
                 $ref: '#/components/schemas/ApiError'
   /api/v1/auth/login:
     post:
+      security: []
       tags:
         - Authentication
       summary: Log in
@@ -759,6 +767,49 @@ paths:
             type: integer
             format: int32
             default: 20
+        - name: search
+          in: query
+          required: false
+          description: Accent- and case-insensitive text searched in name, description, instructions, and ingredients
+          schema:
+            type: string
+        - name: caloriesMin
+          in: query
+          required: false
+          schema: { type: number, minimum: 0 }
+        - name: caloriesMax
+          in: query
+          required: false
+          schema: { type: number, minimum: 0 }
+        - name: carbohydratesMin
+          in: query
+          required: false
+          schema: { type: number, minimum: 0 }
+        - name: carbohydratesMax
+          in: query
+          required: false
+          schema: { type: number, minimum: 0 }
+        - name: proteinsMin
+          in: query
+          required: false
+          schema: { type: number, minimum: 0 }
+        - name: proteinsMax
+          in: query
+          required: false
+          schema: { type: number, minimum: 0 }
+        - name: fatsMin
+          in: query
+          required: false
+          schema: { type: number, minimum: 0 }
+        - name: fatsMax
+          in: query
+          required: false
+          schema: { type: number, minimum: 0 }
+        - name: hasDerivedProduct
+          in: query
+          required: false
+          schema:
+            type: boolean
       responses:
         '200':
           description: Recipes returned
@@ -766,6 +817,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecipePageResponse'
+        '400':
+          description: Invalid pagination, negative range, or minimum greater than maximum
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
     post:
       tags:
         - Recipes
@@ -956,6 +1013,186 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /api/v1/money-boxes:
+    get:
+      tags:
+        - Money boxes
+      summary: List all money boxes
+      description: Returns user-owned and manually created money boxes in one list, including balances and movements.
+      operationId: listMoneyBoxes
+      responses:
+        '200':
+          description: Money boxes returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MoneyBoxResponse'
+    post:
+      tags:
+        - Money boxes
+      summary: Create manual money box
+      description: Creates a money box that is not owned by a user.
+      operationId: createManualMoneyBox
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMoneyBoxRequest'
+            examples:
+              default:
+                value:
+                  name: Household cash
+      responses:
+        '201':
+          description: Manual money box created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoneyBoxResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Manual money box name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/money-boxes/{moneyBoxId}:
+    get:
+      tags:
+        - Money boxes
+      summary: Get money box
+      description: Returns one user-owned or manual money box by identifier.
+      operationId: getMoneyBox
+      parameters:
+        - name: moneyBoxId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Money box returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoneyBoxResponse'
+        '404':
+          description: Money box not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      tags:
+        - Money boxes
+      summary: Delete manual money box
+      description: Deletes a manual money box and all its movements in one transaction. User-owned money boxes cannot be deleted.
+      operationId: deleteManualMoneyBox
+      parameters:
+        - name: moneyBoxId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Manual money box deleted
+        '404':
+          description: Money box not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: User-owned money box cannot be deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/money-boxes/{moneyBoxId}/movements:
+    post:
+      tags:
+        - Money boxes
+      summary: Add money box movement
+      description: Adds a signed movement to a user-owned or manual money box.
+      operationId: addMoneyBoxMovement
+      parameters:
+        - name: moneyBoxId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserMoneyMovementRequest'
+      responses:
+        '201':
+          description: Money movement created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoneyBoxMovementResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Money box not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/money-boxes/{moneyBoxId}/movements/{movementId}:
+    delete:
+      tags:
+        - Money boxes
+      summary: Delete money box movement
+      description: Deletes a movement only when it belongs to the selected money box and is not linked to a menu.
+      operationId: deleteMoneyBoxMovement
+      parameters:
+        - name: moneyBoxId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: movementId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Money movement deleted
+        '404':
+          description: Money box movement not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Money movement is linked to a menu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /api/v1/users/{userId}/money-box:
     get:
       tags:
@@ -1071,6 +1308,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
   /api/v1/planning:
+    get:
+      tags:
+        - Planning
+      summary: List planning
+      description: Returns compact planning summaries ordered by start date descending, without days, products, or calculated totals.
+      operationId: listPlanning
+      responses:
+        '200':
+          description: Planning summaries returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlanningSummaryResponse'
     post:
       tags:
         - Planning
@@ -1191,7 +1443,7 @@ paths:
       tags:
         - Planning
       summary: Create menu from planning
-      description: Consumes available stock, creates a menu snapshot, stores missing products as a shopping list, and subtracts the estimated cost from the selected payer user's money box.
+      description: Consumes the user-confirmed stock allocation, or automatically uses the earliest expiration date when no allocation is supplied. It creates a menu snapshot, stores missing products as a shopping list, and subtracts the applied stock cost from the selected payer user's money box.
       operationId: createMenuFromPlanning
       parameters:
         - name: id
@@ -1210,6 +1462,9 @@ paths:
               default:
                 value:
                   payerUserId: 1
+                  stockAllocations:
+                    - stockEntryId: 7
+                      usedUnits: 1.5
       responses:
         '201':
           description: Menu created
@@ -1229,6 +1484,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /api/v1/menus:
+    get:
+      tags:
+        - Menus
+      summary: List menus
+      description: Returns all menus that have been created from planning, ordered by identifier.
+      operationId: listMenus
+      responses:
+        '200':
+          description: Menus returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MenuResponse'
   /api/v1/menus/{id}:
     get:
       tags:
@@ -1250,6 +1521,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MenuResponse'
+        '404':
+          description: Menu not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    delete:
+      tags:
+        - Menus
+      summary: Undo menu creation
+      description: Returns every consumed quantity to its original stock entry, removes the linked money movement, and deletes the open menu so its planning can be established again. Closed menus cannot be undone.
+      operationId: undoMenuCreation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Menu creation undone
+        '400':
+          description: Closed menu cannot be undone
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '404':
           description: Menu not found
           content:
@@ -1326,7 +1625,7 @@ paths:
       tags:
         - Menus
       summary: Close menu
-      description: Closes a menu after its end date, saves period and month statistics, and blocks further planning edits.
+      description: Closes a menu after its end date, saves statistics, and records an immutable snapshot for every selected person.
       operationId: closeMenu
       parameters:
         - name: id
@@ -1335,6 +1634,14 @@ paths:
           schema:
             type: integer
             format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloseMenuRequest'
+            example:
+              personIds: [1, 2]
       responses:
         '200':
           description: Menu closed
@@ -1349,11 +1656,195 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '404':
-          description: Menu not found
+          description: Menu or selected person not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /api/v1/users:
+    get:
+      tags: [Users]
+      summary: List people
+      description: Returns the people available for selection when closing a menu.
+      operationId: listUsers
+      responses:
+        '200':
+          description: People returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserResponse'
+  /api/v1/users/{personId}/menu-history/monthly:
+    get:
+      tags: [Users]
+      summary: Get monthly menu history
+      description: Returns immutable closed-menu snapshots assigned to one person during a month.
+      operationId: getMonthlyUserMenuHistory
+      parameters:
+        - {name: personId, in: path, required: true, schema: {type: integer, format: int64}}
+        - {name: year, in: query, required: true, schema: {type: integer, example: 2026}}
+        - {name: month, in: query, required: true, schema: {type: integer, minimum: 1, maximum: 12}}
+      responses:
+        '200':
+          description: Monthly history returned
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserMenuHistoryResponse'}
+        '404':
+          description: Person not found
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/users/{personId}/menu-history/annual:
+    get:
+      tags: [Users]
+      summary: Get annual menu history
+      description: Returns immutable closed-menu snapshots assigned to one person during a year.
+      operationId: getAnnualUserMenuHistory
+      parameters:
+        - {name: personId, in: path, required: true, schema: {type: integer, format: int64}}
+        - {name: year, in: query, required: true, schema: {type: integer, example: 2026}}
+      responses:
+        '200':
+          description: Annual history returned
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserMenuHistoryResponse'}
+        '404':
+          description: Person not found
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/users/{userId}/weights:
+    post:
+      tags: [User weights]
+      summary: Record user weight
+      description: Stores a weight in kilograms with its exact measurement date and time.
+      operationId: createUserWeight
+      parameters:
+        - {name: userId, in: path, required: true, schema: {type: integer, format: int64}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateUserWeightRequest'}
+      responses:
+        '201':
+          description: Weight recorded
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserWeightResponse'}
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+    get:
+      tags: [User weights]
+      summary: List user weights by period
+      description: Returns measurements in an inclusive date-time period, ordered from oldest to newest.
+      operationId: listUserWeights
+      parameters:
+        - {name: userId, in: path, required: true, schema: {type: integer, format: int64}}
+        - {name: from, in: query, required: true, schema: {type: string, format: date-time}, example: '2026-06-01T00:00:00Z'}
+        - {name: to, in: query, required: true, schema: {type: string, format: date-time}, example: '2026-06-30T23:59:59Z'}
+      responses:
+        '200':
+          description: Weight measurements returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/UserWeightResponse'}
+        '400':
+          description: Invalid period
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/users/{userId}/weights/stats:
+    get:
+      tags: [User weights]
+      summary: Get user weight statistics
+      description: Returns the highest and lowest measurements, including their exact dates and times, in an inclusive period. For tied weights, the oldest measurement is returned.
+      operationId: getUserWeightStats
+      parameters:
+        - {name: userId, in: path, required: true, schema: {type: integer, format: int64}}
+        - {name: from, in: query, required: true, schema: {type: string, format: date-time}, example: '2026-06-01T00:00:00Z'}
+        - {name: to, in: query, required: true, schema: {type: string, format: date-time}, example: '2026-06-30T23:59:59Z'}
+      responses:
+        '200':
+          description: Weight statistics returned
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserWeightStatsResponse'}
+        '400':
+          description: Invalid period
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+  /api/v1/users/{userId}/weights/{weightId}:
+    put:
+      tags: [User weights]
+      summary: Update user weight
+      description: Replaces the weight and exact measurement date and time. The measurement must belong to the user in the path.
+      operationId: updateUserWeight
+      parameters:
+        - {name: userId, in: path, required: true, schema: {type: integer, format: int64}}
+        - {name: weightId, in: path, required: true, schema: {type: integer, format: int64}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateUserWeightRequest'}
+      responses:
+        '200':
+          description: Weight measurement updated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UserWeightResponse'}
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        '404':
+          description: Weight measurement not found for user
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+    delete:
+      tags: [User weights]
+      summary: Delete user weight
+      description: Deletes a weight measurement only when it belongs to the user in the path.
+      operationId: deleteUserWeight
+      parameters:
+        - {name: userId, in: path, required: true, schema: {type: integer, format: int64}}
+        - {name: weightId, in: path, required: true, schema: {type: integer, format: int64}}
+      responses:
+        '204':
+          description: Weight measurement deleted
+        '404':
+          description: Weight measurement not found for user
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
   /api/v1/menus/{id}/stats:
     get:
       tags:
@@ -1475,6 +1966,7 @@ paths:
                 $ref: '#/components/schemas/ApiError'
   /api/v1/media/{id}:
     get:
+      security: []
       tags:
         - Media
       summary: Download media
@@ -1518,6 +2010,7 @@ paths:
                 $ref: '#/components/schemas/ApiError'
   /api/v1/health:
     get:
+      security: []
       tags:
         - Health
       summary: API status
@@ -2185,6 +2678,97 @@ components:
         unitsProduced:
           type: number
           example: 4
+    CreateMoneyBoxRequest:
+      description: Payload for creating a manual money box.
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          maxLength: 150
+          description: Unique manual money box name
+          example: Household cash
+    MoneyBoxMovementResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Movement identifier
+          example: 1
+        moneyBoxId:
+          type: integer
+          format: int64
+          description: Money box identifier
+          example: 3
+        userId:
+          type:
+            - integer
+            - 'null'
+          format: int64
+          description: Owning user identifier for user money boxes; null for manual money boxes
+          example: 1
+        amount:
+          type: number
+          description: Signed movement amount
+          example: -12.50
+        description:
+          type: string
+          description: Movement description
+          example: Weekly groceries
+        menuId:
+          type:
+            - integer
+            - 'null'
+          format: int64
+          description: Related menu identifier when generated by a menu cost
+          example: 7
+        createdAt:
+          type: string
+          format: date-time
+          description: UTC instant when the movement was created
+    MoneyBoxResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Money box identifier
+          example: 3
+        type:
+          type: string
+          enum:
+            - USER
+            - MANUAL
+          description: Money box origin
+          example: MANUAL
+        name:
+          type: string
+          description: Display name
+          example: Household cash
+        userId:
+          type:
+            - integer
+            - 'null'
+          format: int64
+          description: Owning user identifier; null for manual money boxes
+          example: 1
+        username:
+          type:
+            - string
+            - 'null'
+          description: Owning username; null for manual money boxes
+          example: elias
+        balance:
+          type: number
+          description: Current balance calculated from all signed movements
+          example: 87.50
+        movements:
+          type: array
+          description: Movements ordered from newest to oldest
+          items:
+            $ref: '#/components/schemas/MoneyBoxMovementResponse'
     CreateUserMoneyMovementRequest:
       description: Signed money movement to add to a user's money box.
       type: object
@@ -2343,7 +2927,7 @@ components:
           description: Last date covered by the planning
           example: 2026-06-30
     CreateMenuRequest:
-      description: Request used to establish a planning and assign its cost.
+      description: Request used to establish a planning, assign its cost, and optionally confirm the exact stock allocation.
       type: object
       required:
         - payerUserId
@@ -2353,6 +2937,28 @@ components:
           format: int64
           description: User identifier that assumes the menu period cost
           example: 1
+        stockAllocations:
+          type: array
+          nullable: true
+          description: Optional user-confirmed stock allocation. When omitted, stock is allocated automatically by earliest expiration date. An empty list consumes no stock.
+          items:
+            $ref: '#/components/schemas/MenuStockAllocationRequest'
+    MenuStockAllocationRequest:
+      type: object
+      required:
+        - stockEntryId
+        - usedUnits
+      properties:
+        stockEntryId:
+          type: integer
+          format: int64
+          description: Stock entry identifier
+          example: 7
+        usedUnits:
+          type: number
+          minimum: 0.01
+          description: Quantity to consume from this stock entry
+          example: 1.5
     UpsertPlannedDayRequest:
       type: object
       required:
@@ -2416,6 +3022,37 @@ components:
           minimum: 0
           description: Explicit display order within the section. Must be unique among products in the same section.
           example: 10
+    PlanningSummaryResponse:
+      type: object
+      required: [id, startDate, endDate, plannedDays, state]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 42
+        startDate:
+          type: string
+          format: date
+          example: 2026-06-15
+        endDate:
+          type: string
+          format: date
+          example: 2026-06-21
+        plannedDays:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of explicitly planned days
+          example: 5
+        state:
+          type: string
+          enum: [DRAFT, ESTABLISHED, CLOSED]
+          example: ESTABLISHED
+        menuId:
+          type: [integer, 'null']
+          format: int64
+          description: Established menu identifier, or null while planning is a draft
+          example: 18
     PlanningResponse:
       type: object
       properties:
@@ -2498,6 +3135,93 @@ components:
             $ref: '#/components/schemas/MenuShoppingListItemResponse'
         nutritionalRules:
           $ref: '#/components/schemas/NutritionalRulesEvaluationResponse'
+    CloseMenuRequest:
+      type: object
+      required: [personIds]
+      properties:
+        personIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          description: People who followed the menu and receive an immutable history entry
+          items:
+            type: integer
+            format: int64
+          example: [1, 2]
+    UserResponse:
+      type: object
+      properties:
+        id: {type: integer, format: int64, example: 1}
+        username: {type: string, example: elias}
+    CreateUserWeightRequest:
+      type: object
+      required: [weight, recordedAt]
+      properties:
+        weight:
+          type: number
+          exclusiveMinimum: 0
+          description: Weight in kilograms
+          example: 72.35
+        recordedAt:
+          type: string
+          format: date-time
+          description: Exact date and time when the weight was measured
+          example: '2026-06-28T08:30:00Z'
+    UpdateUserWeightRequest:
+      type: object
+      required: [weight, recordedAt]
+      properties:
+        weight:
+          type: number
+          exclusiveMinimum: 0
+          description: Weight in kilograms
+          example: 71.80
+        recordedAt:
+          type: string
+          format: date-time
+          description: Exact date and time when the weight was measured
+          example: '2026-06-29T08:15:00Z'
+    UserWeightResponse:
+      type: object
+      properties:
+        id: {type: integer, format: int64, example: 1}
+        userId: {type: integer, format: int64, example: 1}
+        weight: {type: number, description: Weight in kilograms, example: 72.35}
+        recordedAt: {type: string, format: date-time, example: '2026-06-28T08:30:00Z'}
+    UserWeightStatsResponse:
+      type: object
+      properties:
+        userId: {type: integer, format: int64, example: 1}
+        from: {type: string, format: date-time, example: '2026-06-01T00:00:00Z'}
+        to: {type: string, format: date-time, example: '2026-06-30T23:59:59Z'}
+        highest:
+          description: Highest measurement, or null when the period has no measurements
+          oneOf:
+            - {$ref: '#/components/schemas/UserWeightResponse'}
+            - {type: 'null'}
+        lowest:
+          description: Lowest measurement, or null when the period has no measurements
+          oneOf:
+            - {$ref: '#/components/schemas/UserWeightResponse'}
+            - {type: 'null'}
+    UserMenuHistoryResponse:
+      type: object
+      properties:
+        personId: {type: integer, format: int64, example: 1}
+        personName: {type: string, example: elias}
+        year: {type: integer, example: 2026}
+        month: {type: integer, nullable: true, example: 6}
+        totals: {$ref: '#/components/schemas/MenuPeriodStatsResponse'}
+        menus:
+          type: array
+          items: {$ref: '#/components/schemas/UserMenuHistoryEntryResponse'}
+    UserMenuHistoryEntryResponse:
+      type: object
+      properties:
+        menuId: {type: integer, format: int64, example: 1}
+        startDate: {type: string, format: date}
+        endDate: {type: string, format: date}
+        stats: {$ref: '#/components/schemas/MenuPeriodStatsResponse'}
     MenuStatsResponse:
       type: object
       properties:

@@ -11,4 +11,6 @@ public interface CurrentWeekMenuRepository {
     CurrentWeekMenuResponse findByProposedWeekMenuId(Long proposedWeekMenuId);
 
     List<CurrentWeekMenuResponse> findAll();
+
+    void delete(Long id);
 }

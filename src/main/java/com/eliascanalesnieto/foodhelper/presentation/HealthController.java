@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class HealthController {
 
     @GetMapping
-    @Operation(summary = "API status", description = "Returns a simple availability indicator.")
+    @Operation(summary = "API status", description = "Returns a simple availability indicator.", security = {})
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "API available",
                     content = @Content(schema = @Schema(implementation = HealthResponse.class)))

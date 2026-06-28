@@ -26,6 +26,8 @@ springdoc:
     path: /v3/api-docs
 
 app:
+  cors:
+    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
   auth:
     registration-code: ${APP_AUTH_REGISTRATION_CODE:foodhelper-invite}
     jwt:

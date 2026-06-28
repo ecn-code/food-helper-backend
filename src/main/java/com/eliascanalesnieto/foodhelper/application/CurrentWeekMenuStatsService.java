@@ -29,7 +29,7 @@ public class CurrentWeekMenuStatsService {
         );
     }
 
-    private CurrentWeekMenuPeriodStatsResponse summarize(List<CurrentWeekMenuResponse> menus) {
+    public CurrentWeekMenuPeriodStatsResponse summarize(List<CurrentWeekMenuResponse> menus) {
         List<CurrentWeekMenuPeriodStatsDayResponse> days = menus.stream()
                 .flatMap(menu -> menu.days().stream())
                 .map(day -> new CurrentWeekMenuPeriodStatsDayResponse(

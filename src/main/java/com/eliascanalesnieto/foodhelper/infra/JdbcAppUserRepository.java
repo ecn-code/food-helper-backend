@@ -8,6 +8,7 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
+import java.util.List;
 
 @Repository
 @RequiredArgsConstructor
@@ -38,6 +39,11 @@ public class JdbcAppUserRepository implements AppUserRepository {
     @Override
     public Optional<AppUser> findByUsername(String username) {
         return userRepository.findByUsername(username).map(this::toDomain);
+    }
+
+    @Override
+    public List<AppUser> findAll() {
+        return userRepository.findAllByOrderByUsernameAsc().stream().map(this::toDomain).toList();
     }
 
     private AppUser toDomain(AppUserEntity entity) {

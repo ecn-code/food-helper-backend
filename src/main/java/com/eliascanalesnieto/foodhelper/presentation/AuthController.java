@@ -28,7 +28,8 @@ public class AuthController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
             summary = "Register user",
-            description = "Creates a user when the registration code is valid and returns a signed Bearer JWT. No cookie or server session is created."
+            description = "Creates a user when the registration code is valid and returns a signed Bearer JWT. No cookie or server session is created.",
+            security = {}
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "User registered",
@@ -45,7 +46,8 @@ public class AuthController {
     @PostMapping("/login")
     @Operation(
             summary = "Log in",
-            description = "Validates credentials and returns a signed Bearer JWT for Authorization headers."
+            description = "Validates credentials and returns a signed Bearer JWT for Authorization headers.",
+            security = {}
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Login succeeded",

@@ -13,6 +13,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
@@ -317,6 +318,28 @@ class ProductLambdaRouterIntegrationTest {
         APIGatewayProxyResponseEvent derivedProductResponse = productHttpHandler.apply(createDerivedProduct);
         assertThat(derivedProductResponse.getStatusCode()).isEqualTo(201);
         assertThat(derivedProductResponse.getBody()).contains("4.00");
+
+        APIGatewayProxyResponseEvent filteredRecipes = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/recipes")
+                .withHeaders(authHeaders(token))
+                .withQueryStringParameters(Map.of(
+                        "search", "chicken",
+                        "caloriesMin", "300",
+                        "caloriesMax", "350",
+                        "hasDerivedProduct", "true"
+                )));
+        assertThat(filteredRecipes.getStatusCode()).isEqualTo(200);
+        JsonNode filteredItems = readNode(filteredRecipes.getBody()).get("items");
+        assertThat(filteredItems.size()).isOne();
+        assertThat(filteredItems.get(0).get("id").asLong()).isEqualTo(recipeId);
+
+        APIGatewayProxyResponseEvent invalidRange = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/recipes")
+                .withHeaders(authHeaders(token))
+                .withQueryStringParameters(Map.of("fatsMin", "5", "fatsMax", "1")));
+        assertThat(invalidRange.getStatusCode()).isEqualTo(400);
     }
 
     @Test
@@ -526,6 +549,14 @@ class ProductLambdaRouterIntegrationTest {
         assertThat(createdMenu.getStatusCode()).isEqualTo(201);
         long menuId = readLong(createdMenu.getBody(), "id");
 
+        APIGatewayProxyResponseEvent draftCatalog = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/planning")
+                .withHeaders(authHeaders(token)));
+        JsonNode draftSummary = findById(readNode(draftCatalog.getBody()), menuId);
+        assertThat(draftSummary.get("state").asText()).isEqualTo("DRAFT");
+        assertThat(draftSummary.get("plannedDays").asInt()).isZero();
+
         APIGatewayProxyResponseEvent plannedMenu = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("PUT")
                 .withPath("/api/v1/planning/" + menuId + "/days")
@@ -540,6 +571,15 @@ class ProductLambdaRouterIntegrationTest {
                 .withBody("{\"payerUserId\":" + auth.userId() + "}"));
         assertThat(establish.getStatusCode()).isEqualTo(201);
         long currentWeekMenuId = readLong(establish.getBody(), "id");
+
+        APIGatewayProxyResponseEvent establishedCatalog = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/planning")
+                .withHeaders(authHeaders(token)));
+        JsonNode establishedSummary = findById(readNode(establishedCatalog.getBody()), menuId);
+        assertThat(establishedSummary.get("state").asText()).isEqualTo("ESTABLISHED");
+        assertThat(establishedSummary.get("menuId").asLong()).isEqualTo(currentWeekMenuId);
+        assertThat(establishedSummary.get("plannedDays").asInt()).isOne();
 
         APIGatewayProxyResponseEvent completeList = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")
@@ -566,11 +606,51 @@ class ProductLambdaRouterIntegrationTest {
         APIGatewayProxyResponseEvent close = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("POST")
                 .withPath("/api/v1/menus/" + currentWeekMenuId + "/close")
-                .withHeaders(authHeaders(token)));
+                .withHeaders(authHeaders(token))
+                .withBody("{\"personIds\":[" + auth.userId() + "]}"));
         assertThat(close.getStatusCode()).isEqualTo(200);
         assertThat(readDecimal(close.getBody(), "period.moneySpent")).isEqualByComparingTo("5.40");
         assertThat(readDecimal(close.getBody(), "month.moneySpent")).isEqualByComparingTo("5.40");
         assertThat(readText(close.getBody(), "period.maxDay.date")).isEqualTo(startDate.toString());
+        BigDecimal closedCalories = readDecimal(close.getBody(), "period.averageCalories");
+
+        APIGatewayProxyResponseEvent closedCatalog = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/planning")
+                .withHeaders(authHeaders(token)));
+        assertThat(findById(readNode(closedCatalog.getBody()), menuId).get("state").asText()).isEqualTo("CLOSED");
+
+        APIGatewayProxyResponseEvent updateProduct = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("PUT")
+                .withPath("/api/v1/products/" + chickenId)
+                .withHeaders(authHeaders(token))
+                .withBody("{\"name\":\"Changed chicken\",\"description\":\"Changed\",\"gramsPerUnit\":100,\"calories\":9999,\"carbohydrates\":9999,\"proteins\":9999,\"fats\":9999,\"defaultPrice\":9999}"));
+        assertThat(updateProduct.getStatusCode()).isEqualTo(200);
+
+        APIGatewayProxyResponseEvent people = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/users")
+                .withHeaders(authHeaders(token)));
+        assertThat(people.getStatusCode()).isEqualTo(200);
+        assertThat(readNode(people.getBody()).findValuesAsText("id"))
+                .contains(Long.toString(auth.userId()));
+
+        APIGatewayProxyResponseEvent monthlyHistory = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/users/" + auth.userId() + "/menu-history/monthly")
+                .withQueryStringParameters(Map.of("year", Integer.toString(endDate.getYear()), "month", Integer.toString(endDate.getMonthValue())))
+                .withHeaders(authHeaders(token)));
+        assertThat(monthlyHistory.getStatusCode()).isEqualTo(200);
+        assertThat(readLong(monthlyHistory.getBody(), "menus.0.menuId")).isEqualTo(currentWeekMenuId);
+        assertThat(readDecimal(monthlyHistory.getBody(), "totals.averageCalories")).isEqualByComparingTo(closedCalories);
+
+        APIGatewayProxyResponseEvent annualHistory = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/users/" + auth.userId() + "/menu-history/annual")
+                .withQueryStringParameters(Map.of("year", Integer.toString(endDate.getYear())))
+                .withHeaders(authHeaders(token)));
+        assertThat(annualHistory.getStatusCode()).isEqualTo(200);
+        assertThat(readDecimal(annualHistory.getBody(), "totals.averageCalories")).isEqualByComparingTo(closedCalories);
 
         APIGatewayProxyResponseEvent stats = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")
@@ -578,6 +658,153 @@ class ProductLambdaRouterIntegrationTest {
                 .withHeaders(authHeaders(token)));
         assertThat(stats.getStatusCode()).isEqualTo(200);
         assertThat(readDecimal(stats.getBody(), "period.moneySpent")).isEqualByComparingTo("5.40");
+    }
+
+    @Test
+    void shouldDeleteMoneyBoxesAndMovementsThroughLambda() {
+        AuthSession auth = registerAndReadAuth();
+        String token = auth.token();
+        String moneyBoxesPath = "/api/v1/money-boxes";
+
+        APIGatewayProxyResponseEvent createdBox = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath(moneyBoxesPath)
+                .withHeaders(authHeaders(token))
+                .withBody("{\"name\":\"Lambda delete box " + System.nanoTime() + "\"}"));
+        assertThat(createdBox.getStatusCode()).isEqualTo(201);
+        long moneyBoxId = readLong(createdBox.getBody(), "id");
+
+        APIGatewayProxyResponseEvent createdMovement = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath(moneyBoxesPath + "/" + moneyBoxId + "/movements")
+                .withHeaders(authHeaders(token))
+                .withBody("{\"amount\":5.25,\"description\":\"Lambda removable\"}"));
+        assertThat(createdMovement.getStatusCode()).isEqualTo(201);
+        long movementId = readLong(createdMovement.getBody(), "id");
+
+        APIGatewayProxyResponseEvent deletedMovement = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("DELETE")
+                .withPath(moneyBoxesPath + "/" + moneyBoxId + "/movements/" + movementId)
+                .withHeaders(authHeaders(token)));
+        assertThat(deletedMovement.getStatusCode()).isEqualTo(204);
+
+        APIGatewayProxyResponseEvent missingMovement = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("DELETE")
+                .withPath(moneyBoxesPath + "/" + moneyBoxId + "/movements/" + movementId)
+                .withHeaders(authHeaders(token)));
+        assertThat(missingMovement.getStatusCode()).isEqualTo(404);
+
+        APIGatewayProxyResponseEvent allBoxes = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath(moneyBoxesPath)
+                .withHeaders(authHeaders(token)));
+        long userMoneyBoxId = 0;
+        for (JsonNode box : readNode(allBoxes.getBody())) {
+            if (!box.get("userId").isNull() && box.get("userId").asLong() == auth.userId()) {
+                userMoneyBoxId = box.get("id").asLong();
+                break;
+            }
+        }
+        assertThat(userMoneyBoxId).isPositive();
+
+        APIGatewayProxyResponseEvent rejectedUserBoxDelete = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("DELETE")
+                .withPath(moneyBoxesPath + "/" + userMoneyBoxId)
+                .withHeaders(authHeaders(token)));
+        assertThat(rejectedUserBoxDelete.getStatusCode()).isEqualTo(409);
+
+        APIGatewayProxyResponseEvent deletedBox = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("DELETE")
+                .withPath(moneyBoxesPath + "/" + moneyBoxId)
+                .withHeaders(authHeaders(token)));
+        assertThat(deletedBox.getStatusCode()).isEqualTo(204);
+
+        APIGatewayProxyResponseEvent missingBox = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("DELETE")
+                .withPath(moneyBoxesPath + "/" + moneyBoxId)
+                .withHeaders(authHeaders(token)));
+        assertThat(missingBox.getStatusCode()).isEqualTo(404);
+    }
+
+    @Test
+    void shouldUpdateAndDeleteUserWeightsThroughLambda() {
+        AuthSession auth = registerAndReadAuth();
+        AuthSession otherUser = registerAndReadAuth();
+        String weightsPath = "/api/v1/users/" + auth.userId() + "/weights";
+
+        APIGatewayProxyResponseEvent editable = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath(weightsPath)
+                .withHeaders(authHeaders(auth.token()))
+                .withBody("{\"weight\":90.00,\"recordedAt\":\"2026-06-05T08:00:00Z\"}"));
+        assertThat(editable.getStatusCode()).isEqualTo(201);
+        long weightId = readLong(editable.getBody(), "id");
+
+        productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath(weightsPath)
+                .withHeaders(authHeaders(auth.token()))
+                .withBody("{\"weight\":75.00,\"recordedAt\":\"2026-06-10T08:00:00Z\"}"));
+
+        String weightPath = weightsPath + "/" + weightId;
+        APIGatewayProxyResponseEvent updated = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("PUT")
+                .withPath(weightPath)
+                .withHeaders(authHeaders(auth.token()))
+                .withBody("{\"weight\":70.25,\"recordedAt\":\"2026-06-25T19:30:00Z\"}"));
+        assertThat(updated.getStatusCode()).isEqualTo(200);
+        assertThat(readDecimal(updated.getBody(), "weight")).isEqualByComparingTo("70.25");
+        assertThat(readText(updated.getBody(), "recordedAt")).isEqualTo("2026-06-25T19:30:00Z");
+
+        APIGatewayProxyResponseEvent stats = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath(weightsPath + "/stats")
+                .withQueryStringParameters(Map.of(
+                        "from", "2026-06-01T00:00:00Z",
+                        "to", "2026-06-30T23:59:59Z"
+                ))
+                .withHeaders(authHeaders(auth.token())));
+        assertThat(stats.getStatusCode()).isEqualTo(200);
+        assertThat(readDecimal(stats.getBody(), "highest.weight")).isEqualByComparingTo("75.00");
+        assertThat(readDecimal(stats.getBody(), "lowest.weight")).isEqualByComparingTo("70.25");
+
+        APIGatewayProxyResponseEvent invalid = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("PUT")
+                .withPath(weightPath)
+                .withHeaders(authHeaders(auth.token()))
+                .withBody("{\"weight\":0,\"recordedAt\":\"2026-06-25T19:30:00Z\"}"));
+        assertThat(invalid.getStatusCode()).isEqualTo(400);
+
+        String wrongUserPath = "/api/v1/users/" + otherUser.userId() + "/weights/" + weightId;
+        APIGatewayProxyResponseEvent wrongUserUpdate = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("PUT")
+                .withPath(wrongUserPath)
+                .withHeaders(authHeaders(auth.token()))
+                .withBody("{\"weight\":65.00,\"recordedAt\":\"2026-06-25T19:30:00Z\"}"));
+        assertThat(wrongUserUpdate.getStatusCode()).isEqualTo(404);
+
+        APIGatewayProxyResponseEvent deleted = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("DELETE")
+                .withPath(weightPath)
+                .withHeaders(authHeaders(auth.token())));
+        assertThat(deleted.getStatusCode()).isEqualTo(204);
+
+        APIGatewayProxyResponseEvent statsAfterDelete = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath(weightsPath + "/stats")
+                .withQueryStringParameters(Map.of(
+                        "from", "2026-06-01T00:00:00Z",
+                        "to", "2026-06-30T23:59:59Z"
+                ))
+                .withHeaders(authHeaders(auth.token())));
+        assertThat(readDecimal(statsAfterDelete.getBody(), "highest.weight")).isEqualByComparingTo("75.00");
+        assertThat(readDecimal(statsAfterDelete.getBody(), "lowest.weight")).isEqualByComparingTo("75.00");
+
+        APIGatewayProxyResponseEvent missing = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("DELETE")
+                .withPath(weightPath)
+                .withHeaders(authHeaders(auth.token())));
+        assertThat(missing.getStatusCode()).isEqualTo(404);
     }
 
     @Test
@@ -646,6 +873,15 @@ class ProductLambdaRouterIntegrationTest {
         } catch (Exception ex) {
             throw new AssertionError("Unable to read field '" + field + "' from response: " + json, ex);
         }
+    }
+
+    private JsonNode findById(JsonNode array, long id) {
+        for (JsonNode item : array) {
+            if (item.get("id").asLong() == id) {
+                return item;
+            }
+        }
+        throw new AssertionError("Entry with id " + id + " not found in response: " + array);
     }
 
     private Map<String, String> queryParams(String query) {

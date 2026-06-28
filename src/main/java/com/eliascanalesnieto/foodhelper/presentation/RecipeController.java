@@ -5,6 +5,7 @@ import com.eliascanalesnieto.foodhelper.application.PaginationRequest;
 import com.eliascanalesnieto.foodhelper.application.RecipeService;
 import com.eliascanalesnieto.foodhelper.application.StatsService;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
+import com.eliascanalesnieto.foodhelper.domain.RecipeSearchCriteria;
 import com.eliascanalesnieto.foodhelper.presentation.error.ApiError;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -13,6 +14,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.math.BigDecimal;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -41,17 +43,37 @@ public class RecipeController {
             summary = "List recipes",
             description = "Returns a paginated list of recipes ordered by identifier ascending, including calculated nutritional totals, ingredients, and optional derived product information."
     )
-    @ApiResponse(responseCode = "200", description = "Recipes returned",
-            content = @Content(schema = @Schema(implementation = RecipePageResponse.class)))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Recipes returned",
+                    content = @Content(schema = @Schema(implementation = RecipePageResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid pagination or nutritional range",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
     public RecipePageResponse findAll(
             @io.swagger.v3.oas.annotations.Parameter(description = "Zero-based page number", example = "0")
             @RequestParam(defaultValue = "0")
             int page,
             @io.swagger.v3.oas.annotations.Parameter(description = "Number of items per page, between 1 and 100", example = "20")
             @RequestParam(defaultValue = "20")
-            int size
+            int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) BigDecimal caloriesMin,
+            @RequestParam(required = false) BigDecimal caloriesMax,
+            @RequestParam(required = false) BigDecimal carbohydratesMin,
+            @RequestParam(required = false) BigDecimal carbohydratesMax,
+            @RequestParam(required = false) BigDecimal proteinsMin,
+            @RequestParam(required = false) BigDecimal proteinsMax,
+            @RequestParam(required = false) BigDecimal fatsMin,
+            @RequestParam(required = false) BigDecimal fatsMax,
+            @RequestParam(required = false) Boolean hasDerivedProduct
     ) {
-        PageResult<com.eliascanalesnieto.foodhelper.domain.Recipe> result = service.findPage(PaginationRequest.of(page, size));
+        RecipeSearchCriteria criteria = new RecipeSearchCriteria(
+                search, caloriesMin, caloriesMax, carbohydratesMin, carbohydratesMax,
+                proteinsMin, proteinsMax, fatsMin, fatsMax, hasDerivedProduct
+        );
+        PageResult<com.eliascanalesnieto.foodhelper.domain.Recipe> result = service.findPage(
+                PaginationRequest.of(page, size), criteria
+        );
         return new RecipePageResponse(result.items().stream()
                 .map(mapper::toResponse)
                 .toList(), result.page(), result.size(), result.totalElements(), result.totalPages());
