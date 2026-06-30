@@ -12,6 +12,8 @@ public record ProposedWeekMenuDayResponse(
         LocalDate date,
         @Schema(description = "Configured day parts selected for the day")
         List<ProposedWeekMenuSectionResponse> sections,
+        @Schema(description = "Recipe productions scheduled for the day")
+        List<ProposedWeekMenuRecipeProductionResponse> recipeProductions,
         @Schema(description = "Nutritional totals for the day")
         NutritionalValuesResponse nutritionalValues
 ) {

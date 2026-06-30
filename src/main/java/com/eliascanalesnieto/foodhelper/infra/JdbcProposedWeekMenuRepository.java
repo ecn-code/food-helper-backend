@@ -5,6 +5,7 @@ import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDay;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDayPart;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDayPartRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuProduct;
+import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuRecipeProduction;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuSection;
 import com.eliascanalesnieto.foodhelper.domain.PlanningState;
@@ -112,6 +113,8 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
 
         jdbcTemplate.update("DELETE FROM proposed_week_menu_sections WHERE day_id = ?", dayId);
         saveSections(dayId, day.getSections());
+        jdbcTemplate.update("DELETE FROM proposed_week_menu_recipe_productions WHERE day_id = ?", dayId);
+        saveRecipeProductions(dayId, day.getRecipeProductions());
         return findById(menuId);
     }
 
@@ -140,6 +143,7 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
                         .id(rs.getLong("id"))
                         .date(rs.getDate("menu_date").toLocalDate())
                         .sections(findSections(rs.getLong("id")))
+                        .recipeProductions(findRecipeProductions(rs.getLong("id")))
                         .build(),
                 menuId
         );
@@ -164,6 +168,23 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
         );
     }
 
+    private List<ProposedWeekMenuRecipeProduction> findRecipeProductions(Long dayId) {
+        return jdbcTemplate.query("""
+                        SELECT id, recipe_id, produced_grams, sort_order
+                        FROM proposed_week_menu_recipe_productions
+                        WHERE day_id = ?
+                        ORDER BY sort_order, id
+                        """,
+                (rs, rowNum) -> ProposedWeekMenuRecipeProduction.builder()
+                        .id(rs.getLong("id"))
+                        .recipeId(rs.getLong("recipe_id"))
+                        .producedGrams(rs.getBigDecimal("produced_grams"))
+                        .sortOrder(rs.getInt("sort_order"))
+                        .build(),
+                dayId
+        );
+    }
+
     private List<ProposedWeekMenuProduct> findProducts(Long sectionId) {
         return jdbcTemplate.query("""
                         SELECT product_id, units, grams, sort_order
@@ -183,7 +204,7 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
 
     private void saveSections(Long dayId, List<ProposedWeekMenuSection> sections) {
         try {
-            for (ProposedWeekMenuSection section : sections) {
+            for (ProposedWeekMenuSection section : sections == null ? List.<ProposedWeekMenuSection>of() : sections) {
                 ProposedWeekMenuDayPart dayPart = dayPartRepository.findById(section.getDayPartId());
                 Long sectionId = insertSection(dayId, dayPart);
                 saveProducts(sectionId, section.getProducts());
@@ -191,6 +212,21 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
         } catch (DataIntegrityViolationException ex) {
             throw new IllegalArgumentException("Day parts and product sort orders must be unique within their parent");
         }
+    }
+
+    private void saveRecipeProductions(Long dayId, List<ProposedWeekMenuRecipeProduction> recipeProductions) {
+        if (recipeProductions == null || recipeProductions.isEmpty()) {
+            return;
+        }
+        jdbcTemplate.batchUpdate("""
+                INSERT INTO proposed_week_menu_recipe_productions (day_id, recipe_id, produced_grams, sort_order)
+                VALUES (?, ?, ?, ?)
+                """, recipeProductions, recipeProductions.size(), (ps, recipeProduction) -> {
+            ps.setLong(1, dayId);
+            ps.setLong(2, recipeProduction.getRecipeId());
+            ps.setBigDecimal(3, recipeProduction.getProducedGrams());
+            ps.setInt(4, recipeProduction.getSortOrder());
+        });
     }
 
     private Long insertSection(Long dayId, ProposedWeekMenuDayPart dayPart) {

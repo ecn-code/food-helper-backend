@@ -29,6 +29,10 @@ public record CurrentWeekMenuResponse(
         List<CurrentWeekMenuUsedStockResponse> usedStock,
         @Schema(description = "Products still missing after consuming stock")
         List<CurrentWeekMenuShoppingListItemResponse> shoppingList,
+        @Schema(description = "Repercussion movements recorded while the menu is open")
+        List<MenuStockMovementResponse> stockMovements,
+        @Schema(description = "Recipe productions scheduled for the menu with their stock transfer trace")
+        List<CurrentWeekMenuRecipeProductionResponse> recipeProductions,
         @Schema(description = "Average daily nutrition evaluated against the saved rules")
         NutritionalRulesEvaluationResponse nutritionalRules
 ) {

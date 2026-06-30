@@ -93,6 +93,15 @@ public class JdbcStockRepository implements StockRepository {
 
     @Override
     @Transactional
+    public void delete(Long stockEntryId) {
+        if (!stockCrudRepository.existsById(stockEntryId)) {
+            throw new ResourceNotFoundException("Stock entry not found");
+        }
+        stockCrudRepository.deleteById(stockEntryId);
+    }
+
+    @Override
+    @Transactional
     public void restore(CurrentWeekMenuUsedStock usedStock) {
         jdbcClient.sql("""
                 INSERT INTO stock_entries (id, product_id, quantity, price, expiration_date, entry_date)

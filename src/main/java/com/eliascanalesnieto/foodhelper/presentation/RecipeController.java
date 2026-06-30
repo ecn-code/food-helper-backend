@@ -41,7 +41,7 @@ public class RecipeController {
     @GetMapping
     @Operation(
             summary = "List recipes",
-            description = "Returns a paginated list of recipes ordered by identifier ascending, including calculated nutritional totals, ingredients, and optional derived product information."
+            description = "Returns recipes ordered by identifier ascending. Text search ignores case and accents across name, description, instructions, and ingredients; nutritional ranges apply to calculated recipe totals."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Recipes returned",
@@ -56,15 +56,25 @@ public class RecipeController {
             @io.swagger.v3.oas.annotations.Parameter(description = "Number of items per page, between 1 and 100", example = "20")
             @RequestParam(defaultValue = "20")
             int size,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Accent- and case-insensitive text", example = "chicken curry")
             @RequestParam(required = false) String search,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Minimum calculated calories, inclusive", example = "300")
             @RequestParam(required = false) BigDecimal caloriesMin,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Maximum calculated calories, inclusive", example = "700")
             @RequestParam(required = false) BigDecimal caloriesMax,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Minimum calculated carbohydrates, inclusive", example = "20")
             @RequestParam(required = false) BigDecimal carbohydratesMin,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Maximum calculated carbohydrates, inclusive", example = "80")
             @RequestParam(required = false) BigDecimal carbohydratesMax,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Minimum calculated proteins, inclusive", example = "15")
             @RequestParam(required = false) BigDecimal proteinsMin,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Maximum calculated proteins, inclusive", example = "60")
             @RequestParam(required = false) BigDecimal proteinsMax,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Minimum calculated fats, inclusive", example = "5")
             @RequestParam(required = false) BigDecimal fatsMin,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Maximum calculated fats, inclusive", example = "30")
             @RequestParam(required = false) BigDecimal fatsMax,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Whether the recipe must have a derived product", example = "true")
             @RequestParam(required = false) Boolean hasDerivedProduct
     ) {
         RecipeSearchCriteria criteria = new RecipeSearchCriteria(

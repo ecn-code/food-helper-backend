@@ -652,6 +652,38 @@ class ProductLambdaRouterIntegrationTest {
         assertThat(annualHistory.getStatusCode()).isEqualTo(200);
         assertThat(readDecimal(annualHistory.getBody(), "totals.averageCalories")).isEqualByComparingTo(closedCalories);
 
+        APIGatewayProxyResponseEvent rangeHistory = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/users/" + auth.userId() + "/menu-history")
+                .withQueryStringParameters(Map.of(
+                        "from", "2018-12-31T00:00:00Z",
+                        "to", "2019-01-31T23:59:59Z"
+                ))
+                .withHeaders(authHeaders(token)));
+        assertThat(rangeHistory.getStatusCode()).isEqualTo(200);
+        assertThat(readLong(rangeHistory.getBody(), "personId")).isEqualTo(auth.userId());
+        assertThat(readText(rangeHistory.getBody(), "personName")).isNotBlank();
+        assertThat(readText(rangeHistory.getBody(), "from")).isEqualTo("2018-12-31T00:00:00Z");
+        assertThat(readText(rangeHistory.getBody(), "to")).isEqualTo("2019-01-31T23:59:59Z");
+        assertThat(readLong(rangeHistory.getBody(), "menus.0.menuId")).isEqualTo(currentWeekMenuId);
+
+        APIGatewayProxyResponseEvent invalidRange = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/users/" + auth.userId() + "/menu-history")
+                .withQueryStringParameters(Map.of(
+                        "from", "2019-01-31T00:00:00Z",
+                        "to", "2018-12-31T23:59:59Z"
+                ))
+                .withHeaders(authHeaders(token)));
+        assertThat(invalidRange.getStatusCode()).isEqualTo(400);
+
+        APIGatewayProxyResponseEvent missingHistoryFrom = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/users/" + auth.userId() + "/menu-history")
+                .withQueryStringParameters(Map.of("to", "2019-01-31T23:59:59Z"))
+                .withHeaders(authHeaders(token)));
+        assertThat(missingHistoryFrom.getStatusCode()).isEqualTo(400);
+
         APIGatewayProxyResponseEvent stats = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")
                 .withPath("/api/v1/menus/" + currentWeekMenuId + "/stats")
@@ -736,9 +768,10 @@ class ProductLambdaRouterIntegrationTest {
                 .withHttpMethod("POST")
                 .withPath(weightsPath)
                 .withHeaders(authHeaders(auth.token()))
-                .withBody("{\"weight\":90.00,\"recordedAt\":\"2026-06-05T08:00:00Z\"}"));
+                .withBody("{\"weight\":90.00,\"recordedAt\":\"2026-06-05T08:00:00Z\",\"notes\":\"before period\"}"));
         assertThat(editable.getStatusCode()).isEqualTo(201);
         long weightId = readLong(editable.getBody(), "id");
+        assertThat(readText(editable.getBody(), "notes")).isEqualTo("before period");
 
         productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("POST")
@@ -751,10 +784,13 @@ class ProductLambdaRouterIntegrationTest {
                 .withHttpMethod("PUT")
                 .withPath(weightPath)
                 .withHeaders(authHeaders(auth.token()))
-                .withBody("{\"weight\":70.25,\"recordedAt\":\"2026-06-25T19:30:00Z\"}"));
+                .withBody("{\"weight\":70.25,\"recordedAt\":\"2026-06-25T19:30:00Z\",\"notes\":\"edited note\"}"));
         assertThat(updated.getStatusCode()).isEqualTo(200);
         assertThat(readDecimal(updated.getBody(), "weight")).isEqualByComparingTo("70.25");
         assertThat(readText(updated.getBody(), "recordedAt")).isEqualTo("2026-06-25T19:30:00Z");
+        assertThat(readText(updated.getBody(), "notes")).isEqualTo("edited note");
+        assertThat(readText(updated.getBody(), "createdAt")).isNotBlank();
+        assertThat(readText(updated.getBody(), "updatedAt")).isNotBlank();
 
         APIGatewayProxyResponseEvent stats = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")
@@ -774,6 +810,26 @@ class ProductLambdaRouterIntegrationTest {
                 .withHeaders(authHeaders(auth.token()))
                 .withBody("{\"weight\":0,\"recordedAt\":\"2026-06-25T19:30:00Z\"}"));
         assertThat(invalid.getStatusCode()).isEqualTo(400);
+
+        APIGatewayProxyResponseEvent missingTo = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath(weightsPath)
+                .withQueryStringParameters(Map.of("from", "2026-06-01T00:00:00Z"))
+                .withHeaders(authHeaders(auth.token())));
+        assertThat(missingTo.getStatusCode()).isEqualTo(400);
+
+        APIGatewayProxyResponseEvent missingFrom = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath(weightsPath)
+                .withQueryStringParameters(Map.of("to", "2026-06-30T23:59:59Z"))
+                .withHeaders(authHeaders(auth.token())));
+        assertThat(missingFrom.getStatusCode()).isEqualTo(400);
+
+        APIGatewayProxyResponseEvent legacyWeightRoute = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/weights/" + weightId)
+                .withHeaders(authHeaders(auth.token())));
+        assertThat(legacyWeightRoute.getStatusCode()).isEqualTo(404);
 
         String wrongUserPath = "/api/v1/users/" + otherUser.userId() + "/weights/" + weightId;
         APIGatewayProxyResponseEvent wrongUserUpdate = productHttpHandler.apply(new APIGatewayProxyRequestEvent()

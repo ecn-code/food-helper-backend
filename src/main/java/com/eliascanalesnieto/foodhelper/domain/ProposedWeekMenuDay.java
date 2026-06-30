@@ -13,5 +13,6 @@ public class ProposedWeekMenuDay {
     Long id;
     LocalDate date;
     List<ProposedWeekMenuSection> sections;
+    List<ProposedWeekMenuRecipeProduction> recipeProductions;
     NutritionalValues nutritionalValues;
 }

@@ -45,7 +45,7 @@ public class UserWeightController {
                     content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
     public UserWeightResponse create(@PathVariable Long userId, @Valid @RequestBody CreateUserWeightRequest request) {
-        return service.create(userId, request.weight(), request.recordedAt());
+        return service.create(userId, request.weight(), request.recordedAt(), request.notes());
     }
 
     @PutMapping("/{weightId}")
@@ -63,7 +63,7 @@ public class UserWeightController {
             @PathVariable Long weightId,
             @Valid @RequestBody UpdateUserWeightRequest request
     ) {
-        return service.update(userId, weightId, request.weight(), request.recordedAt());
+        return service.update(userId, weightId, request.weight(), request.recordedAt(), request.notes());
     }
 
     @DeleteMapping("/{weightId}")

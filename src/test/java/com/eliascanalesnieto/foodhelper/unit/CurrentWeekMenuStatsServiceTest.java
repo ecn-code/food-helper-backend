@@ -7,6 +7,7 @@ import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuPeriodStatsR
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuStatsResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuUsedStockResponse;
+import com.eliascanalesnieto.foodhelper.presentation.MenuStockMovementResponse;
 import com.eliascanalesnieto.foodhelper.presentation.NutritionalValuesResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuDayResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuSectionResponse;
@@ -24,13 +25,15 @@ class CurrentWeekMenuStatsServiceTest {
                 10L,
                 LocalDate.of(2026, 6, 17),
                 day(LocalDate.of(2026, 6, 17), "1000", "90", "70", "30"),
-                List.of(usedStock("12.50"))
+                List.of(usedStock("12.50")),
+                List.of(stockMovement("5.00"))
         );
         CurrentWeekMenuResponse olderClosedWeek = menu(
                 11L,
                 LocalDate.of(2026, 6, 10),
                 day(LocalDate.of(2026, 6, 10), "500", "50", "40", "20"),
-                List.of(usedStock("7.50"))
+                List.of(usedStock("7.50")),
+                List.of(stockMovement("2.50"))
         );
 
         CurrentWeekMenuStatsResponse stats = service.build(closedWeek, List.of(closedWeek, olderClosedWeek));
@@ -43,7 +46,7 @@ class CurrentWeekMenuStatsServiceTest {
                 new BigDecimal("90.00"),
                 new BigDecimal("70.00"),
                 new BigDecimal("30.00"),
-                new BigDecimal("12.50")
+                new BigDecimal("17.50")
         ));
         assertThat(stats.month()).isEqualTo(new CurrentWeekMenuPeriodStatsResponse(
                 new com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuPeriodStatsDayResponse(LocalDate.of(2026, 6, 17), new BigDecimal("1000.00")),
@@ -52,11 +55,17 @@ class CurrentWeekMenuStatsServiceTest {
                 new BigDecimal("70.00"),
                 new BigDecimal("55.00"),
                 new BigDecimal("25.00"),
-                new BigDecimal("20.00")
+                new BigDecimal("27.50")
         ));
     }
 
-    private CurrentWeekMenuResponse menu(Long id, LocalDate endDate, ProposedWeekMenuDayResponse day, List<CurrentWeekMenuUsedStockResponse> usedStock) {
+    private CurrentWeekMenuResponse menu(
+            Long id,
+            LocalDate endDate,
+            ProposedWeekMenuDayResponse day,
+            List<CurrentWeekMenuUsedStockResponse> usedStock,
+            List<MenuStockMovementResponse> stockMovements
+    ) {
         return new CurrentWeekMenuResponse(
                 id,
                 5L,
@@ -74,6 +83,8 @@ class CurrentWeekMenuStatsServiceTest {
                 null,
                 usedStock,
                 List.of(),
+                stockMovements,
+                List.of(),
                 null
         );
     }
@@ -88,6 +99,7 @@ class CurrentWeekMenuStatsServiceTest {
                         new BigDecimal(proteins),
                         new BigDecimal(fats)
                 ))),
+                List.of(),
                 new NutritionalValuesResponse(
                         new BigDecimal(calories),
                         new BigDecimal(carbohydrates),
@@ -107,6 +119,22 @@ class CurrentWeekMenuStatsServiceTest {
                 new BigDecimal(totalCost),
                 null,
                 null
+        );
+    }
+
+    private MenuStockMovementResponse stockMovement(String totalCost) {
+        return new MenuStockMovementResponse(
+                1L,
+                10L,
+                1L,
+                "payer",
+                99L,
+                "Rice",
+                new BigDecimal("1.00"),
+                new BigDecimal("5.00"),
+                new BigDecimal(totalCost),
+                "Weekly groceries",
+                java.time.LocalDateTime.of(2026, 6, 1, 10, 0)
         );
     }
 }

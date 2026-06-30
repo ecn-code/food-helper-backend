@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.servers.Server;
 import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
 import org.springdoc.core.models.GroupedOpenApi;
+import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -33,6 +34,19 @@ import org.springframework.context.annotation.Configuration;
         scheme = "bearer"
 )
 public class OpenApiConfig {
+
+    @Bean
+    OpenApiCustomizer publicOperationsCustomizer() {
+        return openApi -> {
+            if (openApi.getPaths() == null) {
+                return;
+            }
+            markPublic(openApi, "/api/v1/auth/register");
+            markPublic(openApi, "/api/v1/auth/login");
+            markPublic(openApi, "/api/v1/health");
+            markPublic(openApi, "/api/v1/media/{id}");
+        };
+    }
 
     @Bean
     GroupedOpenApi authApi() {
@@ -73,7 +87,7 @@ public class OpenApiConfig {
 
     @Bean
     GroupedOpenApi usersApi() {
-        return groupedApi("users", "Users", "/api/v1/users/**").build();
+        return groupedApi("users", "Users", "/api/v1/users", "/api/v1/users/**").build();
     }
 
     @Bean
@@ -116,5 +130,12 @@ public class OpenApiConfig {
                 .group(group)
                 .displayName(displayName)
                 .pathsToMatch(pathsToMatch);
+    }
+
+    private void markPublic(io.swagger.v3.oas.models.OpenAPI openApi, String path) {
+        io.swagger.v3.oas.models.PathItem pathItem = openApi.getPaths().get(path);
+        if (pathItem != null) {
+            pathItem.readOperations().forEach(operation -> operation.setSecurity(java.util.List.of()));
+        }
     }
 }

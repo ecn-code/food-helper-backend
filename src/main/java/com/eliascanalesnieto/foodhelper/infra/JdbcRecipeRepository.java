@@ -33,10 +33,10 @@ public class JdbcRecipeRepository implements RecipeRepository {
                        r.description,
                        r.instructions,
                        COALESCE(string_agg(CONCAT_WS(' ', p.name, p.description), ' '), '') AS ingredient_text,
-                       COALESCE(SUM(nv.calories * rp.grams / 100), 0) AS calories,
-                       COALESCE(SUM(nv.carbohydrates * rp.grams / 100), 0) AS carbohydrates,
-                       COALESCE(SUM(nv.proteins * rp.grams / 100), 0) AS proteins,
-                       COALESCE(SUM(nv.fats * rp.grams / 100), 0) AS fats,
+                       COALESCE(SUM(ROUND(nv.calories * rp.grams / 100, 2)), 0) AS calories,
+                       COALESCE(SUM(ROUND(nv.carbohydrates * rp.grams / 100, 2)), 0) AS carbohydrates,
+                       COALESCE(SUM(ROUND(nv.proteins * rp.grams / 100, 2)), 0) AS proteins,
+                       COALESCE(SUM(ROUND(nv.fats * rp.grams / 100, 2)), 0) AS fats,
                        EXISTS (SELECT 1 FROM recipe_product_origins origin WHERE origin.recipe_id = r.id) AS has_derived_product
                 FROM recipes r
                 LEFT JOIN recipe_products rp ON rp.recipe_id = r.id
@@ -93,22 +93,6 @@ public class JdbcRecipeRepository implements RecipeRepository {
                 + " ORDER BY id LIMIT :limit OFFSET :offset";
         return jdbcTemplate.query(sql, parameters, (rs, rowNum) -> rs.getLong("id")).stream()
                 .map(this::findById)
-                .toList();
-    }
-
-    private List<Recipe> findPageWithoutFilters(int offset, int limit) {
-        return jdbcTemplate.query(
-                        SELECT_RECIPES_WITH_MEDIA + " ORDER BY r.id LIMIT :limit OFFSET :offset",
-                        new MapSqlParameterSource()
-                                .addValue("limit", limit)
-                                .addValue("offset", offset),
-                        recipeRowMapper())
-                .stream()
-                .map(recipe -> recipe.toBuilder()
-                        .ingredients(recipeIngredientRepository.findAllByRecipeId(recipe.getId()).stream()
-                                .map(this::toDomain)
-                                .toList())
-                        .build())
                 .toList();
     }
 

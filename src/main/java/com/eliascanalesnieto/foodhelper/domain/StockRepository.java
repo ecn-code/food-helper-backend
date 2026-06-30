@@ -14,6 +14,8 @@ public interface StockRepository {
 
     void removeQuantity(Long stockEntryId, BigDecimal quantity);
 
+    void delete(Long stockEntryId);
+
     void restore(CurrentWeekMenuUsedStock usedStock);
 
     List<StockEntry> findStock(LocalDate expiresBefore, Collection<Long> productIds);

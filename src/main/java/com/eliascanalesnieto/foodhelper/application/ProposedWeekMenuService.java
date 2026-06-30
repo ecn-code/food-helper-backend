@@ -3,9 +3,13 @@ package com.eliascanalesnieto.foodhelper.application;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
+import com.eliascanalesnieto.foodhelper.domain.Recipe;
+import com.eliascanalesnieto.foodhelper.domain.RecipeDerivedProduct;
+import com.eliascanalesnieto.foodhelper.domain.RecipeRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenu;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDay;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuProduct;
+import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuRecipeProduction;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuSection;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockRequirement;
@@ -44,6 +48,7 @@ public class ProposedWeekMenuService {
 
     private final ProposedWeekMenuRepository menuRepository;
     private final ProductRepository productRepository;
+    private final RecipeRepository recipeRepository;
     private final StockRepository stockRepository;
     private final CurrentWeekMenuStatsRepository currentWeekMenuStatsRepository;
 
@@ -75,9 +80,12 @@ public class ProposedWeekMenuService {
     @Transactional
     public ProposedWeekMenu upsertDay(Long menuId, ProposedWeekMenuDay day) {
         ensureMenuIsOpen(menuId);
+        validateDayContent(day);
         validateDayParts(day);
         validateProductSortOrders(day);
+        validateRecipeSortOrders(day);
         ProposedWeekMenuDay completedDay = completeDefaultGrams(day);
+        completedDay = completeRecipeProductions(completedDay);
         return enrich(menuRepository.upsertDay(menuId, completedDay));
     }
 
@@ -91,16 +99,16 @@ public class ProposedWeekMenuService {
     }
 
     private void validateDayParts(ProposedWeekMenuDay day) {
-        Set<Long> dayPartIds = day.getSections().stream()
+        Set<Long> dayPartIds = safeSections(day).stream()
                 .map(ProposedWeekMenuSection::getDayPartId)
                 .collect(java.util.stream.Collectors.toSet());
-        if (dayPartIds.size() != day.getSections().size()) {
+        if (dayPartIds.size() != safeSections(day).size()) {
             throw new IllegalArgumentException("Day parts must be unique within a day");
         }
     }
 
     private void validateProductSortOrders(ProposedWeekMenuDay day) {
-        for (ProposedWeekMenuSection section : day.getSections()) {
+        for (ProposedWeekMenuSection section : safeSections(day)) {
             Set<Integer> sortOrders = new HashSet<>();
             for (ProposedWeekMenuProduct product : section.getProducts()) {
                 if (!sortOrders.add(product.getSortOrder())) {
@@ -110,9 +118,24 @@ public class ProposedWeekMenuService {
         }
     }
 
+    private void validateRecipeSortOrders(ProposedWeekMenuDay day) {
+        Set<Integer> sortOrders = new HashSet<>();
+        for (ProposedWeekMenuRecipeProduction recipeProduction : safeRecipeProductions(day)) {
+            if (!sortOrders.add(recipeProduction.getSortOrder())) {
+                throw new IllegalArgumentException("Recipe production sortOrder must be unique within the day");
+            }
+        }
+    }
+
+    private void validateDayContent(ProposedWeekMenuDay day) {
+        if (safeSections(day).isEmpty() && safeRecipeProductions(day).isEmpty()) {
+            throw new IllegalArgumentException("A planned day must contain at least one section or recipe production");
+        }
+    }
+
     private ProposedWeekMenuDay completeDefaultGrams(ProposedWeekMenuDay day) {
-        Map<Long, Product> productsById = loadProductsFromSections(day.getSections());
-        List<ProposedWeekMenuSection> sections = day.getSections().stream()
+        Map<Long, Product> productsById = loadProductsFromSections(safeSections(day));
+        List<ProposedWeekMenuSection> sections = safeSections(day).stream()
                 .map(section -> section.toBuilder()
                         .products(section.getProducts().stream()
                                 .map(product -> {
@@ -132,6 +155,23 @@ public class ProposedWeekMenuService {
         return day.toBuilder().sections(sections).build();
     }
 
+    private ProposedWeekMenuDay completeRecipeProductions(ProposedWeekMenuDay day) {
+        List<ProposedWeekMenuRecipeProduction> recipeProductions = safeRecipeProductions(day);
+        if (recipeProductions.isEmpty()) {
+            return day.toBuilder().recipeProductions(List.of()).build();
+        }
+        Map<Long, Recipe> recipesById = loadRecipes(recipeProductions);
+        Map<Long, Product> productsById = loadProductsFromRecipes(recipesById.values());
+        List<ProposedWeekMenuRecipeProduction> completedRecipeProductions = recipeProductions.stream()
+                .map(recipeProduction -> completeRecipeProduction(
+                        recipeProduction,
+                        recipesById.get(recipeProduction.getRecipeId()),
+                        productsById
+                ))
+                .toList();
+        return day.toBuilder().recipeProductions(completedRecipeProductions).build();
+    }
+
     private ProposedWeekMenu enrich(ProposedWeekMenu menu) {
         Map<Long, Product> productsById = loadProducts(menu.getDays());
         List<ProposedWeekMenuDay> enrichedDays = menu.getDays().stream()
@@ -145,11 +185,13 @@ public class ProposedWeekMenuService {
     }
 
     private ProposedWeekMenuDay enrichDay(ProposedWeekMenuDay day, Map<Long, Product> productsById) {
-        List<ProposedWeekMenuSection> sections = day.getSections().stream()
+        List<ProposedWeekMenuSection> sections = safeSections(day).stream()
                 .map(section -> enrichSection(section, productsById))
                 .toList();
+        List<ProposedWeekMenuRecipeProduction> recipeProductions = enrichRecipeProductions(day.getRecipeProductions());
         return day.toBuilder()
                 .sections(sections)
+                .recipeProductions(recipeProductions)
                 .nutritionalValues(sumSections(sections))
                 .build();
     }
@@ -175,7 +217,7 @@ public class ProposedWeekMenuService {
 
     private Map<Long, Product> loadProducts(List<ProposedWeekMenuDay> days) {
         List<ProposedWeekMenuSection> sections = days.stream()
-                .flatMap(day -> day.getSections().stream())
+                .flatMap(day -> safeSections(day).stream())
                 .toList();
         return loadProductsFromSections(sections);
     }
@@ -198,6 +240,72 @@ public class ProposedWeekMenuService {
         return loadProductsFromProducts(sections.stream()
                 .flatMap(section -> section.getProducts().stream())
                 .toList());
+    }
+
+    private Map<Long, Product> loadProductsFromRecipes(Iterable<Recipe> recipes) {
+        List<Long> productIds = new ArrayList<>();
+        for (Recipe recipe : recipes) {
+            RecipeDerivedProduct derivedProduct = recipe.getDerivedProduct();
+            if (derivedProduct == null) {
+                throw new IllegalArgumentException("Recipe must have a derived product");
+            }
+            productIds.add(derivedProduct.getProductId());
+        }
+        List<Long> uniqueProductIds = productIds.stream().distinct().toList();
+        List<Product> loadedProducts = productRepository.findByIds(uniqueProductIds);
+        if (loadedProducts.size() != uniqueProductIds.size()) {
+            throw new ResourceNotFoundException("Derived product not found for recipe production");
+        }
+        Map<Long, Product> productsById = new LinkedHashMap<>();
+        loadedProducts.forEach(product -> productsById.put(product.getId(), product));
+        return productsById;
+    }
+
+    private Map<Long, Recipe> loadRecipes(List<ProposedWeekMenuRecipeProduction> recipeProductions) {
+        Map<Long, Recipe> recipesById = new LinkedHashMap<>();
+        for (Long recipeId : recipeProductions.stream().map(ProposedWeekMenuRecipeProduction::getRecipeId).distinct().toList()) {
+            Recipe recipe = recipeRepository.findById(recipeId);
+            if (recipe.getDerivedProduct() == null) {
+                throw new IllegalArgumentException("Recipe must have a derived product");
+            }
+            recipesById.put(recipeId, recipe);
+        }
+        return recipesById;
+    }
+
+    private List<ProposedWeekMenuRecipeProduction> enrichRecipeProductions(List<ProposedWeekMenuRecipeProduction> recipeProductions) {
+        if (recipeProductions == null || recipeProductions.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, Recipe> recipesById = loadRecipes(recipeProductions);
+        Map<Long, Product> productsById = loadProductsFromRecipes(recipesById.values());
+        return recipeProductions.stream()
+                .map(recipeProduction -> completeRecipeProduction(
+                        recipeProduction,
+                        recipesById.get(recipeProduction.getRecipeId()),
+                        productsById
+                ))
+                .toList();
+    }
+
+    private ProposedWeekMenuRecipeProduction completeRecipeProduction(
+            ProposedWeekMenuRecipeProduction recipeProduction,
+            Recipe recipe,
+            Map<Long, Product> productsById
+    ) {
+        RecipeDerivedProduct derivedProduct = recipe.getDerivedProduct();
+        Product product = productsById.get(derivedProduct.getProductId());
+        if (product == null) {
+            throw new ResourceNotFoundException("Derived product not found for recipe production");
+        }
+        BigDecimal producedUnits = scale(recipeProduction.getProducedGrams()
+                .divide(derivedProduct.getGramsPerUnit(), SCALE, RoundingMode.HALF_UP));
+        return recipeProduction.toBuilder()
+                .recipeName(recipe.getName())
+                .productId(product.getId())
+                .productName(product.getName())
+                .producedUnits(producedUnits)
+                .build();
     }
 
     private ProposedWeekMenuStockSummary buildStockSummary(List<ProposedWeekMenuDay> days, Map<Long, Product> productsById) {
@@ -332,6 +440,14 @@ public class ProposedWeekMenuService {
 
     private BigDecimal normalize(BigDecimal value) {
         return value == null ? ZERO : scale(value);
+    }
+
+    private List<ProposedWeekMenuSection> safeSections(ProposedWeekMenuDay day) {
+        return day.getSections() == null ? List.of() : day.getSections();
+    }
+
+    private List<ProposedWeekMenuRecipeProduction> safeRecipeProductions(ProposedWeekMenuDay day) {
+        return day.getRecipeProductions() == null ? List.of() : day.getRecipeProductions();
     }
 
     private final class StockRequirementAccumulator {

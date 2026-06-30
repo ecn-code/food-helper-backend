@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuStatsRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
+import com.eliascanalesnieto.foodhelper.domain.RecipeRepository;
 import com.eliascanalesnieto.foodhelper.domain.PlanningState;
 import com.eliascanalesnieto.foodhelper.domain.PlanningSummary;
 import com.eliascanalesnieto.foodhelper.domain.StockRepository;
@@ -32,6 +33,9 @@ class ProposedWeekMenuServiceTest {
 
     @Mock
     private ProductRepository productRepository;
+
+    @Mock
+    private RecipeRepository recipeRepository;
 
     @Mock
     private CurrentWeekMenuStatsRepository currentWeekMenuStatsRepository;

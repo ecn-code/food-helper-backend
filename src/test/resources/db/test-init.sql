@@ -191,6 +191,32 @@ CREATE TABLE IF NOT EXISTS current_week_menu_stats (
         ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS menu_stock_movements (
+    id BIGSERIAL PRIMARY KEY,
+    current_week_menu_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    user_username VARCHAR(80) NOT NULL,
+    product_id BIGINT NOT NULL,
+    product_name VARCHAR(150) NOT NULL,
+    quantity NUMERIC(12,2) NOT NULL CHECK (quantity > 0),
+    price NUMERIC(12,2) NOT NULL CHECK (price >= 0),
+    total_cost NUMERIC(12,2) NOT NULL,
+    description VARCHAR(255),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT fk_menu_stock_movements_menu
+        FOREIGN KEY (current_week_menu_id)
+        REFERENCES current_week_menus(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_menu_stock_movements_user
+        FOREIGN KEY (user_id)
+        REFERENCES app_users(id)
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_menu_stock_movements_product
+        FOREIGN KEY (product_id)
+        REFERENCES products(id)
+        ON DELETE RESTRICT
+);
+
 CREATE TABLE IF NOT EXISTS app_users (
     id BIGSERIAL PRIMARY KEY,
     username VARCHAR(80) NOT NULL UNIQUE,
@@ -198,9 +224,61 @@ CREATE TABLE IF NOT EXISTS app_users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS money_boxes (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    user_id BIGINT UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT fk_money_boxes_user
+        FOREIGN KEY (user_id)
+        REFERENCES app_users(id)
+        ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_manual_money_boxes_name_lower
+    ON money_boxes (LOWER(name))
+    WHERE user_id IS NULL;
+
+CREATE OR REPLACE FUNCTION create_user_money_box()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO money_boxes (name, user_id)
+    VALUES (NEW.username, NEW.id)
+    ON CONFLICT (user_id) DO NOTHING;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_create_user_money_box ON app_users;
+
+CREATE TRIGGER trg_create_user_money_box
+AFTER INSERT ON app_users
+FOR EACH ROW
+EXECUTE FUNCTION create_user_money_box();
+
+CREATE TABLE IF NOT EXISTS user_menu_history (
+    id BIGSERIAL PRIMARY KEY,
+    current_week_menu_id BIGINT NOT NULL,
+    person_id BIGINT NOT NULL,
+    person_name VARCHAR(80) NOT NULL,
+    menu_start_date DATE NOT NULL,
+    menu_end_date DATE NOT NULL,
+    menu_snapshot_json TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT fk_user_menu_history_menu FOREIGN KEY (current_week_menu_id)
+        REFERENCES current_week_menus(id) ON DELETE CASCADE,
+    CONSTRAINT fk_user_menu_history_person FOREIGN KEY (person_id)
+        REFERENCES app_users(id) ON DELETE RESTRICT,
+    CONSTRAINT uq_user_menu_history_menu_person UNIQUE (current_week_menu_id, person_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_menu_history_person_end_date
+    ON user_menu_history(person_id, menu_end_date);
+
 CREATE TABLE IF NOT EXISTS user_money_movements (
     id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL,
+    money_box_id BIGINT NOT NULL,
+    user_id BIGINT,
     amount NUMERIC(12, 2) NOT NULL,
     description VARCHAR(255),
     current_week_menu_id BIGINT,
@@ -208,6 +286,10 @@ CREATE TABLE IF NOT EXISTS user_money_movements (
     CONSTRAINT fk_user_money_movements_user
         FOREIGN KEY (user_id)
         REFERENCES app_users(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_user_money_movements_money_box
+        FOREIGN KEY (money_box_id)
+        REFERENCES money_boxes(id)
         ON DELETE CASCADE,
     CONSTRAINT fk_user_money_movements_current_week_menu
         FOREIGN KEY (current_week_menu_id)
@@ -217,6 +299,24 @@ CREATE TABLE IF NOT EXISTS user_money_movements (
 
 CREATE INDEX IF NOT EXISTS idx_user_money_movements_user_created
     ON user_money_movements(user_id, created_at DESC, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_user_money_movements_box_created
+    ON user_money_movements(money_box_id, created_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS user_weight_entries (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    weight NUMERIC(6, 2) NOT NULL CHECK (weight > 0),
+    recorded_at TIMESTAMPTZ NOT NULL,
+    notes TEXT,
+    CONSTRAINT fk_user_weight_entries_user
+        FOREIGN KEY (user_id)
+        REFERENCES app_users(id)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_weight_entries_user_recorded
+    ON user_weight_entries(user_id, recorded_at, id);
 
 CREATE TABLE IF NOT EXISTS nutritional_rules (
     id SMALLINT PRIMARY KEY,

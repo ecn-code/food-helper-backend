@@ -22,14 +22,19 @@ public class UserWeightService {
 
     @Transactional
     public UserWeightResponse create(Long userId, BigDecimal weight, Instant recordedAt) {
-        validateMeasurement(weight, recordedAt);
-        return toResponse(repository.create(userId, scale(weight), recordedAt));
+        return create(userId, weight, recordedAt, null);
     }
 
     @Transactional
-    public UserWeightResponse update(Long userId, Long weightId, BigDecimal weight, Instant recordedAt) {
+    public UserWeightResponse create(Long userId, BigDecimal weight, Instant recordedAt, String notes) {
         validateMeasurement(weight, recordedAt);
-        return toResponse(repository.update(userId, weightId, scale(weight), recordedAt));
+        return toResponse(repository.create(userId, scale(weight), recordedAt, notes));
+    }
+
+    @Transactional
+    public UserWeightResponse update(Long userId, Long weightId, BigDecimal weight, Instant recordedAt, String notes) {
+        validateMeasurement(weight, recordedAt);
+        return toResponse(repository.update(userId, weightId, scale(weight), recordedAt, notes));
     }
 
     @Transactional
@@ -84,7 +89,15 @@ public class UserWeightService {
     }
 
     private UserWeightResponse toResponse(UserWeightEntry entry) {
-        return new UserWeightResponse(entry.getId(), entry.getUserId(), scale(entry.getWeight()), entry.getRecordedAt());
+        return new UserWeightResponse(
+                entry.getId(),
+                entry.getUserId(),
+                scale(entry.getWeight()),
+                entry.getRecordedAt(),
+                entry.getNotes(),
+                entry.getCreatedAt(),
+                entry.getUpdatedAt()
+        );
     }
 
     private BigDecimal scale(BigDecimal weight) {

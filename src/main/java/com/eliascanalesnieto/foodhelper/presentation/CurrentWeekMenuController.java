@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -25,7 +26,7 @@ import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/api/v1/menus")
 @RequiredArgsConstructor
-@Tag(name = "Menus", description = "Inspect menu snapshots, consumed stock, missing products, and closure stats")
+@Tag(name = "Menus", description = "Inspect menu snapshots, consumed stock, recipe-to-stock transfers, missing products, and closure stats")
 public class CurrentWeekMenuController {
     private final CurrentWeekMenuService service;
 
@@ -60,7 +61,7 @@ public class CurrentWeekMenuController {
     @Operation(
             operationId = "undoMenuCreation",
             summary = "Undo menu creation",
-            description = "Returns every consumed quantity to its original stock entry, removes the linked money movement, and deletes the open menu so its planning can be established again. Closed menus cannot be undone."
+            description = "Returns every consumed quantity to its original stock entry, removes the linked money movement, reverses transferred recipe stock when possible, and deletes the open menu so its planning can be established again. Closed menus cannot be undone."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "Menu creation undone"),
@@ -71,6 +72,26 @@ public class CurrentWeekMenuController {
     })
     public void undo(@PathVariable Long id) {
         service.undo(id);
+    }
+
+    @PostMapping("/{id}/recipe-productions/{recipeProductionId}/transfer")
+    @Operation(
+            summary = "Transfer recipe production to stock",
+            description = "Creates a stock entry from one recipe production inside the menu, records the transfer trace in the menu snapshot, and refuses to transfer the same production more than once."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Recipe production transferred",
+                    content = @Content(schema = @Schema(implementation = CurrentWeekMenuResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Menu or recipe production not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "400", description = "Menu cannot be modified or recipe production was already transferred",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public CurrentWeekMenuResponse transferRecipeProduction(
+            @PathVariable Long id,
+            @PathVariable Long recipeProductionId
+    ) {
+        return service.transferRecipeProduction(id, recipeProductionId);
     }
 
     @GetMapping("/{id}/used-stock")
@@ -86,6 +107,21 @@ public class CurrentWeekMenuController {
     })
     public List<CurrentWeekMenuUsedStockResponse> findUsedStock(@PathVariable Long id) {
         return service.findById(id).usedStock();
+    }
+
+    @GetMapping("/{id}/stock-movements")
+    @Operation(
+            summary = "List stock repercussion movements for menu",
+            description = "Returns the historical stock repercussion movements recorded while the menu is open."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Stock repercussion movements returned",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = MenuStockMovementResponse.class)))),
+            @ApiResponse(responseCode = "404", description = "Menu not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public List<MenuStockMovementResponse> findStockMovements(@PathVariable Long id) {
+        return service.findStockMovements(id);
     }
 
     @GetMapping("/{id}/shopping-list")
@@ -107,10 +143,50 @@ public class CurrentWeekMenuController {
         return service.findShoppingList(id, supermarketId);
     }
 
+    @PutMapping("/{id}/payer")
+    @Operation(
+            summary = "Update menu responsible",
+            description = "Updates the default responsible user used by the front when recording stock repercussion movements."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Menu responsible updated",
+                    content = @Content(schema = @Schema(implementation = CurrentWeekMenuResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Menu cannot be modified or user is invalid",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "404", description = "Menu or user not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public CurrentWeekMenuResponse updateResponsible(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateCurrentWeekMenuPayerRequest request
+    ) {
+        return service.updateResponsible(id, request.userId());
+    }
+
+    @PostMapping("/{id}/stock-movements")
+    @Operation(
+            summary = "Record stock repercussion movement",
+            description = "Records a positive stock movement for an open menu, stores the historical ledger entry, and charges the selected user money box using the menu responsible as default when userId is omitted."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Stock repercussion recorded",
+                    content = @Content(schema = @Schema(implementation = CurrentWeekMenuResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Menu cannot be modified or movement is invalid",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "404", description = "Menu, product, or user not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public CurrentWeekMenuResponse addStockMovement(
+            @PathVariable Long id,
+            @Valid @RequestBody CreateMenuStockMovementRequest request
+    ) {
+        return service.addStockMovement(id, request);
+    }
+
     @PostMapping("/{id}/close")
     @Operation(
             summary = "Close menu",
-            description = "Closes a menu after its end date and saves an immutable history snapshot for every selected person."
+            description = "Closes a menu after its end date and saves an immutable history snapshot for every selected person. Repeating a successful close returns the originally saved statistics without duplicating snapshots."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Menu closed",

@@ -30,7 +30,7 @@ public class JdbcCurrentWeekMenuRepository implements CurrentWeekMenuRepository 
             ps.setString(2, objectMapper.writeValueAsString(menu));
             return ps;
         }, keyHolder);
-        CurrentWeekMenuResponse persisted = new CurrentWeekMenuResponse(
+        return save(new CurrentWeekMenuResponse(
                 keyHolder.getKey().longValue(),
                 menu.planningId(),
                 menu.payerUserId(),
@@ -42,14 +42,20 @@ public class JdbcCurrentWeekMenuRepository implements CurrentWeekMenuRepository 
                 menu.stockSummary(),
                 menu.usedStock(),
                 menu.shoppingList(),
+                menu.stockMovements(),
+                menu.recipeProductions(),
                 menu.nutritionalRules()
-        );
+        ));
+    }
+
+    @Override
+    public CurrentWeekMenuResponse save(CurrentWeekMenuResponse menu) {
         jdbcTemplate.update(
                 "UPDATE current_week_menus SET snapshot_json = ? WHERE id = ?",
-                objectMapper.writeValueAsString(persisted),
-                persisted.id()
+                objectMapper.writeValueAsString(menu),
+                menu.id()
         );
-        return persisted;
+        return menu;
     }
 
     @Override

@@ -21,4 +21,6 @@ public class CurrentWeekMenu {
     ProposedWeekMenuStockSummary stockSummary;
     List<CurrentWeekMenuUsedStock> usedStock;
     List<CurrentWeekMenuShoppingListItem> shoppingList;
+    List<MenuStockMovement> stockMovements;
+    List<CurrentWeekMenuRecipeProduction> recipeProductions;
 }

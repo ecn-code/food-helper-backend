@@ -6,6 +6,8 @@ import java.util.List;
 public interface CurrentWeekMenuRepository {
     CurrentWeekMenuResponse create(CurrentWeekMenuResponse menu);
 
+    CurrentWeekMenuResponse save(CurrentWeekMenuResponse menu);
+
     CurrentWeekMenuResponse findById(Long id);
 
     CurrentWeekMenuResponse findByProposedWeekMenuId(Long proposedWeekMenuId);

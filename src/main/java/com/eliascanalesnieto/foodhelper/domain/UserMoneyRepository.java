@@ -6,6 +6,10 @@ import java.util.List;
 public interface UserMoneyRepository {
     UserMoneyMovement addMovement(Long userId, BigDecimal amount, String description, Long currentWeekMenuId);
 
+    default UserMoneyMovement addMovement(Long userId, BigDecimal amount, String description) {
+        return addMovement(userId, amount, description, null);
+    }
+
     UserMoneyBox findMoneyBox(Long userId);
 
     MoneyBox createManualMoneyBox(String name);

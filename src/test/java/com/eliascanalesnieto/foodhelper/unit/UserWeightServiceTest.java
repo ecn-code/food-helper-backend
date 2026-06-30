@@ -75,6 +75,8 @@ class UserWeightServiceTest {
                 .userId(userId)
                 .weight(new BigDecimal(weight))
                 .recordedAt(recordedAt)
+                .createdAt(recordedAt)
+                .updatedAt(recordedAt)
                 .build();
     }
 }

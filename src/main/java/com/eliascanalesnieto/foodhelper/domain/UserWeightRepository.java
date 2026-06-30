@@ -5,9 +5,9 @@ import java.time.Instant;
 import java.util.List;
 
 public interface UserWeightRepository {
-    UserWeightEntry create(Long userId, BigDecimal weight, Instant recordedAt);
+    UserWeightEntry create(Long userId, BigDecimal weight, Instant recordedAt, String notes);
 
-    UserWeightEntry update(Long userId, Long weightId, BigDecimal weight, Instant recordedAt);
+    UserWeightEntry update(Long userId, Long weightId, BigDecimal weight, Instant recordedAt, String notes);
 
     void delete(Long userId, Long weightId);
 

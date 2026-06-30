@@ -1,0 +1,30 @@
+{
+  "products_exported": 293,
+  "recipes_exported": 124,
+  "recipe_ingredients_exported": 722,
+  "synthetic_products_exported": 1,
+  "lines_read": 515,
+  "skipped_without_name": 0,
+  "skipped_recipe_ingredients": 0,
+  "ignored_by_pk": {
+    "menu#roma": 5,
+    "nutritional_value": 5,
+    "settings": 1,
+    "unit": 3,
+    "user": 3,
+    "weekly_menu#elias": 41,
+    "weekly_menu#roma": 41
+  },
+  "ignored_nutrients": {
+    "Azucares": 417
+  },
+  "defaulted_nutrients": {
+    "proteins": 1
+  },
+  "missing_ingredient_products": {},
+  "normalized_ingredient_products": {
+    "Harina de Maiz -> Harina de maiz": 2,
+    "Seitan 1/4 -> Seitan": 1,
+    "Seitan 1/8 -> Seitan": 2
+  }
+}

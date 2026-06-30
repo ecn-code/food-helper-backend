@@ -5,6 +5,7 @@ import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenu;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDay;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuProduct;
+import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuRecipeProduction;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuSection;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockRequirement;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummary;
@@ -19,21 +20,25 @@ public class ProposedWeekMenuApiMapper {
     private final NutritionalRulesService nutritionalRulesService;
 
     public ProposedWeekMenuResponse toResponse(ProposedWeekMenu menu) {
+        java.util.List<ProposedWeekMenuDay> days = menu.getDays() == null ? java.util.List.of() : menu.getDays();
         return new ProposedWeekMenuResponse(
                 menu.getId(),
                 menu.getStartDate(),
                 menu.getEndDate(),
-                menu.getDays().stream().map(this::toResponse).toList(),
+                days.stream().map(this::toResponse).toList(),
                 toResponse(menu.getNutritionalValues()),
                 toResponse(menu.getStockSummary()),
-                nutritionalRulesService.evaluate(menu.getNutritionalValues(), menu.getDays().size())
+                nutritionalRulesService.evaluate(menu.getNutritionalValues(), days.size())
         );
     }
 
     public ProposedWeekMenuDay toDomain(UpsertProposedWeekMenuDayRequest request) {
         return ProposedWeekMenuDay.builder()
                 .date(request.date())
-                .sections(request.sections().stream()
+                .sections((request.sections() == null ? java.util.List.<ProposedWeekMenuSectionRequest>of() : request.sections()).stream()
+                        .map(this::toDomain)
+                        .toList())
+                .recipeProductions((request.recipeProductions() == null ? java.util.List.<ProposedWeekMenuRecipeProductionRequest>of() : request.recipeProductions()).stream()
                         .map(this::toDomain)
                         .toList())
                 .build();
@@ -57,11 +62,20 @@ public class ProposedWeekMenuApiMapper {
                 .build();
     }
 
+    private ProposedWeekMenuRecipeProduction toDomain(ProposedWeekMenuRecipeProductionRequest request) {
+        return ProposedWeekMenuRecipeProduction.builder()
+                .recipeId(request.recipeId())
+                .producedGrams(request.producedGrams())
+                .sortOrder(request.sortOrder())
+                .build();
+    }
+
     private ProposedWeekMenuDayResponse toResponse(ProposedWeekMenuDay day) {
         return new ProposedWeekMenuDayResponse(
                 day.getId(),
                 day.getDate(),
-                day.getSections().stream().map(this::toResponse).toList(),
+                (day.getSections() == null ? java.util.List.<ProposedWeekMenuSection>of() : day.getSections()).stream().map(this::toResponse).toList(),
+                (day.getRecipeProductions() == null ? java.util.List.<ProposedWeekMenuRecipeProduction>of() : day.getRecipeProductions()).stream().map(this::toResponse).toList(),
                 toResponse(day.getNutritionalValues())
         );
     }
@@ -86,6 +100,19 @@ public class ProposedWeekMenuApiMapper {
                 product.getGrams(),
                 product.getSortOrder(),
                 toResponse(product.getNutritionalValues())
+        );
+    }
+
+    private ProposedWeekMenuRecipeProductionResponse toResponse(ProposedWeekMenuRecipeProduction production) {
+        return new ProposedWeekMenuRecipeProductionResponse(
+                production.getId(),
+                production.getRecipeId(),
+                production.getRecipeName(),
+                production.getProductId(),
+                production.getProductName(),
+                production.getProducedGrams(),
+                production.getProducedUnits(),
+                production.getSortOrder()
         );
     }
 

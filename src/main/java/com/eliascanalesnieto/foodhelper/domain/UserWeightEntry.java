@@ -12,4 +12,7 @@ public class UserWeightEntry {
     Long userId;
     BigDecimal weight;
     Instant recordedAt;
+    String notes;
+    Instant createdAt;
+    Instant updatedAt;
 }

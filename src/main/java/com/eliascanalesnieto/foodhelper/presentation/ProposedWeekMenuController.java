@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/planning")
 @RequiredArgsConstructor
-@Tag(name = "Planning", description = "Plan a menu for any date range before creating it")
+@Tag(name = "Planning", description = "Plan a menu for any date range, including recipe productions, before creating it")
 public class ProposedWeekMenuController {
     private final ProposedWeekMenuService service;
     private final CurrentWeekMenuService currentWeekMenuService;
@@ -80,7 +80,7 @@ public class ProposedWeekMenuController {
     @PutMapping("/{id}/days")
     @Operation(
             summary = "Create or replace planned day",
-            description = "Creates or replaces one planned day. Each selected day part can appear only once and products keep their explicit order, which must be unique within each section."
+            description = "Creates or replaces one planned day. Each selected day part can appear only once, products keep their explicit order, and optional recipe productions generate stock instead of being eaten."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Planning updated",
@@ -101,7 +101,7 @@ public class ProposedWeekMenuController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
             summary = "Create menu from planning",
-            description = "Consumes the user-confirmed stock allocation, or automatically uses the earliest expiration date when no allocation is supplied. It creates a menu snapshot, stores missing products as a shopping list, and subtracts the applied stock cost from the selected payer user's money box."
+            description = "Consumes the user-confirmed stock allocation, or automatically uses the earliest expiration date when no allocation is supplied. It creates a menu snapshot, stores missing products as a shopping list, subtracts the applied stock cost from the selected payer user's money box, and carries recipe productions into the menu snapshot."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Menu created",

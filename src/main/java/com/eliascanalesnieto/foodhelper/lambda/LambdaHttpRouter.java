@@ -26,6 +26,7 @@ import com.eliascanalesnieto.foodhelper.presentation.AdjustStockQuantityRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateProductRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateMoneyBoxRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateProposedWeekMenuRequest;
+import com.eliascanalesnieto.foodhelper.presentation.CreateMenuStockMovementRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeDerivedProductRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateStockEntryRequest;
@@ -43,6 +44,7 @@ import com.eliascanalesnieto.foodhelper.presentation.RegisterRequest;
 import com.eliascanalesnieto.foodhelper.presentation.SaveNutritionalRulesRequest;
 import com.eliascanalesnieto.foodhelper.presentation.SupermarketRequest;
 import com.eliascanalesnieto.foodhelper.presentation.SupermarketResponse;
+import com.eliascanalesnieto.foodhelper.presentation.UpdateCurrentWeekMenuPayerRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateStockEntryRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateUserWeightRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpsertProposedWeekMenuDayRequest;
@@ -333,6 +335,31 @@ public class LambdaHttpRouter {
         }
 
         if (path != null && path.startsWith("/api/v1/menus/")) {
+            if (path.endsWith("/payer")) {
+                Long id = parseId(path.substring(0, path.lastIndexOf('/')));
+                if ("PUT".equals(method)) {
+                    UpdateCurrentWeekMenuPayerRequest body = readBody(request.getBody(), UpdateCurrentWeekMenuPayerRequest.class);
+                    return json(200, currentWeekMenuService.updateResponsible(id, body.userId()));
+                }
+            }
+            if (path.endsWith("/stock-movements")) {
+                Long id = parseId(path.substring(0, path.lastIndexOf('/')));
+                if ("GET".equals(method)) {
+                    return json(200, currentWeekMenuService.findStockMovements(id));
+                }
+                if ("POST".equals(method)) {
+                    CreateMenuStockMovementRequest body = readBody(request.getBody(), CreateMenuStockMovementRequest.class);
+                    return json(200, currentWeekMenuService.addStockMovement(id, body));
+                }
+            }
+            if (path.matches("/api/v1/menus/\\d+/recipe-productions/\\d+/transfer")) {
+                String[] segments = path.split("/");
+                Long menuId = Long.parseLong(segments[4]);
+                Long recipeProductionId = Long.parseLong(segments[6]);
+                if ("POST".equals(method)) {
+                    return json(200, currentWeekMenuService.transferRecipeProduction(menuId, recipeProductionId));
+                }
+            }
             if (path.endsWith("/close")) {
                 Long id = parseId(path.substring(0, path.lastIndexOf('/')));
                 if ("POST".equals(method)) {
@@ -417,6 +444,15 @@ public class LambdaHttpRouter {
             }
         }
 
+        if ("GET".equals(method) && path != null && path.matches("/api/v1/users/\\d+/menu-history")) {
+            Long personId = Long.parseLong(path.split("/")[4]);
+            return json(200, currentWeekMenuService.findHistoryByRange(
+                    personId,
+                    parseRequiredInstant(queryParam(request, "from"), "from"),
+                    parseRequiredInstant(queryParam(request, "to"), "to")
+            ));
+        }
+
         if ("GET".equals(method) && path != null && path.matches("/api/v1/users/\\d+/menu-history/monthly")) {
             Long personId = Long.parseLong(path.split("/")[4]);
             return json(200, currentWeekMenuService.findMonthlyHistory(
@@ -451,7 +487,7 @@ public class LambdaHttpRouter {
             Long weightId = Long.parseLong(pathParts[6]);
             if ("PUT".equals(method)) {
                 UpdateUserWeightRequest body = readBody(request.getBody(), UpdateUserWeightRequest.class);
-                return json(200, userWeightService.update(userId, weightId, body.weight(), body.recordedAt()));
+                return json(200, userWeightService.update(userId, weightId, body.weight(), body.recordedAt(), body.notes()));
             }
             if ("DELETE".equals(method)) {
                 userWeightService.delete(userId, weightId);
@@ -463,7 +499,7 @@ public class LambdaHttpRouter {
             Long userId = Long.parseLong(path.split("/")[4]);
             if ("POST".equals(method)) {
                 CreateUserWeightRequest body = readBody(request.getBody(), CreateUserWeightRequest.class);
-                return json(201, userWeightService.create(userId, body.weight(), body.recordedAt()));
+                return json(201, userWeightService.create(userId, body.weight(), body.recordedAt(), body.notes()));
             }
             if ("GET".equals(method)) {
                 return json(200, userWeightService.findByPeriod(

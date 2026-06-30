@@ -35,7 +35,7 @@ Function definition:
 ## CORS
 
 - `APP_CORS_ALLOWED_ORIGIN_PATTERNS`: comma-separated browser origin patterns. Local development defaults to `http://localhost:*` and `http://127.0.0.1:*`.
-- Production must set this variable to the deployed S3/CloudFront frontend origin (for example `https://d1234567890.cloudfront.net`); multiple origins may be supplied as a comma-separated list.
+- Production must set this variable to the deployed frontend origin, for example `https://d1234567890.cloudfront.net` or `http://192.168.1.133`; multiple origins may be supplied as a comma-separated list.
 
 ## API documentation
 The OpenAPI contract is the source of truth for endpoints, parameters, authentication, request and response schemas, validation errors, and examples:
@@ -52,6 +52,25 @@ Every new endpoint, and every change to request or response data in an existing 
 - Integration tests with PostgreSQL Testcontainers
 - Lambda route integration test with API Gateway event objects
 - LocalStack Docker-only smoke test
+
+## Raspberry Pi deployment
+
+For the simplest deployment flow, use:
+
+```bash
+./scripts/deploy_to_raspberry.sh
+```
+
+That script:
+
+- builds the JAR locally
+- copies it to `pi-server`
+- installs it in `/opt/foodhelper/foodhelper-api.jar`
+- updates `APP_AUTH_REGISTRATION_CODE` on the Raspberry when `DEPLOY_AUTH_REGISTRATION_CODE` is set
+- restarts the `foodhelper` systemd service
+- checks `http://localhost:8080/actuator/health`
+
+The Raspberry Pi already exposes the app through the `foodhelper` service and PostgreSQL runs locally on the device.
 
 ## Docker host
 When running against a remote Docker host, create an SSH tunnel to the Docker socket before starting the app or the tests:

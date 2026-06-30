@@ -4,6 +4,7 @@ import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuPeriodStatsD
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuPeriodStatsResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuStatsResponse;
+import com.eliascanalesnieto.foodhelper.presentation.MenuStockMovementResponse;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.YearMonth;
@@ -52,8 +53,13 @@ public class CurrentWeekMenuStatsService {
                 .map(day -> day.nutritionalValues().fats())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal totalMoneySpent = menus.stream()
-                .flatMap(menu -> menu.usedStock().stream())
+                .flatMap(menu -> safeUsedStock(menu).stream())
                 .map(item -> item.totalCost() == null ? ZERO : item.totalCost())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalRepercuted = menus.stream()
+                .flatMap(menu -> safeStockMovements(menu).stream())
+                .map(MenuStockMovementResponse::totalCost)
+                .map(total -> total == null ? ZERO : total)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         int dayCount = days.size();
@@ -75,7 +81,7 @@ public class CurrentWeekMenuStatsService {
                 average(totalCarbohydrates, dayCount),
                 average(totalProteins, dayCount),
                 average(totalFats, dayCount),
-                totalMoneySpent.setScale(SCALE, RoundingMode.HALF_UP)
+                totalMoneySpent.add(totalRepercuted).setScale(SCALE, RoundingMode.HALF_UP)
         );
     }
 
@@ -87,5 +93,13 @@ public class CurrentWeekMenuStatsService {
 
     private BigDecimal average(BigDecimal total, int count) {
         return total.divide(BigDecimal.valueOf(count), SCALE, RoundingMode.HALF_UP);
+    }
+
+    private List<com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuUsedStockResponse> safeUsedStock(CurrentWeekMenuResponse menu) {
+        return menu.usedStock() == null ? List.of() : menu.usedStock();
+    }
+
+    private List<MenuStockMovementResponse> safeStockMovements(CurrentWeekMenuResponse menu) {
+        return menu.stockMovements() == null ? List.of() : menu.stockMovements();
     }
 }
