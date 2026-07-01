@@ -8,11 +8,14 @@ import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuProduct;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuRecipeProduction;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuSection;
+import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.PlanningState;
 import com.eliascanalesnieto.foodhelper.domain.PlanningSummary;
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
+import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.PreparedStatement;
+import java.sql.Types;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -91,6 +94,14 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
                         PlanningState.valueOf(rs.getString("state")),
                         rs.getObject("menu_id", Long.class)
                 ));
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long id) {
+        if (jdbcTemplate.update("DELETE FROM proposed_week_menus WHERE id = ?", id) == 0) {
+            throw new ResourceNotFoundException("Planning not found");
+        }
     }
 
     @Override
@@ -187,15 +198,17 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
 
     private List<ProposedWeekMenuProduct> findProducts(Long sectionId) {
         return jdbcTemplate.query("""
-                        SELECT product_id, units, grams, sort_order
+                        SELECT product_id, product_name, units, grams, calories, carbohydrates, proteins, fats, sort_order
                         FROM proposed_week_menu_products
                         WHERE section_id = ?
                         ORDER BY sort_order
                         """,
                 (rs, rowNum) -> ProposedWeekMenuProduct.builder()
-                        .productId(rs.getLong("product_id"))
+                        .productId(rs.getObject("product_id", Long.class))
+                        .productName(rs.getString("product_name"))
                         .units(rs.getBigDecimal("units"))
                         .grams(rs.getBigDecimal("grams"))
+                        .nutritionalValues(readNutritionalValues(rs))
                         .sortOrder(rs.getInt("sort_order"))
                         .build(),
                 sectionId
@@ -248,15 +261,43 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
 
     private void saveProducts(Long sectionId, List<ProposedWeekMenuProduct> products) {
         jdbcTemplate.batchUpdate("""
-                INSERT INTO proposed_week_menu_products (section_id, product_id, units, grams, sort_order)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO proposed_week_menu_products (
+                    section_id, product_id, product_name, units, grams, calories, carbohydrates, proteins, fats, sort_order
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, products, products.size(), (ps, product) -> {
             ps.setLong(1, sectionId);
-            ps.setLong(2, product.getProductId());
-            ps.setBigDecimal(3, product.getUnits());
-            ps.setBigDecimal(4, product.getGrams());
-            ps.setInt(5, product.getSortOrder());
+            if (product.getProductId() == null) {
+                ps.setNull(2, Types.BIGINT);
+            } else {
+                ps.setLong(2, product.getProductId());
+            }
+            ps.setString(3, product.getProductName());
+            ps.setBigDecimal(4, product.getUnits());
+            ps.setBigDecimal(5, product.getGrams());
+            NutritionalValues nutritionalValues = product.getNutritionalValues();
+            ps.setBigDecimal(6, nutritionalValues == null ? null : nutritionalValues.getCalories());
+            ps.setBigDecimal(7, nutritionalValues == null ? null : nutritionalValues.getCarbohydrates());
+            ps.setBigDecimal(8, nutritionalValues == null ? null : nutritionalValues.getProteins());
+            ps.setBigDecimal(9, nutritionalValues == null ? null : nutritionalValues.getFats());
+            ps.setInt(10, product.getSortOrder());
         });
+    }
+
+    private NutritionalValues readNutritionalValues(java.sql.ResultSet rs) throws java.sql.SQLException {
+        BigDecimal calories = rs.getBigDecimal("calories");
+        BigDecimal carbohydrates = rs.getBigDecimal("carbohydrates");
+        BigDecimal proteins = rs.getBigDecimal("proteins");
+        BigDecimal fats = rs.getBigDecimal("fats");
+        if (calories == null && carbohydrates == null && proteins == null && fats == null) {
+            return null;
+        }
+        return NutritionalValues.builder()
+                .calories(calories)
+                .carbohydrates(carbohydrates)
+                .proteins(proteins)
+                .fats(fats)
+                .build();
     }
 
     private RowMapper<ProposedWeekMenu> menuRowMapper() {

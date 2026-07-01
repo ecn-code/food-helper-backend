@@ -5,13 +5,13 @@ import java.math.BigDecimal;
 
 @Schema(name = "PlanningProductResponse", description = "API representation of one ordered planning product")
 public record ProposedWeekMenuProductResponse(
-        @Schema(description = "Product identifier", example = "1")
+        @Schema(description = "Product identifier for a catalog product. Null for a manual item.", example = "1", nullable = true)
         Long productId,
-        @Schema(description = "Product name", example = "Apple")
+        @Schema(description = "Product name or manual label", example = "Apple")
         String productName,
-        @Schema(description = "Consumed units", example = "2")
+        @Schema(description = "Consumed units. For manual items, this is normalized from 100-gram servings when possible.", example = "2", nullable = true)
         BigDecimal units,
-        @Schema(description = "Consumed grams", example = "300")
+        @Schema(description = "Consumed grams", example = "300", nullable = true)
         BigDecimal grams,
         @Schema(description = "Explicit display order within the section. Values are unique within the section.", example = "10")
         Integer sortOrder,

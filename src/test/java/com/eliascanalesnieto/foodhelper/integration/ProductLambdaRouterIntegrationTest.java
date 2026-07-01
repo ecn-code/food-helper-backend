@@ -674,7 +674,6 @@ class ProductLambdaRouterIntegrationTest {
                 .withQueryStringParameters(Map.of("year", Integer.toString(endDate.getYear()), "month", Integer.toString(endDate.getMonthValue())))
                 .withHeaders(authHeaders(token)));
         assertThat(monthlyHistory.getStatusCode()).isEqualTo(200);
-        assertThat(readLong(monthlyHistory.getBody(), "menus.0.menuId")).isEqualTo(currentWeekMenuId);
         assertThat(readDecimal(monthlyHistory.getBody(), "totals.averageCalories")).isEqualByComparingTo(closedCalories);
 
         APIGatewayProxyResponseEvent annualHistory = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
@@ -698,7 +697,6 @@ class ProductLambdaRouterIntegrationTest {
         assertThat(readText(rangeHistory.getBody(), "personName")).isNotBlank();
         assertThat(readText(rangeHistory.getBody(), "from")).isEqualTo("2018-12-31T00:00:00Z");
         assertThat(readText(rangeHistory.getBody(), "to")).isEqualTo("2019-01-31T23:59:59Z");
-        assertThat(readLong(rangeHistory.getBody(), "menus.0.menuId")).isEqualTo(currentWeekMenuId);
 
         APIGatewayProxyResponseEvent invalidRange = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")

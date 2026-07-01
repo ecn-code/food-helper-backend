@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -77,10 +78,26 @@ public class ProposedWeekMenuController {
         return mapper.toResponse(service.findById(id));
     }
 
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(
+            summary = "Delete planning",
+            description = "Deletes a planning by identifier. Related days, sections, products, and established menu snapshots are removed automatically.",
+            operationId = "deletePlanning"
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Planning deleted"),
+            @ApiResponse(responseCode = "404", description = "Planning not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public void delete(@PathVariable Long id) {
+        service.delete(id);
+    }
+
     @PutMapping("/{id}/days")
     @Operation(
             summary = "Create or replace planned day",
-            description = "Creates or replaces one planned day. Each selected day part can appear only once, products keep their explicit order, and optional recipe productions generate stock instead of being eaten."
+            description = "Creates or replaces one planned day. Each selected day part can appear only once, products keep their explicit order, manual items can add nutrition without a catalog product, and optional recipe productions generate stock instead of being eaten."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Planning updated",

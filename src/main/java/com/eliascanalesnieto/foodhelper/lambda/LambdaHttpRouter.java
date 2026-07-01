@@ -201,15 +201,32 @@ public class LambdaHttpRouter {
             return json(200, proposedWeekMenuService.findAllSummaries());
         }
 
-        if (path != null && path.startsWith("/api/v1/planning/") && path.endsWith("/menu")) {
-            Long id = parseId(path.substring(0, path.lastIndexOf('/')));
-            if ("POST".equals(method)) {
-                EstablishProposedWeekMenuRequest body = parseEstablishProposedWeekMenu(request.getBody());
-                return json(201, currentWeekMenuService.establishFromProposed(
-                        id,
-                        body.payerUserId(),
-                        body.stockAllocations()
-                ));
+        if (path != null && path.startsWith("/api/v1/planning/")) {
+            if (path.endsWith("/days")) {
+                Long id = parseId(path.substring(0, path.lastIndexOf('/')));
+                if ("PUT".equals(method)) {
+                    UpsertProposedWeekMenuDayRequest body = parseProposedWeekMenuDayUpsert(request.getBody());
+                    return json(200, proposedWeekMenuMapper.toResponse(proposedWeekMenuService.upsertDay(id, proposedWeekMenuMapper.toDomain(body))));
+                }
+            }
+            if (path.endsWith("/menu")) {
+                Long id = parseId(path.substring(0, path.lastIndexOf('/')));
+                if ("POST".equals(method)) {
+                    EstablishProposedWeekMenuRequest body = parseEstablishProposedWeekMenu(request.getBody());
+                    return json(201, currentWeekMenuService.establishFromProposed(
+                            id,
+                            body.payerUserId(),
+                            body.stockAllocations()
+                    ));
+                }
+            }
+            Long id = parseId(path);
+            if ("GET".equals(method)) {
+                return json(200, proposedWeekMenuMapper.toResponse(proposedWeekMenuService.findById(id)));
+            }
+            if ("DELETE".equals(method)) {
+                proposedWeekMenuService.delete(id);
+                return new APIGatewayProxyResponseEvent().withStatusCode(204).withHeaders(defaultHeaders());
             }
         }
 
@@ -313,20 +330,6 @@ public class LambdaHttpRouter {
             if ("DELETE".equals(method)) {
                 recipeService.delete(id);
                 return new APIGatewayProxyResponseEvent().withStatusCode(204).withHeaders(defaultHeaders());
-            }
-        }
-
-        if (path != null && path.startsWith("/api/v1/planning/")) {
-            if (path.endsWith("/days")) {
-                Long id = parseId(path.substring(0, path.lastIndexOf('/')));
-                if ("PUT".equals(method)) {
-                    UpsertProposedWeekMenuDayRequest body = parseProposedWeekMenuDayUpsert(request.getBody());
-                    return json(200, proposedWeekMenuMapper.toResponse(proposedWeekMenuService.upsertDay(id, proposedWeekMenuMapper.toDomain(body))));
-                }
-            }
-            Long id = parseId(path);
-            if ("GET".equals(method)) {
-                return json(200, proposedWeekMenuMapper.toResponse(proposedWeekMenuService.findById(id)));
             }
         }
 

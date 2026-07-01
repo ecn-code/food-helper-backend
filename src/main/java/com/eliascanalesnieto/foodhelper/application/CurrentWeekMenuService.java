@@ -705,8 +705,12 @@ public class CurrentWeekMenuService {
                 .flatMap(day -> day.getSections().stream())
                 .flatMap(section -> section.getProducts().stream())
                 .map(ProposedWeekMenuProduct::getProductId)
+                .filter(java.util.Objects::nonNull)
                 .distinct()
                 .toList();
+        if (productIds.isEmpty()) {
+            return Map.of();
+        }
         List<Product> products = productRepository.findByIds(productIds);
         Map<Long, Product> productsById = new HashMap<>();
         products.forEach(product -> productsById.put(product.getId(), product));
@@ -718,6 +722,9 @@ public class CurrentWeekMenuService {
         for (ProposedWeekMenuDay day : days) {
             for (ProposedWeekMenuSection section : day.getSections()) {
                 for (ProposedWeekMenuProduct product : section.getProducts()) {
+                    if (product.getProductId() == null) {
+                        continue;
+                    }
                     requiredUnits.merge(product.getProductId(), normalizeRequiredUnits(product), BigDecimal::add);
                 }
             }

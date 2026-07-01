@@ -56,9 +56,21 @@ public class ProposedWeekMenuApiMapper {
     private ProposedWeekMenuProduct toDomain(ProposedWeekMenuProductRequest request) {
         return ProposedWeekMenuProduct.builder()
                 .productId(request.productId())
+                .productName(request.productName())
                 .units(request.units())
                 .grams(request.grams())
                 .sortOrder(request.sortOrder())
+                .nutritionalValues(request.calories() == null
+                        && request.carbohydrates() == null
+                        && request.proteins() == null
+                        && request.fats() == null
+                        ? null
+                        : NutritionalValues.builder()
+                                .calories(request.calories())
+                                .carbohydrates(request.carbohydrates())
+                                .proteins(request.proteins())
+                                .fats(request.fats())
+                                .build())
                 .build();
     }
 
@@ -117,6 +129,9 @@ public class ProposedWeekMenuApiMapper {
     }
 
     private NutritionalValuesResponse toResponse(NutritionalValues nutritionalValues) {
+        if (nutritionalValues == null) {
+            return null;
+        }
         return new NutritionalValuesResponse(
                 nutritionalValues.getCalories(),
                 nutritionalValues.getCarbohydrates(),

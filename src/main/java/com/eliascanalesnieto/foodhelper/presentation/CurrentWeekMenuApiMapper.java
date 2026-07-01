@@ -153,6 +153,9 @@ public class CurrentWeekMenuApiMapper {
     }
 
     private NutritionalValuesResponse toResponse(com.eliascanalesnieto.foodhelper.domain.NutritionalValues nutritionalValues) {
+        if (nutritionalValues == null) {
+            return null;
+        }
         return new NutritionalValuesResponse(
                 nutritionalValues.getCalories(),
                 nutritionalValues.getCarbohydrates(),

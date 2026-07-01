@@ -12,6 +12,7 @@ import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
 import com.eliascanalesnieto.foodhelper.domain.RecipeRepository;
 import com.eliascanalesnieto.foodhelper.domain.PlanningState;
 import com.eliascanalesnieto.foodhelper.domain.PlanningSummary;
+import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenu;
 import com.eliascanalesnieto.foodhelper.domain.StockRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDay;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuRepository;
@@ -56,16 +57,19 @@ class ProposedWeekMenuServiceTest {
     }
 
     @Test
-    void shouldRejectOverlappingProposedMenusWhenCreatingANewOne() {
-        when(menuRepository.findAllSummaries()).thenReturn(List.of(
-                new PlanningSummary(1L, LocalDate.of(2026, 6, 15), LocalDate.of(2026, 6, 21), 7, PlanningState.DRAFT, null)
-        ));
+    void shouldCreateProposedMenusEvenWhenOtherSummariesAlreadyExist() {
+        when(menuRepository.create(org.mockito.ArgumentMatchers.any())).thenAnswer(invocation -> {
+            ProposedWeekMenu menu = invocation.getArgument(0);
+            return menu.toBuilder()
+                    .id(99L)
+                    .build();
+        });
 
-        assertThatThrownBy(() -> service.create(LocalDate.of(2026, 6, 21), LocalDate.of(2026, 6, 27)))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Planning overlaps an existing menu");
+        ProposedWeekMenu created = service.create(LocalDate.of(2026, 6, 21), LocalDate.of(2026, 6, 27));
 
-        verify(menuRepository, never()).create(org.mockito.Mockito.any());
+        assertThat(created.getId()).isEqualTo(99L);
+        assertThat(created.getDays()).isEmpty();
+        verify(menuRepository).create(org.mockito.Mockito.any());
     }
 
     @Test
@@ -92,6 +96,113 @@ class ProposedWeekMenuServiceTest {
     }
 
     @Test
+    void shouldRejectManualProductsWithoutRequiredNutrition() {
+        when(currentWeekMenuStatsRepository.findByProposedWeekMenuId(1L))
+                .thenThrow(new ResourceNotFoundException("Established week menu not found"));
+
+        ProposedWeekMenuDay day = ProposedWeekMenuDay.builder()
+                .date(LocalDate.of(2026, 6, 15))
+                .sections(List.of(
+                        ProposedWeekMenuSection.builder()
+                                .dayPartId(1L)
+                                .products(List.of(
+                                        ProposedWeekMenuProduct.builder()
+                                                .productName("Homemade bowl")
+                                                .sortOrder(10)
+                                                .build()
+                                ))
+                                .build()
+                ))
+                .build();
+
+        assertThatThrownBy(() -> service.upsertDay(1L, day))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Manual products require calories, carbohydrates, proteins, and fats per 100 grams");
+    }
+
+    @Test
+    void shouldRejectLinkedProductsThatAlsoSendManualData() {
+        when(currentWeekMenuStatsRepository.findByProposedWeekMenuId(1L))
+                .thenThrow(new ResourceNotFoundException("Established week menu not found"));
+
+        ProposedWeekMenuDay day = ProposedWeekMenuDay.builder()
+                .date(LocalDate.of(2026, 6, 15))
+                .sections(List.of(
+                        ProposedWeekMenuSection.builder()
+                                .dayPartId(1L)
+                                .products(List.of(
+                                        ProposedWeekMenuProduct.builder()
+                                                .productId(10L)
+                                                .productName("Mixed payload")
+                                                .nutritionalValues(com.eliascanalesnieto.foodhelper.domain.NutritionalValues.builder()
+                                                        .calories(new BigDecimal("10"))
+                                                        .carbohydrates(new BigDecimal("1"))
+                                                        .proteins(new BigDecimal("2"))
+                                                        .fats(new BigDecimal("3"))
+                                                        .build())
+                                                .sortOrder(10)
+                                                .build()
+                                ))
+                                .build()
+                ))
+                .build();
+
+        assertThatThrownBy(() -> service.upsertDay(1L, day))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Linked products must not include manual product data");
+    }
+
+    @Test
+    void shouldAllowManualProductsWithoutCatalogLookups() {
+        when(currentWeekMenuStatsRepository.findByProposedWeekMenuId(1L))
+                .thenThrow(new ResourceNotFoundException("Established week menu not found"));
+        when(menuRepository.upsertDay(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> {
+                    ProposedWeekMenuDay completedDay = invocation.getArgument(1);
+                    return ProposedWeekMenu.builder()
+                            .id(1L)
+                            .startDate(LocalDate.of(2026, 6, 15))
+                            .endDate(LocalDate.of(2026, 6, 21))
+                            .days(List.of(completedDay))
+                            .build();
+                });
+
+        ProposedWeekMenuDay day = ProposedWeekMenuDay.builder()
+                .date(LocalDate.of(2026, 6, 15))
+                .sections(List.of(
+                        ProposedWeekMenuSection.builder()
+                                .dayPartId(1L)
+                                .products(List.of(
+                                        ProposedWeekMenuProduct.builder()
+                                                .productName("Homemade bowl")
+                                                .grams(new BigDecimal("50"))
+                                                .nutritionalValues(com.eliascanalesnieto.foodhelper.domain.NutritionalValues.builder()
+                                                        .calories(new BigDecimal("180"))
+                                                        .carbohydrates(new BigDecimal("24"))
+                                                        .proteins(new BigDecimal("5"))
+                                                        .fats(new BigDecimal("6"))
+                                                        .build())
+                                                .sortOrder(10)
+                                                .build()
+                                ))
+                                .build()
+                ))
+                .build();
+
+        ProposedWeekMenu result = service.upsertDay(1L, day);
+
+        assertThat(result.getDays()).hasSize(1);
+        assertThat(result.getDays().getFirst().getSections().getFirst().getProducts().getFirst().getUnits())
+                .isEqualByComparingTo("0.50");
+        assertThat(result.getDays().getFirst().getSections().getFirst().getProducts().getFirst().getNutritionalValues().getCalories())
+                .isEqualByComparingTo("90.00");
+        assertThat(result.getDays().getFirst().getSections().getFirst().getProducts().getFirst().getGrams())
+                .isEqualByComparingTo("50.00");
+        assertThat(result.getStockSummary().getDistinctProducts()).isZero();
+        verify(productRepository, never()).findByIds(org.mockito.ArgumentMatchers.anyList());
+    }
+
+    @Test
     void shouldExposeDraftEstablishedAndClosedPlanningStatesFromCatalog() {
         List<PlanningSummary> summaries = List.of(
                 new PlanningSummary(3L, LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 7), 0, PlanningState.DRAFT, null),
@@ -103,5 +214,12 @@ class ProposedWeekMenuServiceTest {
         assertThat(service.findAllSummaries()).containsExactlyElementsOf(summaries);
         assertThat(service.findAllSummaries()).extracting(PlanningSummary::state)
                 .containsExactly(PlanningState.DRAFT, PlanningState.ESTABLISHED, PlanningState.CLOSED);
+    }
+
+    @Test
+    void shouldDeletePlanningThroughTheRepository() {
+        service.delete(42L);
+
+        verify(menuRepository).delete(42L);
     }
 }

@@ -152,9 +152,14 @@ CREATE TABLE IF NOT EXISTS proposed_week_menu_sections (
 CREATE TABLE IF NOT EXISTS proposed_week_menu_products (
     id BIGSERIAL PRIMARY KEY,
     section_id BIGINT NOT NULL,
-    product_id BIGINT NOT NULL,
-    units NUMERIC(10,2) NOT NULL,
-    grams NUMERIC(10,2) NOT NULL,
+    product_id BIGINT,
+    product_name VARCHAR(150) NOT NULL,
+    units NUMERIC(10,2),
+    grams NUMERIC(10,2),
+    calories NUMERIC(10,2),
+    carbohydrates NUMERIC(10,2),
+    proteins NUMERIC(10,2),
+    fats NUMERIC(10,2),
     sort_order INTEGER NOT NULL,
     CONSTRAINT fk_proposed_week_menu_products_section
         FOREIGN KEY (section_id)
@@ -189,32 +194,6 @@ CREATE TABLE IF NOT EXISTS current_week_menu_stats (
         FOREIGN KEY (current_week_menu_id)
         REFERENCES current_week_menus(id)
         ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS menu_stock_movements (
-    id BIGSERIAL PRIMARY KEY,
-    current_week_menu_id BIGINT NOT NULL,
-    user_id BIGINT NOT NULL,
-    user_username VARCHAR(80) NOT NULL,
-    product_id BIGINT NOT NULL,
-    product_name VARCHAR(150) NOT NULL,
-    quantity NUMERIC(12,2) NOT NULL CHECK (quantity > 0),
-    price NUMERIC(12,2) NOT NULL CHECK (price >= 0),
-    total_cost NUMERIC(12,2) NOT NULL,
-    description VARCHAR(255),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT fk_menu_stock_movements_menu
-        FOREIGN KEY (current_week_menu_id)
-        REFERENCES current_week_menus(id)
-        ON DELETE CASCADE,
-    CONSTRAINT fk_menu_stock_movements_user
-        FOREIGN KEY (user_id)
-        REFERENCES app_users(id)
-        ON DELETE RESTRICT,
-    CONSTRAINT fk_menu_stock_movements_product
-        FOREIGN KEY (product_id)
-        REFERENCES products(id)
-        ON DELETE RESTRICT
 );
 
 CREATE TABLE IF NOT EXISTS app_users (
@@ -308,6 +287,8 @@ CREATE TABLE IF NOT EXISTS user_weight_entries (
     user_id BIGINT NOT NULL,
     weight NUMERIC(6, 2) NOT NULL CHECK (weight > 0),
     recorded_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     notes TEXT,
     CONSTRAINT fk_user_weight_entries_user
         FOREIGN KEY (user_id)
@@ -317,6 +298,51 @@ CREATE TABLE IF NOT EXISTS user_weight_entries (
 
 CREATE INDEX IF NOT EXISTS idx_user_weight_entries_user_recorded
     ON user_weight_entries(user_id, recorded_at, id);
+
+CREATE TABLE IF NOT EXISTS menu_stock_movements (
+    id BIGSERIAL PRIMARY KEY,
+    current_week_menu_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    user_username VARCHAR(80) NOT NULL,
+    product_id BIGINT NOT NULL,
+    product_name VARCHAR(150) NOT NULL,
+    quantity NUMERIC(12,2) NOT NULL CHECK (quantity > 0),
+    price NUMERIC(12,2) NOT NULL CHECK (price >= 0),
+    total_cost NUMERIC(12,2) NOT NULL,
+    description VARCHAR(255),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT fk_menu_stock_movements_menu
+        FOREIGN KEY (current_week_menu_id)
+        REFERENCES current_week_menus(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_menu_stock_movements_user
+        FOREIGN KEY (user_id)
+        REFERENCES app_users(id)
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_menu_stock_movements_product
+        FOREIGN KEY (product_id)
+        REFERENCES products(id)
+        ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS proposed_week_menu_recipe_productions (
+    id BIGSERIAL PRIMARY KEY,
+    day_id BIGINT NOT NULL,
+    recipe_id BIGINT NOT NULL,
+    produced_grams NUMERIC(12,2) NOT NULL,
+    sort_order INT NOT NULL,
+    CONSTRAINT fk_proposed_week_menu_recipe_productions_day
+        FOREIGN KEY (day_id)
+        REFERENCES proposed_week_menu_days(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_proposed_week_menu_recipe_productions_recipe
+        FOREIGN KEY (recipe_id)
+        REFERENCES recipes(id),
+    CONSTRAINT uq_proposed_week_menu_recipe_productions_order UNIQUE (day_id, sort_order)
+);
+
+CREATE INDEX IF NOT EXISTS idx_proposed_week_menu_recipe_productions_day_id
+    ON proposed_week_menu_recipe_productions(day_id);
 
 CREATE TABLE IF NOT EXISTS nutritional_rules (
     id SMALLINT PRIMARY KEY,

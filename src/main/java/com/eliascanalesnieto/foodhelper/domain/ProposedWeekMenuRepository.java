@@ -9,5 +9,7 @@ public interface ProposedWeekMenuRepository {
 
     List<PlanningSummary> findAllSummaries();
 
+    void delete(Long id);
+
     ProposedWeekMenu upsertDay(Long menuId, ProposedWeekMenuDay day);
 }
