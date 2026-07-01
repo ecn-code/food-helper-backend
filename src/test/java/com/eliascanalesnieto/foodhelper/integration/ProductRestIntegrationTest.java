@@ -17,6 +17,7 @@ import com.eliascanalesnieto.foodhelper.presentation.MoneyBoxMovementResponse;
 import com.eliascanalesnieto.foodhelper.presentation.MoneyBoxResponse;
 import com.eliascanalesnieto.foodhelper.presentation.NutrientRuleRequest;
 import com.eliascanalesnieto.foodhelper.presentation.NutritionalRuleStatus;
+import com.eliascanalesnieto.foodhelper.presentation.NutritionalRulesPeriodRequest;
 import com.eliascanalesnieto.foodhelper.presentation.NutritionalRulesResponse;
 import com.eliascanalesnieto.foodhelper.presentation.SaveNutritionalRulesRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateUserMoneyMovementRequest;
@@ -1318,6 +1319,7 @@ class ProductRestIntegrationTest {
         assertThat(established.getBody()).isNotNull();
         assertThat(established.getBody().planningId()).isEqualTo(createdMenu.getBody().id());
         assertThat(established.getBody().payerUserId()).isEqualTo(authenticatedUserId());
+        assertThat(established.getBody().personIds()).isEmpty();
         assertThat(established.getBody().nutritionalValues().calories()).isEqualByComparingTo(plannedMenu.getBody().nutritionalValues().calories());
         assertThat(established.getBody().stockSummary().estimatedCost()).isEqualByComparingTo("3.75");
         assertThat(established.getBody().usedStock()).hasSize(2);
@@ -1362,6 +1364,7 @@ class ProductRestIntegrationTest {
         );
         assertThat(loadedCurrentWeek.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(loadedCurrentWeek.getBody()).isNotNull();
+        assertThat(loadedCurrentWeek.getBody().personIds()).containsExactly(authenticatedUserId());
         assertThat(loadedCurrentWeek.getBody().days()).hasSize(1);
         assertThat(loadedCurrentWeek.getBody().days().getFirst().sections()).hasSize(1);
 
@@ -1447,6 +1450,46 @@ class ProductRestIntegrationTest {
         );
         assertThat(rejectedUpdate.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(rejectedUpdate.getBody()).contains("already closed");
+    }
+
+    @Test
+    void establishingAnOverlappingMenuForTheSameUserShouldBeRejected() {
+        String proposedMenusUrl = "http://localhost:" + port + "/api/v1/planning";
+        LocalDate firstStart = LocalDate.of(2026, 6, 15);
+        LocalDate firstEnd = LocalDate.of(2026, 6, 21);
+        LocalDate secondStart = LocalDate.of(2026, 6, 20);
+        LocalDate secondEnd = LocalDate.of(2026, 6, 27);
+
+        ResponseEntity<ProposedWeekMenuResponse> firstPlanning = postAuthorized(
+                proposedMenusUrl,
+                new CreateProposedWeekMenuRequest(firstStart, firstEnd),
+                ProposedWeekMenuResponse.class
+        );
+        assertThat(firstPlanning.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<CurrentWeekMenuResponse> firstMenu = postAuthorized(
+                proposedMenusUrl + "/" + firstPlanning.getBody().id() + "/menu",
+                new EstablishProposedWeekMenuRequest(authenticatedUserId()),
+                CurrentWeekMenuResponse.class
+        );
+        assertThat(firstMenu.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<ProposedWeekMenuResponse> secondPlanning = postAuthorized(
+                proposedMenusUrl,
+                new CreateProposedWeekMenuRequest(secondStart, secondEnd),
+                ProposedWeekMenuResponse.class
+        );
+        assertThat(secondPlanning.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<String> rejectedMenu = restTemplate.exchange(
+                proposedMenusUrl + "/" + secondPlanning.getBody().id() + "/menu",
+                HttpMethod.POST,
+                authorizedEntity(new EstablishProposedWeekMenuRequest(authenticatedUserId())),
+                String.class
+        );
+
+        assertThat(rejectedMenu.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(rejectedMenu.getBody()).contains("overlapping menu");
     }
 
     @Test
@@ -2416,10 +2459,18 @@ class ProductRestIntegrationTest {
     void nutritionalRulesShouldEvaluateFlexiblePlanningAndCreatedMenuByPlannedDay() {
         String baseUrl = "http://localhost:" + port + "/api/v1";
         SaveNutritionalRulesRequest rules = new SaveNutritionalRulesRequest(
-                new NutrientRuleRequest(new BigDecimal("100"), new BigDecimal("200")),
-                new NutrientRuleRequest(null, new BigDecimal("20")),
-                new NutrientRuleRequest(new BigDecimal("10"), null),
-                new NutrientRuleRequest(null, null)
+                new NutritionalRulesPeriodRequest(
+                        new NutrientRuleRequest(new BigDecimal("100"), new BigDecimal("200")),
+                        new NutrientRuleRequest(null, new BigDecimal("20")),
+                        new NutrientRuleRequest(new BigDecimal("10"), null),
+                        new NutrientRuleRequest(null, null)
+                ),
+                new NutritionalRulesPeriodRequest(
+                        new NutrientRuleRequest(new BigDecimal("120"), new BigDecimal("180")),
+                        new NutrientRuleRequest(null, new BigDecimal("20")),
+                        new NutrientRuleRequest(new BigDecimal("0"), new BigDecimal("20")),
+                        new NutrientRuleRequest(null, null)
+                )
         );
 
         ResponseEntity<NutritionalRulesResponse> savedRules = restTemplate.exchange(
@@ -2429,7 +2480,8 @@ class ProductRestIntegrationTest {
                 NutritionalRulesResponse.class
         );
         assertThat(savedRules.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(savedRules.getBody().calories().minimum()).isEqualByComparingTo("100.00");
+        assertThat(savedRules.getBody().daily().calories().minimum()).isEqualByComparingTo("100.00");
+        assertThat(savedRules.getBody().weekly().calories().minimum()).isEqualByComparingTo("120.00");
 
         Long productId = createProduct(baseUrl + "/products", "Rules product", "Nutrition rules", "150", "25", "5", "2");
         Long dayPartId = createDayPart(baseUrl + "/planning/day-parts", "Rules lunch", "Rule evaluation meal", 991);
@@ -2453,11 +2505,16 @@ class ProductRestIntegrationTest {
                 ProposedWeekMenuResponse.class
         );
 
-        assertThat(planned.getBody().nutritionalRules().plannedDays()).isOne();
-        assertThat(planned.getBody().nutritionalRules().calories().status()).isEqualTo(NutritionalRuleStatus.WITHIN_RANGE);
-        assertThat(planned.getBody().nutritionalRules().carbohydrates().status()).isEqualTo(NutritionalRuleStatus.ABOVE_MAXIMUM);
-        assertThat(planned.getBody().nutritionalRules().proteins().status()).isEqualTo(NutritionalRuleStatus.BELOW_MINIMUM);
-        assertThat(planned.getBody().nutritionalRules().fats().status()).isEqualTo(NutritionalRuleStatus.NOT_CONFIGURED);
+        assertThat(planned.getBody().nutritionalRules().daily().plannedDays()).isOne();
+        assertThat(planned.getBody().nutritionalRules().daily().calories().status()).isEqualTo(NutritionalRuleStatus.WITHIN_RANGE);
+        assertThat(planned.getBody().nutritionalRules().daily().carbohydrates().status()).isEqualTo(NutritionalRuleStatus.ABOVE_MAXIMUM);
+        assertThat(planned.getBody().nutritionalRules().daily().proteins().status()).isEqualTo(NutritionalRuleStatus.BELOW_MINIMUM);
+        assertThat(planned.getBody().nutritionalRules().daily().fats().status()).isEqualTo(NutritionalRuleStatus.NOT_CONFIGURED);
+        assertThat(planned.getBody().nutritionalRules().weekly().plannedDays()).isOne();
+        assertThat(planned.getBody().nutritionalRules().weekly().calories().status()).isEqualTo(NutritionalRuleStatus.WITHIN_RANGE);
+        assertThat(planned.getBody().nutritionalRules().weekly().carbohydrates().status()).isEqualTo(NutritionalRuleStatus.ABOVE_MAXIMUM);
+        assertThat(planned.getBody().nutritionalRules().weekly().proteins().status()).isEqualTo(NutritionalRuleStatus.WITHIN_RANGE);
+        assertThat(planned.getBody().nutritionalRules().weekly().fats().status()).isEqualTo(NutritionalRuleStatus.NOT_CONFIGURED);
 
         ResponseEntity<CurrentWeekMenuResponse> menu = postAuthorized(
                 baseUrl + "/planning/" + planning.getBody().id() + "/menu",

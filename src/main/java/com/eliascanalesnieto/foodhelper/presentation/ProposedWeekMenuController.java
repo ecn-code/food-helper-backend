@@ -55,7 +55,7 @@ public class ProposedWeekMenuController {
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Planning created",
                     content = @Content(schema = @Schema(implementation = ProposedWeekMenuResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Invalid request",
+            @ApiResponse(responseCode = "400", description = "Invalid request or overlapping planning",
                     content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
     public ProposedWeekMenuResponse create(@Valid @RequestBody CreateProposedWeekMenuRequest request) {

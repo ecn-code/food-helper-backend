@@ -35,6 +35,7 @@ public class JdbcCurrentWeekMenuRepository implements CurrentWeekMenuRepository 
                 menu.planningId(),
                 menu.payerUserId(),
                 menu.payerUsername(),
+                menu.personIds() == null ? List.of() : menu.personIds(),
                 menu.startDate(),
                 menu.endDate(),
                 menu.days(),

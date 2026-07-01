@@ -49,4 +49,17 @@ public class JdbcUserMenuHistoryRepository implements UserMenuHistoryRepository 
                 personId, from, to
         );
     }
+
+    @Override
+    public List<Long> findPersonIds(Long menuId) {
+        return jdbcTemplate.query("""
+                        SELECT DISTINCT person_id
+                        FROM user_menu_history
+                        WHERE current_week_menu_id = ?
+                        ORDER BY person_id
+                        """,
+                (rs, rowNum) -> rs.getLong("person_id"),
+                menuId
+        );
+    }
 }

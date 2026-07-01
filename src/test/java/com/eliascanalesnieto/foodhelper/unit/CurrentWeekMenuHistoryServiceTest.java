@@ -67,6 +67,7 @@ class CurrentWeekMenuHistoryServiceTest {
     void shouldSaveAnImmutableMenuSnapshotForEverySelectedPersonWhenClosing() {
         CurrentWeekMenuResponse menu = new CurrentWeekMenuResponse(
                 10L, 20L, 1L, "payer",
+                List.of(),
                 LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 7),
                 List.of(), null, null, List.of(), List.of(), List.of(), List.of(), null
         );
@@ -90,6 +91,32 @@ class CurrentWeekMenuHistoryServiceTest {
     }
 
     @Test
+    void establishFromProposedShouldRejectOverlappingMenusForTheSameUser() {
+        CurrentWeekMenuResponse overlappingMenu = new CurrentWeekMenuResponse(
+                11L, 21L, 1L, "payer",
+                List.of(),
+                LocalDate.of(2026, 6, 18), LocalDate.of(2026, 6, 24),
+                List.of(), null, null, List.of(), List.of(), List.of(), List.of(), null
+        );
+        AppUser payer = AppUser.builder().id(1L).username("payer").build();
+        com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenu proposedWeekMenu = com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenu.builder()
+                .id(20L)
+                .startDate(LocalDate.of(2026, 6, 20))
+                .endDate(LocalDate.of(2026, 6, 26))
+                .days(List.of())
+                .build();
+
+        when(menuRepository.findByProposedWeekMenuId(20L)).thenThrow(new ResourceNotFoundException("not established"));
+        when(userRepository.findById(1L)).thenReturn(payer);
+        when(proposedWeekMenuService.findById(20L)).thenReturn(proposedWeekMenu);
+        when(menuRepository.findAll()).thenReturn(List.of(overlappingMenu));
+
+        assertThatThrownBy(() -> service.establishFromProposed(20L, 1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("User already has an overlapping menu");
+    }
+
+    @Test
     void repeatedCloseShouldReturnSavedStatsWithoutCreatingMoreSnapshots() {
         CurrentWeekMenuStatsResponse stats = new CurrentWeekMenuStatsResponse(10L, null, null);
         when(statsRepository.findByCurrentWeekMenuId(10L)).thenReturn(stats);
@@ -104,6 +131,7 @@ class CurrentWeekMenuHistoryServiceTest {
     void closeShouldRejectAnEmptyPersonSelection() {
         CurrentWeekMenuResponse menu = new CurrentWeekMenuResponse(
                 10L, 20L, 1L, "payer",
+                List.of(),
                 LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 7),
                 List.of(), null, null, List.of(), List.of(), List.of(), List.of(), null
         );
@@ -125,6 +153,7 @@ class CurrentWeekMenuHistoryServiceTest {
         );
         CurrentWeekMenuResponse menu = new CurrentWeekMenuResponse(
                 10L, 20L, 1L, "payer",
+                List.of(),
                 LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 7),
                 List.of(), null, null, List.of(usedStock), List.of(), List.of(), List.of(), null
         );
@@ -148,6 +177,7 @@ class CurrentWeekMenuHistoryServiceTest {
         AppUser payer = AppUser.builder().id(1L).username("payer").build();
         CurrentWeekMenuResponse menu = new CurrentWeekMenuResponse(
                 10L, 20L, 1L, "payer",
+                List.of(),
                 LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 7),
                 List.of(),
                 null,
@@ -211,6 +241,7 @@ class CurrentWeekMenuHistoryServiceTest {
         AppUser payer = AppUser.builder().id(2L).username("new-payer").build();
         CurrentWeekMenuResponse menu = new CurrentWeekMenuResponse(
                 10L, 20L, 1L, "payer",
+                List.of(),
                 LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 7),
                 List.of(),
                 null,
@@ -252,6 +283,7 @@ class CurrentWeekMenuHistoryServiceTest {
         );
         CurrentWeekMenuResponse menu = new CurrentWeekMenuResponse(
                 10L, 20L, 1L, "payer",
+                List.of(),
                 LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 7),
                 List.of(new com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuDayResponse(
                         5L,
@@ -300,6 +332,7 @@ class CurrentWeekMenuHistoryServiceTest {
     void closeShouldAutomaticallyTransferPendingRecipeProductions() {
         CurrentWeekMenuResponse menu = new CurrentWeekMenuResponse(
                 10L, 20L, 1L, "payer",
+                List.of(),
                 LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 7),
                 List.of(new com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuDayResponse(
                         5L,

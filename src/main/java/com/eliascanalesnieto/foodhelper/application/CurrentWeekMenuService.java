@@ -95,13 +95,14 @@ public class CurrentWeekMenuService {
             List<MenuStockAllocationRequest> stockAllocations
     ) {
         try {
-            return applyCurrentRules(currentWeekMenuRepository.findByProposedWeekMenuId(proposedWeekMenuId));
+            return withPersonIdsFromHistory(applyCurrentRules(currentWeekMenuRepository.findByProposedWeekMenuId(proposedWeekMenuId)));
         } catch (ResourceNotFoundException ex) {
             // Fall through and create the established week when no snapshot exists yet.
         }
 
         AppUser payer = appUserRepository.findById(payerUserId);
         ProposedWeekMenu proposedMenu = proposedWeekMenuService.findById(proposedWeekMenuId);
+        ensurePayerHasNoOverlappingMenu(payer.getId(), proposedMenu.getStartDate(), proposedMenu.getEndDate());
         AllocationResult allocation = allocateStock(proposedMenu, stockAllocations);
         List<CurrentWeekMenuRecipeProduction> recipeProductions = toCurrentRecipeProductions(proposedMenu.getDays());
         CurrentWeekMenu currentWeekMenu = CurrentWeekMenu.builder()
@@ -118,7 +119,7 @@ public class CurrentWeekMenuService {
                 .stockMovements(List.of())
                 .recipeProductions(recipeProductions)
                 .build();
-        CurrentWeekMenuResponse created = currentWeekMenuRepository.create(mapper.toResponse(currentWeekMenu));
+        CurrentWeekMenuResponse created = withPersonIds(currentWeekMenuRepository.create(mapper.toResponse(currentWeekMenu)));
         userMoneyRepository.addMovement(
                 payer.getId(),
                 allocationCost(allocation.usedStock()).negate(),
@@ -128,16 +129,30 @@ public class CurrentWeekMenuService {
         return created;
     }
 
+    private void ensurePayerHasNoOverlappingMenu(Long payerUserId, LocalDate startDate, LocalDate endDate) {
+        boolean overlaps = currentWeekMenuRepository.findAll().stream()
+                .filter(menu -> menu.payerUserId() != null && menu.payerUserId().equals(payerUserId))
+                .anyMatch(menu -> overlaps(menu.startDate(), menu.endDate(), startDate, endDate));
+        if (overlaps) {
+            throw new IllegalArgumentException("User already has an overlapping menu");
+        }
+    }
+
+    private boolean overlaps(LocalDate firstStart, LocalDate firstEnd, LocalDate secondStart, LocalDate secondEnd) {
+        return !firstEnd.isBefore(secondStart) && !firstStart.isAfter(secondEnd);
+    }
+
     @Transactional(readOnly = true)
     public List<CurrentWeekMenuResponse> findAll() {
         return currentWeekMenuRepository.findAll().stream()
                 .map(this::applyCurrentRules)
+                .map(this::withPersonIdsFromHistory)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public CurrentWeekMenuResponse findById(Long id) {
-        return applyCurrentRules(currentWeekMenuRepository.findById(id));
+        return withPersonIdsFromHistory(applyCurrentRules(currentWeekMenuRepository.findById(id)));
     }
 
     @Transactional
@@ -216,6 +231,7 @@ public class CurrentWeekMenuService {
                 menu.planningId(),
                 person.getId(),
                 person.getUsername(),
+                safePersonIds(menu),
                 menu.startDate(),
                 menu.endDate(),
                 menu.days(),
@@ -227,7 +243,7 @@ public class CurrentWeekMenuService {
                 menu.recipeProductions(),
                 menu.nutritionalRules()
         );
-        return currentWeekMenuRepository.save(updated);
+        return withPersonIds(currentWeekMenuRepository.save(updated));
     }
 
     @Transactional
@@ -260,6 +276,7 @@ public class CurrentWeekMenuService {
                 menu.planningId(),
                 menu.payerUserId(),
                 menu.payerUsername(),
+                safePersonIds(menu),
                 menu.startDate(),
                 menu.endDate(),
                 menu.days(),
@@ -271,7 +288,7 @@ public class CurrentWeekMenuService {
                 menu.recipeProductions(),
                 menu.nutritionalRules()
         );
-        return currentWeekMenuRepository.save(updated);
+        return withPersonIds(currentWeekMenuRepository.save(updated));
     }
 
     @Transactional(readOnly = true)
@@ -290,7 +307,7 @@ public class CurrentWeekMenuService {
         }
         CurrentWeekMenuResponse updated = applyRecipeProductionTransfer(menu, production, "MANUAL");
         currentWeekMenuRepository.save(updated);
-        return updated;
+        return withPersonIds(updated);
     }
 
     @Transactional(readOnly = true)
@@ -375,6 +392,7 @@ public class CurrentWeekMenuService {
                 menu.planningId(),
                 menu.payerUserId(),
                 menu.payerUsername(),
+                safePersonIds(menu),
                 menu.startDate(),
                 menu.endDate(),
                 updatedDays,
@@ -729,6 +747,7 @@ public class CurrentWeekMenuService {
                 : menu.nutritionalValues();
         return new CurrentWeekMenuResponse(
                 menu.id(), menu.planningId(), menu.payerUserId(), menu.payerUsername(),
+                safePersonIds(menu),
                 menu.startDate(), menu.endDate(), days, totals,
                 menu.stockSummary(),
                 menu.usedStock() == null ? List.of() : menu.usedStock(),
@@ -737,6 +756,50 @@ public class CurrentWeekMenuService {
                 menu.recipeProductions() == null ? List.of() : menu.recipeProductions(),
                 nutritionalRulesService.evaluate(totals, days.size())
         );
+    }
+
+    private CurrentWeekMenuResponse withPersonIds(CurrentWeekMenuResponse menu) {
+        return new CurrentWeekMenuResponse(
+                menu.id(),
+                menu.planningId(),
+                menu.payerUserId(),
+                menu.payerUsername(),
+                safePersonIds(menu),
+                menu.startDate(),
+                menu.endDate(),
+                menu.days(),
+                menu.nutritionalValues(),
+                menu.stockSummary(),
+                menu.usedStock(),
+                menu.shoppingList(),
+                menu.stockMovements(),
+                menu.recipeProductions(),
+                menu.nutritionalRules()
+        );
+    }
+
+    private CurrentWeekMenuResponse withPersonIdsFromHistory(CurrentWeekMenuResponse menu) {
+        return new CurrentWeekMenuResponse(
+                menu.id(),
+                menu.planningId(),
+                menu.payerUserId(),
+                menu.payerUsername(),
+                userMenuHistoryRepository.findPersonIds(menu.id()),
+                menu.startDate(),
+                menu.endDate(),
+                menu.days(),
+                menu.nutritionalValues(),
+                menu.stockSummary(),
+                menu.usedStock(),
+                menu.shoppingList(),
+                menu.stockMovements(),
+                menu.recipeProductions(),
+                menu.nutritionalRules()
+        );
+    }
+
+    private List<Long> safePersonIds(CurrentWeekMenuResponse menu) {
+        return menu.personIds() == null ? List.of() : menu.personIds();
     }
 
     private List<CurrentWeekMenuShoppingListItemResponse> updateShoppingList(

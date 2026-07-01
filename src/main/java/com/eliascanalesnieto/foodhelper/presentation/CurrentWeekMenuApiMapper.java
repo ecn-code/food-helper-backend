@@ -22,6 +22,7 @@ public class CurrentWeekMenuApiMapper {
                 menu.getProposedWeekMenuId(),
                 menu.getPayerUserId(),
                 menu.getPayerUsername(),
+                java.util.List.of(),
                 menu.getStartDate(),
                 menu.getEndDate(),
                 days.stream().map(this::toResponse).toList(),

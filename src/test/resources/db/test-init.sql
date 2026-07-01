@@ -320,29 +320,51 @@ CREATE INDEX IF NOT EXISTS idx_user_weight_entries_user_recorded
 
 CREATE TABLE IF NOT EXISTS nutritional_rules (
     id SMALLINT PRIMARY KEY,
-    calories_minimum NUMERIC(10,2),
-    calories_maximum NUMERIC(10,2),
-    carbohydrates_minimum NUMERIC(10,2),
-    carbohydrates_maximum NUMERIC(10,2),
-    proteins_minimum NUMERIC(10,2),
-    proteins_maximum NUMERIC(10,2),
-    fats_minimum NUMERIC(10,2),
-    fats_maximum NUMERIC(10,2),
+    daily_calories_minimum NUMERIC(10,2),
+    daily_calories_maximum NUMERIC(10,2),
+    daily_carbohydrates_minimum NUMERIC(10,2),
+    daily_carbohydrates_maximum NUMERIC(10,2),
+    daily_proteins_minimum NUMERIC(10,2),
+    daily_proteins_maximum NUMERIC(10,2),
+    daily_fats_minimum NUMERIC(10,2),
+    daily_fats_maximum NUMERIC(10,2),
+    weekly_calories_minimum NUMERIC(10,2),
+    weekly_calories_maximum NUMERIC(10,2),
+    weekly_carbohydrates_minimum NUMERIC(10,2),
+    weekly_carbohydrates_maximum NUMERIC(10,2),
+    weekly_proteins_minimum NUMERIC(10,2),
+    weekly_proteins_maximum NUMERIC(10,2),
+    weekly_fats_minimum NUMERIC(10,2),
+    weekly_fats_maximum NUMERIC(10,2),
     CONSTRAINT chk_nutritional_rules_singleton CHECK (id = 1),
-    CONSTRAINT chk_nutritional_rules_non_negative CHECK (
-        (calories_minimum IS NULL OR calories_minimum >= 0) AND
-        (calories_maximum IS NULL OR calories_maximum >= 0) AND
-        (carbohydrates_minimum IS NULL OR carbohydrates_minimum >= 0) AND
-        (carbohydrates_maximum IS NULL OR carbohydrates_maximum >= 0) AND
-        (proteins_minimum IS NULL OR proteins_minimum >= 0) AND
-        (proteins_maximum IS NULL OR proteins_maximum >= 0) AND
-        (fats_minimum IS NULL OR fats_minimum >= 0) AND
-        (fats_maximum IS NULL OR fats_maximum >= 0)
+    CONSTRAINT chk_nutritional_rules_daily_non_negative CHECK (
+        (daily_calories_minimum IS NULL OR daily_calories_minimum >= 0) AND
+        (daily_calories_maximum IS NULL OR daily_calories_maximum >= 0) AND
+        (daily_carbohydrates_minimum IS NULL OR daily_carbohydrates_minimum >= 0) AND
+        (daily_carbohydrates_maximum IS NULL OR daily_carbohydrates_maximum >= 0) AND
+        (daily_proteins_minimum IS NULL OR daily_proteins_minimum >= 0) AND
+        (daily_proteins_maximum IS NULL OR daily_proteins_maximum >= 0) AND
+        (daily_fats_minimum IS NULL OR daily_fats_minimum >= 0) AND
+        (daily_fats_maximum IS NULL OR daily_fats_maximum >= 0)
     ),
-    CONSTRAINT chk_nutritional_rules_calories CHECK (calories_minimum IS NULL OR calories_maximum IS NULL OR calories_minimum <= calories_maximum),
-    CONSTRAINT chk_nutritional_rules_carbohydrates CHECK (carbohydrates_minimum IS NULL OR carbohydrates_maximum IS NULL OR carbohydrates_minimum <= carbohydrates_maximum),
-    CONSTRAINT chk_nutritional_rules_proteins CHECK (proteins_minimum IS NULL OR proteins_maximum IS NULL OR proteins_minimum <= proteins_maximum),
-    CONSTRAINT chk_nutritional_rules_fats CHECK (fats_minimum IS NULL OR fats_maximum IS NULL OR fats_minimum <= fats_maximum)
+    CONSTRAINT chk_nutritional_rules_daily_calories CHECK (daily_calories_minimum IS NULL OR daily_calories_maximum IS NULL OR daily_calories_minimum <= daily_calories_maximum),
+    CONSTRAINT chk_nutritional_rules_daily_carbohydrates CHECK (daily_carbohydrates_minimum IS NULL OR daily_carbohydrates_maximum IS NULL OR daily_carbohydrates_minimum <= daily_carbohydrates_maximum),
+    CONSTRAINT chk_nutritional_rules_daily_proteins CHECK (daily_proteins_minimum IS NULL OR daily_proteins_maximum IS NULL OR daily_proteins_minimum <= daily_proteins_maximum),
+    CONSTRAINT chk_nutritional_rules_daily_fats CHECK (daily_fats_minimum IS NULL OR daily_fats_maximum IS NULL OR daily_fats_minimum <= daily_fats_maximum),
+    CONSTRAINT chk_nutritional_rules_weekly_non_negative CHECK (
+        (weekly_calories_minimum IS NULL OR weekly_calories_minimum >= 0) AND
+        (weekly_calories_maximum IS NULL OR weekly_calories_maximum >= 0) AND
+        (weekly_carbohydrates_minimum IS NULL OR weekly_carbohydrates_minimum >= 0) AND
+        (weekly_carbohydrates_maximum IS NULL OR weekly_carbohydrates_maximum >= 0) AND
+        (weekly_proteins_minimum IS NULL OR weekly_proteins_minimum >= 0) AND
+        (weekly_proteins_maximum IS NULL OR weekly_proteins_maximum >= 0) AND
+        (weekly_fats_minimum IS NULL OR weekly_fats_minimum >= 0) AND
+        (weekly_fats_maximum IS NULL OR weekly_fats_maximum >= 0)
+    ),
+    CONSTRAINT chk_nutritional_rules_weekly_calories CHECK (weekly_calories_minimum IS NULL OR weekly_calories_maximum IS NULL OR weekly_calories_minimum <= weekly_calories_maximum),
+    CONSTRAINT chk_nutritional_rules_weekly_carbohydrates CHECK (weekly_carbohydrates_minimum IS NULL OR weekly_carbohydrates_maximum IS NULL OR weekly_carbohydrates_minimum <= weekly_carbohydrates_maximum),
+    CONSTRAINT chk_nutritional_rules_weekly_proteins CHECK (weekly_proteins_minimum IS NULL OR weekly_proteins_maximum IS NULL OR weekly_proteins_minimum <= weekly_proteins_maximum),
+    CONSTRAINT chk_nutritional_rules_weekly_fats CHECK (weekly_fats_minimum IS NULL OR weekly_fats_maximum IS NULL OR weekly_fats_minimum <= weekly_fats_maximum)
 );
 
 DO $$

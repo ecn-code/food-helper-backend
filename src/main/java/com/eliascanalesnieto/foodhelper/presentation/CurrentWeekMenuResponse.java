@@ -15,6 +15,8 @@ public record CurrentWeekMenuResponse(
         Long payerUserId,
         @Schema(description = "Username that assumes the menu cost", example = "elias")
         String payerUsername,
+        @Schema(description = "Identifiers of the people assigned to the menu", example = "[1, 2]")
+        List<Long> personIds,
         @Schema(description = "First date covered by the menu", example = "2026-06-15")
         LocalDate startDate,
         @Schema(description = "Last date covered by the menu", example = "2026-06-22")
@@ -33,7 +35,10 @@ public record CurrentWeekMenuResponse(
         List<MenuStockMovementResponse> stockMovements,
         @Schema(description = "Recipe productions scheduled for the menu with their stock transfer trace")
         List<CurrentWeekMenuRecipeProductionResponse> recipeProductions,
-        @Schema(description = "Average daily nutrition evaluated against the saved rules")
+        @Schema(description = "Average daily nutrition evaluated against the saved daily and weekly rules")
         NutritionalRulesEvaluationResponse nutritionalRules
 ) {
+    public CurrentWeekMenuResponse {
+        personIds = personIds == null ? List.of() : List.copyOf(personIds);
+    }
 }

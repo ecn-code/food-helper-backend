@@ -71,6 +71,7 @@ class CurrentWeekMenuStatsServiceTest {
                 5L,
                 1L,
                 "elias",
+                List.of(),
                 endDate.minusDays(7),
                 endDate,
                 List.of(day),

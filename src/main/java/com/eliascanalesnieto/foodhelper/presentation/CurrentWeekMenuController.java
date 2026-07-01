@@ -44,7 +44,7 @@ public class CurrentWeekMenuController {
     @GetMapping("/{id}")
     @Operation(
             summary = "Get menu",
-            description = "Returns one menu snapshot with ordered days, nutritional totals, rule evaluation, stock summary, consumed stock, and missing products."
+            description = "Returns one menu snapshot with ordered days, nutritional totals, rule evaluation, stock summary, consumed stock, missing products, and assigned people when available."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Menu returned",

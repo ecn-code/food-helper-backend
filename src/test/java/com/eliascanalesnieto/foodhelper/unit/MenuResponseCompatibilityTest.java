@@ -22,6 +22,7 @@ class MenuResponseCompatibilityTest {
         );
 
         assertThat(menu.planningId()).isEqualTo(5L);
+        assertThat(menu.personIds()).isEmpty();
         assertThat(stats.menuId()).isEqualTo(1L);
         assertThat(stats.period().averageCalories()).isEqualByComparingTo("100");
     }

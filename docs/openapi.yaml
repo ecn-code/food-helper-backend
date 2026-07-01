@@ -141,7 +141,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SupermarketResponse'
         '400':
-          description: Invalid request
+          description: Invalid request or overlapping planning
           content:
             application/json:
               schema:
@@ -1273,7 +1273,7 @@ paths:
       tags:
         - Nutritional rules
       summary: Get nutritional rules
-      description: Returns the saved daily minimum and maximum for each nutrient. Unconfigured limits are null.
+      description: Returns the saved daily and weekly minimum and maximum for each nutrient. Unconfigured limits are null.
       operationId: getNutritionalRules
       responses:
         '200':
@@ -1286,7 +1286,7 @@ paths:
       tags:
         - Nutritional rules
       summary: Save nutritional rules
-      description: Replaces the daily limits. Each nutrient may define a minimum, a maximum, both, or neither.
+      description: Replaces the daily and weekly limits. Each nutrient may define a minimum, a maximum, both, or neither in each period.
       operationId: saveNutritionalRules
       requestBody:
         required: true
@@ -1505,7 +1505,7 @@ paths:
       tags:
         - Menus
       summary: Get menu
-      description: Returns one menu snapshot with ordered days, nutritional totals, rule evaluation, stock summary, consumed stock, and missing products.
+      description: Returns one menu snapshot with ordered days, nutritional totals, rule evaluation, stock summary, consumed stock, missing products, and assigned people when available.
       operationId: getMenu
       parameters:
         - name: id
@@ -2917,13 +2917,21 @@ components:
           type: number
           minimum: 0
           nullable: true
-          description: Inclusive daily minimum
+          description: Inclusive minimum
         maximum:
           type: number
           minimum: 0
           nullable: true
-          description: Inclusive daily maximum
+          description: Inclusive maximum
     SaveNutritionalRulesRequest:
+      type: object
+      required: [daily, weekly]
+      properties:
+        daily:
+          $ref: '#/components/schemas/NutritionalRulesPeriodRequest'
+        weekly:
+          $ref: '#/components/schemas/NutritionalRulesPeriodRequest'
+    NutritionalRulesPeriodRequest:
       type: object
       required: [calories, carbohydrates, proteins, fats]
       properties:
@@ -2945,6 +2953,13 @@ components:
           type: number
           nullable: true
     NutritionalRulesResponse:
+      type: object
+      properties:
+        daily:
+          $ref: '#/components/schemas/NutritionalRulesPeriodResponse'
+        weekly:
+          $ref: '#/components/schemas/NutritionalRulesPeriodResponse'
+    NutritionalRulesPeriodResponse:
       type: object
       properties:
         calories:
@@ -2970,8 +2985,9 @@ components:
         status:
           type: string
           enum: [BELOW_MINIMUM, WITHIN_RANGE, ABOVE_MAXIMUM, NOT_CONFIGURED]
-    NutritionalRulesEvaluationResponse:
+    NutritionalRulesEvaluationPeriodResponse:
       type: object
+      required: [plannedDays, calories, carbohydrates, proteins, fats]
       properties:
         plannedDays:
           type: integer
@@ -2984,6 +3000,13 @@ components:
           $ref: '#/components/schemas/NutrientRuleEvaluationResponse'
         fats:
           $ref: '#/components/schemas/NutrientRuleEvaluationResponse'
+    NutritionalRulesEvaluationResponse:
+      type: object
+      properties:
+        daily:
+          $ref: '#/components/schemas/NutritionalRulesEvaluationPeriodResponse'
+        weekly:
+          $ref: '#/components/schemas/NutritionalRulesEvaluationPeriodResponse'
     CreatePlanningRequest:
       description: Payload for starting an empty planning. The inclusive date range cannot span more than 16 calendar days.
       type: object
@@ -3207,6 +3230,13 @@ components:
           type: string
           description: Username that assumes the menu period cost
           example: elias
+        personIds:
+          type: array
+          description: Identifiers of the people assigned to the menu
+          items:
+            type: integer
+            format: int64
+          example: [1, 2]
         startDate:
           type: string
           format: date

@@ -8,4 +8,6 @@ public interface UserMenuHistoryRepository {
     void save(Long menuId, AppUser person, CurrentWeekMenuResponse menuSnapshot);
 
     List<CurrentWeekMenuResponse> findMenus(Long personId, LocalDate from, LocalDate to);
+
+    List<Long> findPersonIds(Long menuId);
 }

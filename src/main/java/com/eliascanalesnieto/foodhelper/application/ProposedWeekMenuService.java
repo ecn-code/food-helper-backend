@@ -60,6 +60,7 @@ public class ProposedWeekMenuService {
         if (ChronoUnit.DAYS.between(startDate, endDate) + 1 > MAX_MENU_DAYS) {
             throw new IllegalArgumentException("Planning cannot span more than 16 days");
         }
+        ensureNoOverlappingPlanning(startDate, endDate);
         return enrich(menuRepository.create(ProposedWeekMenu.builder()
                 .startDate(startDate)
                 .endDate(endDate)
@@ -98,6 +99,14 @@ public class ProposedWeekMenuService {
         }
     }
 
+    private void ensureNoOverlappingPlanning(LocalDate startDate, LocalDate endDate) {
+        boolean overlaps = menuRepository.findAllSummaries().stream()
+                .anyMatch(summary -> overlaps(summary.startDate(), summary.endDate(), startDate, endDate));
+        if (overlaps) {
+            throw new IllegalArgumentException("Planning overlaps an existing menu");
+        }
+    }
+
     private void validateDayParts(ProposedWeekMenuDay day) {
         Set<Long> dayPartIds = safeSections(day).stream()
                 .map(ProposedWeekMenuSection::getDayPartId)
@@ -125,6 +134,10 @@ public class ProposedWeekMenuService {
                 throw new IllegalArgumentException("Recipe production sortOrder must be unique within the day");
             }
         }
+    }
+
+    private boolean overlaps(LocalDate firstStart, LocalDate firstEnd, LocalDate secondStart, LocalDate secondEnd) {
+        return !firstEnd.isBefore(secondStart) && !firstStart.isAfter(secondEnd);
     }
 
     private void validateDayContent(ProposedWeekMenuDay day) {

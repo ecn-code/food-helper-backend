@@ -2,6 +2,8 @@ package com.eliascanalesnieto.foodhelper.unit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
@@ -51,6 +53,19 @@ class ProposedWeekMenuServiceTest {
         assertThatThrownBy(() -> service.create(LocalDate.of(2026, 6, 15), LocalDate.of(2026, 7, 1)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Planning cannot span more than 16 days");
+    }
+
+    @Test
+    void shouldRejectOverlappingProposedMenusWhenCreatingANewOne() {
+        when(menuRepository.findAllSummaries()).thenReturn(List.of(
+                new PlanningSummary(1L, LocalDate.of(2026, 6, 15), LocalDate.of(2026, 6, 21), 7, PlanningState.DRAFT, null)
+        ));
+
+        assertThatThrownBy(() -> service.create(LocalDate.of(2026, 6, 21), LocalDate.of(2026, 6, 27)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Planning overlaps an existing menu");
+
+        verify(menuRepository, never()).create(org.mockito.Mockito.any());
     }
 
     @Test

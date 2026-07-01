@@ -18,7 +18,7 @@ public record ProposedWeekMenuResponse(
         NutritionalValuesResponse nutritionalValues,
         @Schema(description = "Preview of stock requirements and calorie coverage for the planning period")
         ProposedWeekMenuStockSummaryResponse stockSummary,
-        @Schema(description = "Average daily nutrition evaluated against the saved rules")
+        @Schema(description = "Average daily nutrition evaluated against the saved daily and weekly rules")
         NutritionalRulesEvaluationResponse nutritionalRules
 ) {
 }

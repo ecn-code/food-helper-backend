@@ -119,6 +119,31 @@ class ProductLambdaRouterIntegrationTest {
     }
 
     @Test
+    void shouldHandleDailyAndWeeklyNutritionalRulesThroughLambda() {
+        AuthSession auth = registerAndReadAuth();
+        String token = auth.token();
+
+        APIGatewayProxyResponseEvent saved = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("PUT")
+                .withPath("/api/v1/nutritional-rules")
+                .withHeaders(authHeaders(token))
+                .withBody("""
+                        {"daily":{"calories":{"minimum":100,"maximum":200},"carbohydrates":{"minimum":null,"maximum":20},"proteins":{"minimum":10,"maximum":null},"fats":{"minimum":null,"maximum":null}},"weekly":{"calories":{"minimum":120,"maximum":180},"carbohydrates":{"minimum":null,"maximum":20},"proteins":{"minimum":0,"maximum":20},"fats":{"minimum":null,"maximum":null}}}
+                        """));
+        assertThat(saved.getStatusCode()).isEqualTo(200);
+        assertThat(readDecimal(saved.getBody(), "daily.calories.minimum")).isEqualByComparingTo("100");
+        assertThat(readDecimal(saved.getBody(), "weekly.calories.minimum")).isEqualByComparingTo("120");
+
+        APIGatewayProxyResponseEvent loaded = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/nutritional-rules")
+                .withHeaders(authHeaders(token)));
+        assertThat(loaded.getStatusCode()).isEqualTo(200);
+        assertThat(readDecimal(loaded.getBody(), "daily.calories.maximum")).isEqualByComparingTo("200");
+        assertThat(readDecimal(loaded.getBody(), "weekly.proteins.maximum")).isEqualByComparingTo("20");
+    }
+
+    @Test
     void shouldManageSupermarketsAndProductAssignmentsThroughLambda() {
         AuthSession auth = registerAndReadAuth();
         String token = auth.token();
@@ -571,6 +596,7 @@ class ProductLambdaRouterIntegrationTest {
                 .withBody("{\"payerUserId\":" + auth.userId() + "}"));
         assertThat(establish.getStatusCode()).isEqualTo(201);
         long currentWeekMenuId = readLong(establish.getBody(), "id");
+        assertThat(readNode(establish.getBody()).get("personIds").size()).isZero();
 
         APIGatewayProxyResponseEvent establishedCatalog = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")
@@ -613,6 +639,13 @@ class ProductLambdaRouterIntegrationTest {
         assertThat(readDecimal(close.getBody(), "month.moneySpent")).isEqualByComparingTo("5.40");
         assertThat(readText(close.getBody(), "period.maxDay.date")).isEqualTo(startDate.toString());
         BigDecimal closedCalories = readDecimal(close.getBody(), "period.averageCalories");
+
+        APIGatewayProxyResponseEvent currentMenu = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/menus/" + currentWeekMenuId)
+                .withHeaders(authHeaders(token)));
+        assertThat(currentMenu.getStatusCode()).isEqualTo(200);
+        assertThat(readLong(currentMenu.getBody(), "personIds.0")).isEqualTo(auth.userId());
 
         APIGatewayProxyResponseEvent closedCatalog = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")

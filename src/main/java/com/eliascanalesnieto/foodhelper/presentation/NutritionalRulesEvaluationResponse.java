@@ -2,12 +2,9 @@ package com.eliascanalesnieto.foodhelper.presentation;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-@Schema(name = "NutritionalRulesEvaluationResponse", description = "Evaluation of average daily nutrition against the saved rules")
+@Schema(name = "NutritionalRulesEvaluationResponse", description = "Evaluation of average daily nutrition against the saved daily and weekly rules")
 public record NutritionalRulesEvaluationResponse(
-        @Schema(description = "Number of planned days used to calculate each average", example = "7") int plannedDays,
-        NutrientRuleEvaluationResponse calories,
-        NutrientRuleEvaluationResponse carbohydrates,
-        NutrientRuleEvaluationResponse proteins,
-        NutrientRuleEvaluationResponse fats
+        NutritionalRulesEvaluationPeriodResponse daily,
+        NutritionalRulesEvaluationPeriodResponse weekly
 ) {
 }

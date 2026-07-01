@@ -2,12 +2,16 @@ package com.eliascanalesnieto.foodhelper.application;
 
 import com.eliascanalesnieto.foodhelper.domain.NutritionalRules;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalRulesRepository;
+import com.eliascanalesnieto.foodhelper.domain.NutritionalRuleSet;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.presentation.NutrientRuleEvaluationResponse;
 import com.eliascanalesnieto.foodhelper.presentation.NutrientRuleRequest;
 import com.eliascanalesnieto.foodhelper.presentation.NutrientRuleResponse;
 import com.eliascanalesnieto.foodhelper.presentation.NutritionalRuleStatus;
 import com.eliascanalesnieto.foodhelper.presentation.NutritionalRulesEvaluationResponse;
+import com.eliascanalesnieto.foodhelper.presentation.NutritionalRulesEvaluationPeriodResponse;
+import com.eliascanalesnieto.foodhelper.presentation.NutritionalRulesPeriodRequest;
+import com.eliascanalesnieto.foodhelper.presentation.NutritionalRulesPeriodResponse;
 import com.eliascanalesnieto.foodhelper.presentation.NutritionalRulesResponse;
 import com.eliascanalesnieto.foodhelper.presentation.NutritionalValuesResponse;
 import com.eliascanalesnieto.foodhelper.presentation.SaveNutritionalRulesRequest;
@@ -31,19 +35,17 @@ public class NutritionalRulesService {
 
     @Transactional
     public NutritionalRulesResponse save(SaveNutritionalRulesRequest request) {
-        validate("calories", request.calories());
-        validate("carbohydrates", request.carbohydrates());
-        validate("proteins", request.proteins());
-        validate("fats", request.fats());
+        validate("calories", request.daily().calories());
+        validate("carbohydrates", request.daily().carbohydrates());
+        validate("proteins", request.daily().proteins());
+        validate("fats", request.daily().fats());
+        validate("calories", request.weekly().calories());
+        validate("carbohydrates", request.weekly().carbohydrates());
+        validate("proteins", request.weekly().proteins());
+        validate("fats", request.weekly().fats());
         return toResponse(repository.save(NutritionalRules.builder()
-                .caloriesMinimum(request.calories().minimum())
-                .caloriesMaximum(request.calories().maximum())
-                .carbohydratesMinimum(request.carbohydrates().minimum())
-                .carbohydratesMaximum(request.carbohydrates().maximum())
-                .proteinsMinimum(request.proteins().minimum())
-                .proteinsMaximum(request.proteins().maximum())
-                .fatsMinimum(request.fats().minimum())
-                .fatsMaximum(request.fats().maximum())
+                .daily(toDomain(request.daily()))
+                .weekly(toDomain(request.weekly()))
                 .build()));
     }
 
@@ -63,11 +65,22 @@ public class NutritionalRulesService {
         NutritionalRules rules = repository.find();
         int divisor = Math.max(plannedDays, 1);
         return new NutritionalRulesEvaluationResponse(
+                evaluatePeriod(calories, carbohydrates, proteins, fats, plannedDays, divisor, rules.getDaily()),
+                evaluatePeriod(calories, carbohydrates, proteins, fats, plannedDays, divisor, rules.getWeekly())
+        );
+    }
+
+    private NutritionalRulesEvaluationPeriodResponse evaluatePeriod(
+            BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats,
+            int plannedDays, int divisor, NutritionalRuleSet ruleSet
+    ) {
+        NutritionalRuleSet effectiveRuleSet = ruleSet == null ? NutritionalRuleSet.builder().build() : ruleSet;
+        return new NutritionalRulesEvaluationPeriodResponse(
                 plannedDays,
-                evaluate(calories, divisor, rules.getCaloriesMinimum(), rules.getCaloriesMaximum()),
-                evaluate(carbohydrates, divisor, rules.getCarbohydratesMinimum(), rules.getCarbohydratesMaximum()),
-                evaluate(proteins, divisor, rules.getProteinsMinimum(), rules.getProteinsMaximum()),
-                evaluate(fats, divisor, rules.getFatsMinimum(), rules.getFatsMaximum())
+                evaluate(calories, divisor, effectiveRuleSet.getCaloriesMinimum(), effectiveRuleSet.getCaloriesMaximum()),
+                evaluate(carbohydrates, divisor, effectiveRuleSet.getCarbohydratesMinimum(), effectiveRuleSet.getCarbohydratesMaximum()),
+                evaluate(proteins, divisor, effectiveRuleSet.getProteinsMinimum(), effectiveRuleSet.getProteinsMaximum()),
+                evaluate(fats, divisor, effectiveRuleSet.getFatsMinimum(), effectiveRuleSet.getFatsMaximum())
         );
     }
 
@@ -75,6 +88,19 @@ public class NutritionalRulesService {
         if (rule.minimum() != null && rule.maximum() != null && rule.minimum().compareTo(rule.maximum()) > 0) {
             throw new IllegalArgumentException(nutrient + " minimum cannot be greater than maximum");
         }
+    }
+
+    private NutritionalRuleSet toDomain(NutritionalRulesPeriodRequest request) {
+        return NutritionalRuleSet.builder()
+                .caloriesMinimum(request.calories().minimum())
+                .caloriesMaximum(request.calories().maximum())
+                .carbohydratesMinimum(request.carbohydrates().minimum())
+                .carbohydratesMaximum(request.carbohydrates().maximum())
+                .proteinsMinimum(request.proteins().minimum())
+                .proteinsMaximum(request.proteins().maximum())
+                .fatsMinimum(request.fats().minimum())
+                .fatsMaximum(request.fats().maximum())
+                .build();
     }
 
     private NutrientRuleEvaluationResponse evaluate(BigDecimal total, int divisor, BigDecimal minimum, BigDecimal maximum) {
@@ -93,11 +119,18 @@ public class NutritionalRulesService {
     }
 
     private NutritionalRulesResponse toResponse(NutritionalRules rules) {
-        return new NutritionalRulesResponse(
-                new NutrientRuleResponse(rules.getCaloriesMinimum(), rules.getCaloriesMaximum()),
-                new NutrientRuleResponse(rules.getCarbohydratesMinimum(), rules.getCarbohydratesMaximum()),
-                new NutrientRuleResponse(rules.getProteinsMinimum(), rules.getProteinsMaximum()),
-                new NutrientRuleResponse(rules.getFatsMinimum(), rules.getFatsMaximum())
+        NutritionalRulesPeriodResponse daily = toResponse(rules.getDaily());
+        NutritionalRulesPeriodResponse weekly = toResponse(rules.getWeekly());
+        return new NutritionalRulesResponse(daily, weekly);
+    }
+
+    private NutritionalRulesPeriodResponse toResponse(NutritionalRuleSet ruleSet) {
+        NutritionalRuleSet effectiveRuleSet = ruleSet == null ? NutritionalRuleSet.builder().build() : ruleSet;
+        return new NutritionalRulesPeriodResponse(
+                new NutrientRuleResponse(effectiveRuleSet.getCaloriesMinimum(), effectiveRuleSet.getCaloriesMaximum()),
+                new NutrientRuleResponse(effectiveRuleSet.getCarbohydratesMinimum(), effectiveRuleSet.getCarbohydratesMaximum()),
+                new NutrientRuleResponse(effectiveRuleSet.getProteinsMinimum(), effectiveRuleSet.getProteinsMaximum()),
+                new NutrientRuleResponse(effectiveRuleSet.getFatsMinimum(), effectiveRuleSet.getFatsMaximum())
         );
     }
 }

@@ -7,9 +7,11 @@ import static org.mockito.Mockito.when;
 import com.eliascanalesnieto.foodhelper.application.NutritionalRulesService;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalRules;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalRulesRepository;
+import com.eliascanalesnieto.foodhelper.domain.NutritionalRuleSet;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.presentation.NutrientRuleRequest;
 import com.eliascanalesnieto.foodhelper.presentation.NutritionalRuleStatus;
+import com.eliascanalesnieto.foodhelper.presentation.NutritionalRulesPeriodRequest;
 import com.eliascanalesnieto.foodhelper.presentation.SaveNutritionalRulesRequest;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
@@ -29,10 +31,18 @@ class NutritionalRulesServiceTest {
     @Test
     void shouldEvaluateAveragePerPlannedDay() {
         when(repository.find()).thenReturn(NutritionalRules.builder()
-                .caloriesMinimum(new BigDecimal("100"))
-                .caloriesMaximum(new BigDecimal("200"))
-                .carbohydratesMaximum(new BigDecimal("20"))
-                .proteinsMinimum(new BigDecimal("10"))
+                .daily(NutritionalRuleSet.builder()
+                        .caloriesMinimum(new BigDecimal("100"))
+                        .caloriesMaximum(new BigDecimal("200"))
+                        .carbohydratesMaximum(new BigDecimal("20"))
+                        .proteinsMinimum(new BigDecimal("10"))
+                        .build())
+                .weekly(NutritionalRuleSet.builder()
+                        .caloriesMinimum(new BigDecimal("120"))
+                        .caloriesMaximum(new BigDecimal("180"))
+                        .carbohydratesMaximum(new BigDecimal("20"))
+                        .proteinsMinimum(new BigDecimal("5"))
+                        .build())
                 .build());
 
         var result = service.evaluate(NutritionalValues.builder()
@@ -42,21 +52,34 @@ class NutritionalRulesServiceTest {
                 .fats(new BigDecimal("4"))
                 .build(), 2);
 
-        assertThat(result.plannedDays()).isEqualTo(2);
-        assertThat(result.calories().value()).isEqualByComparingTo("150.00");
-        assertThat(result.calories().status()).isEqualTo(NutritionalRuleStatus.WITHIN_RANGE);
-        assertThat(result.carbohydrates().status()).isEqualTo(NutritionalRuleStatus.ABOVE_MAXIMUM);
-        assertThat(result.proteins().status()).isEqualTo(NutritionalRuleStatus.BELOW_MINIMUM);
-        assertThat(result.fats().status()).isEqualTo(NutritionalRuleStatus.NOT_CONFIGURED);
+        assertThat(result.daily().plannedDays()).isEqualTo(2);
+        assertThat(result.daily().calories().value()).isEqualByComparingTo("150.00");
+        assertThat(result.daily().calories().status()).isEqualTo(NutritionalRuleStatus.WITHIN_RANGE);
+        assertThat(result.daily().carbohydrates().status()).isEqualTo(NutritionalRuleStatus.ABOVE_MAXIMUM);
+        assertThat(result.daily().proteins().status()).isEqualTo(NutritionalRuleStatus.BELOW_MINIMUM);
+        assertThat(result.daily().fats().status()).isEqualTo(NutritionalRuleStatus.NOT_CONFIGURED);
+        assertThat(result.weekly().plannedDays()).isEqualTo(2);
+        assertThat(result.weekly().calories().status()).isEqualTo(NutritionalRuleStatus.WITHIN_RANGE);
+        assertThat(result.weekly().carbohydrates().status()).isEqualTo(NutritionalRuleStatus.ABOVE_MAXIMUM);
+        assertThat(result.weekly().proteins().status()).isEqualTo(NutritionalRuleStatus.WITHIN_RANGE);
+        assertThat(result.weekly().fats().status()).isEqualTo(NutritionalRuleStatus.NOT_CONFIGURED);
     }
 
     @Test
     void shouldRejectMinimumGreaterThanMaximum() {
         SaveNutritionalRulesRequest request = new SaveNutritionalRulesRequest(
-                new NutrientRuleRequest(new BigDecimal("200"), new BigDecimal("100")),
-                new NutrientRuleRequest(null, null),
-                new NutrientRuleRequest(null, null),
-                new NutrientRuleRequest(null, null)
+                new NutritionalRulesPeriodRequest(
+                        new NutrientRuleRequest(new BigDecimal("200"), new BigDecimal("100")),
+                        new NutrientRuleRequest(null, null),
+                        new NutrientRuleRequest(null, null),
+                        new NutrientRuleRequest(null, null)
+                ),
+                new NutritionalRulesPeriodRequest(
+                        new NutrientRuleRequest(null, null),
+                        new NutrientRuleRequest(null, null),
+                        new NutrientRuleRequest(null, null),
+                        new NutrientRuleRequest(null, null)
+                )
         );
 
         assertThatThrownBy(() -> service.save(request))

@@ -39,7 +39,7 @@ class CurrentWeekMenuShoppingListServiceTest {
         CurrentWeekMenuShoppingListItemResponse rice = new CurrentWeekMenuShoppingListItemResponse(10L, "Rice", new BigDecimal("2.00"));
         CurrentWeekMenuShoppingListItemResponse beans = new CurrentWeekMenuShoppingListItemResponse(20L, "Beans", new BigDecimal("0.50"));
         CurrentWeekMenuResponse menu = new CurrentWeekMenuResponse(
-                1L, 2L, 3L, "payer", null, null, List.of(), null, null, List.of(), List.of(rice, beans), List.of(), List.of(), null
+                1L, 2L, 3L, "payer", List.of(), null, null, List.of(), null, null, List.of(), List.of(rice, beans), List.of(), List.of(), null
         );
         when(currentWeekMenuRepository.findById(1L)).thenReturn(menu);
 
