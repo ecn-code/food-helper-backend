@@ -45,6 +45,7 @@ import com.eliascanalesnieto.foodhelper.presentation.SaveNutritionalRulesRequest
 import com.eliascanalesnieto.foodhelper.presentation.SupermarketRequest;
 import com.eliascanalesnieto.foodhelper.presentation.SupermarketResponse;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateCurrentWeekMenuPayerRequest;
+import com.eliascanalesnieto.foodhelper.presentation.UpdateCurrentWeekMenuStockRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateStockEntryRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateUserWeightRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpsertProposedWeekMenuDayRequest;
@@ -353,6 +354,16 @@ public class LambdaHttpRouter {
                 if ("POST".equals(method)) {
                     CreateMenuStockMovementRequest body = readBody(request.getBody(), CreateMenuStockMovementRequest.class);
                     return json(200, currentWeekMenuService.addStockMovement(id, body));
+                }
+            }
+            if (path.endsWith("/week-stock")) {
+                Long id = parseId(path.substring(0, path.lastIndexOf('/')));
+                if ("GET".equals(method)) {
+                    return json(200, currentWeekMenuService.findById(id).weekStock());
+                }
+                if ("PUT".equals(method)) {
+                    UpdateCurrentWeekMenuStockRequest body = readBody(request.getBody(), UpdateCurrentWeekMenuStockRequest.class);
+                    return json(200, currentWeekMenuService.updateWeekStock(id, body));
                 }
             }
             if (path.matches("/api/v1/menus/\\d+/recipe-productions/\\d+/transfer")) {

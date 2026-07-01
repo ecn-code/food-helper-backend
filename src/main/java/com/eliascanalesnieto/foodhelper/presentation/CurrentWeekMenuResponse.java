@@ -29,6 +29,8 @@ public record CurrentWeekMenuResponse(
         ProposedWeekMenuStockSummaryResponse stockSummary,
         @Schema(description = "Stock entries consumed to satisfy the menu")
         List<CurrentWeekMenuUsedStockResponse> usedStock,
+        @Schema(description = "Temporary stock tracked for the established week")
+        List<CurrentWeekMenuStockItemResponse> weekStock,
         @Schema(description = "Products still missing after consuming stock")
         List<CurrentWeekMenuShoppingListItemResponse> shoppingList,
         @Schema(description = "Repercussion movements recorded while the menu is open")
@@ -40,5 +42,43 @@ public record CurrentWeekMenuResponse(
 ) {
     public CurrentWeekMenuResponse {
         personIds = personIds == null ? List.of() : List.copyOf(personIds);
+        weekStock = weekStock == null ? List.of() : List.copyOf(weekStock);
+    }
+
+    public CurrentWeekMenuResponse(
+            Long id,
+            Long planningId,
+            Long payerUserId,
+            String payerUsername,
+            List<Long> personIds,
+            LocalDate startDate,
+            LocalDate endDate,
+            List<ProposedWeekMenuDayResponse> days,
+            NutritionalValuesResponse nutritionalValues,
+            ProposedWeekMenuStockSummaryResponse stockSummary,
+            List<CurrentWeekMenuUsedStockResponse> usedStock,
+            List<CurrentWeekMenuShoppingListItemResponse> shoppingList,
+            List<MenuStockMovementResponse> stockMovements,
+            List<CurrentWeekMenuRecipeProductionResponse> recipeProductions,
+            NutritionalRulesEvaluationResponse nutritionalRules
+    ) {
+        this(
+                id,
+                planningId,
+                payerUserId,
+                payerUsername,
+                personIds,
+                startDate,
+                endDate,
+                days,
+                nutritionalValues,
+                stockSummary,
+                usedStock,
+                List.of(),
+                shoppingList,
+                stockMovements,
+                recipeProductions,
+                nutritionalRules
+        );
     }
 }

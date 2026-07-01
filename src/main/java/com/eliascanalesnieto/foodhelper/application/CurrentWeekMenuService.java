@@ -7,6 +7,7 @@ import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuRepository;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuRecipeProduction;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuStatsRepository;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuShoppingListItem;
+import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuStockItem;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuUsedStock;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.Product;
@@ -28,10 +29,13 @@ import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuRecipeProduc
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuShoppingListItemResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuStatsResponse;
+import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuStockItemRequest;
+import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuStockItemResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuUsedStockResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CreateMenuStockMovementRequest;
 import com.eliascanalesnieto.foodhelper.presentation.MenuStockMovementResponse;
 import com.eliascanalesnieto.foodhelper.presentation.MenuStockAllocationRequest;
+import com.eliascanalesnieto.foodhelper.presentation.UpdateCurrentWeekMenuStockRequest;
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuDayResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuRecipeProductionResponse;
 import com.eliascanalesnieto.foodhelper.presentation.NutritionalValuesResponse;
@@ -115,6 +119,7 @@ public class CurrentWeekMenuService {
                 .nutritionalValues(proposedMenu.getNutritionalValues())
                 .stockSummary(proposedMenu.getStockSummary())
                 .usedStock(allocation.usedStock())
+                .weekStock(List.of())
                 .shoppingList(allocation.shoppingList())
                 .stockMovements(List.of())
                 .recipeProductions(recipeProductions)
@@ -211,6 +216,7 @@ public class CurrentWeekMenuService {
             currentWeekMenuRepository.save(updatedMenu);
             closedWeek = updatedMenu;
         }
+        transferWeekStockToProducts(closedWeek);
         List<AppUser> people = loadPeople(personIds);
         List<CurrentWeekMenuResponse> closedWeeksInMonth = new ArrayList<>(currentWeekMenuStatsRepository.findClosedWeekMenusByMonth(YearMonth.from(closedWeek.endDate())));
         closedWeeksInMonth.add(closedWeek);
@@ -238,6 +244,7 @@ public class CurrentWeekMenuService {
                 menu.nutritionalValues(),
                 menu.stockSummary(),
                 menu.usedStock(),
+                safeWeekStock(menu),
                 menu.shoppingList(),
                 safeStockMovements(menu),
                 menu.recipeProductions(),
@@ -257,6 +264,7 @@ public class CurrentWeekMenuService {
         BigDecimal price = scale(request.price());
         BigDecimal totalCost = scale(quantity.multiply(price));
         List<CurrentWeekMenuShoppingListItemResponse> updatedShoppingList = updateShoppingList(menu, request.productId(), quantity);
+        List<CurrentWeekMenuStockItemResponse> updatedWeekStock = updateWeekStock(menu, request.productId(), quantity, product.getName());
         MenuStockMovement movement = menuStockMovementRepository.save(MenuStockMovement.builder()
                 .currentWeekMenuId(id)
                 .userId(person.getId())
@@ -283,6 +291,7 @@ public class CurrentWeekMenuService {
                 menu.nutritionalValues(),
                 menu.stockSummary(),
                 menu.usedStock(),
+                updatedWeekStock,
                 updatedShoppingList,
                 append(safeStockMovements(menu), movementResponse),
                 menu.recipeProductions(),
@@ -310,6 +319,32 @@ public class CurrentWeekMenuService {
         return withPersonIds(updated);
     }
 
+    @Transactional
+    public CurrentWeekMenuResponse updateWeekStock(Long id, UpdateCurrentWeekMenuStockRequest request) {
+        CurrentWeekMenuResponse menu = currentWeekMenuRepository.findById(id);
+        ensureMenuIsOpen(id);
+        WeekStockUpdateResult updated = replaceWeekStock(menu, request.weekStock());
+        CurrentWeekMenuResponse updatedMenu = new CurrentWeekMenuResponse(
+                menu.id(),
+                menu.planningId(),
+                menu.payerUserId(),
+                menu.payerUsername(),
+                safePersonIds(menu),
+                menu.startDate(),
+                menu.endDate(),
+                menu.days(),
+                menu.nutritionalValues(),
+                menu.stockSummary(),
+                menu.usedStock(),
+                updated.weekStock(),
+                updated.shoppingList(),
+                safeStockMovements(menu),
+                menu.recipeProductions(),
+                menu.nutritionalRules()
+        );
+        return withPersonIds(currentWeekMenuRepository.save(updatedMenu));
+    }
+
     @Transactional(readOnly = true)
     public List<UserResponse> findPeople() {
         return appUserRepository.findAll().stream()
@@ -330,6 +365,18 @@ public class CurrentWeekMenuService {
             }
         }
         return updated;
+    }
+
+    private void transferWeekStockToProducts(CurrentWeekMenuResponse menu) {
+        for (CurrentWeekMenuStockItemResponse item : safeWeekStock(menu)) {
+            productRepository.findById(item.productId());
+            stockRepository.create(item.productId(), StockEntry.builder()
+                    .quantity(item.quantity())
+                    .price(ZERO)
+                    .expirationDate(null)
+                    .entryDate(LocalDate.now(clock))
+                    .build());
+        }
     }
 
     private CurrentWeekMenuResponse applyRecipeProductionTransfer(
@@ -399,6 +446,7 @@ public class CurrentWeekMenuService {
                 menu.nutritionalValues(),
                 menu.stockSummary(),
                 menu.usedStock(),
+                safeWeekStock(menu),
                 menu.shoppingList(),
                 safeStockMovements(menu),
                 updatedProductions,
@@ -758,6 +806,7 @@ public class CurrentWeekMenuService {
                 menu.startDate(), menu.endDate(), days, totals,
                 menu.stockSummary(),
                 menu.usedStock() == null ? List.of() : menu.usedStock(),
+                safeWeekStock(menu),
                 menu.shoppingList() == null ? List.of() : menu.shoppingList(),
                 safeStockMovements(menu),
                 menu.recipeProductions() == null ? List.of() : menu.recipeProductions(),
@@ -778,6 +827,7 @@ public class CurrentWeekMenuService {
                 menu.nutritionalValues(),
                 menu.stockSummary(),
                 menu.usedStock(),
+                safeWeekStock(menu),
                 menu.shoppingList(),
                 menu.stockMovements(),
                 menu.recipeProductions(),
@@ -798,6 +848,7 @@ public class CurrentWeekMenuService {
                 menu.nutritionalValues(),
                 menu.stockSummary(),
                 menu.usedStock(),
+                safeWeekStock(menu),
                 menu.shoppingList(),
                 menu.stockMovements(),
                 menu.recipeProductions(),
@@ -809,34 +860,133 @@ public class CurrentWeekMenuService {
         return menu.personIds() == null ? List.of() : menu.personIds();
     }
 
+    private List<CurrentWeekMenuStockItemResponse> safeWeekStock(CurrentWeekMenuResponse menu) {
+        return menu.weekStock() == null ? List.of() : menu.weekStock();
+    }
+
     private List<CurrentWeekMenuShoppingListItemResponse> updateShoppingList(
             CurrentWeekMenuResponse menu,
             Long productId,
             BigDecimal quantity
     ) {
-        if (menu.shoppingList() == null || menu.shoppingList().isEmpty()) {
-            throw new IllegalArgumentException("Menu does not have a shopping list item for the selected product");
+        return adjustShoppingList(menu.shoppingList(), productId, quantity);
+    }
+
+    private List<CurrentWeekMenuStockItemResponse> updateWeekStock(
+            CurrentWeekMenuResponse menu,
+            Long productId,
+            BigDecimal quantity,
+            String productName
+    ) {
+        return upsertWeekStock(safeWeekStock(menu), productId, quantity, productName);
+    }
+
+    private WeekStockUpdateResult replaceWeekStock(
+            CurrentWeekMenuResponse menu,
+            List<CurrentWeekMenuStockItemRequest> requestedWeekStock
+    ) {
+        List<CurrentWeekMenuStockItemResponse> currentWeekStock = new ArrayList<>(safeWeekStock(menu));
+        List<CurrentWeekMenuShoppingListItemResponse> shoppingList = new ArrayList<>(menu.shoppingList() == null ? List.of() : menu.shoppingList());
+        Map<Long, CurrentWeekMenuStockItemRequest> requestedByProduct = new LinkedHashMap<>();
+        if (requestedWeekStock != null) {
+            for (CurrentWeekMenuStockItemRequest request : requestedWeekStock) {
+                if (request == null || request.productId() == null || request.quantity() == null || request.quantity().signum() <= 0) {
+                    throw new IllegalArgumentException("Week stock items require a productId and positive quantity");
+                }
+                if (requestedByProduct.put(request.productId(), request) != null) {
+                    throw new IllegalArgumentException("Each product can appear only once in weekStock");
+                }
+                productRepository.findById(request.productId());
+            }
         }
-        boolean[] matched = new boolean[1];
+
+        Map<Long, CurrentWeekMenuStockItemResponse> currentByProduct = currentWeekStock.stream()
+                .collect(Collectors.toMap(
+                        CurrentWeekMenuStockItemResponse::productId,
+                        item -> item,
+                        (left, right) -> right,
+                        LinkedHashMap::new
+                ));
+
+        Set<Long> productIds = new java.util.LinkedHashSet<>();
+        productIds.addAll(currentByProduct.keySet());
+        productIds.addAll(requestedByProduct.keySet());
+        Map<Long, String> productNames = requestedByProduct.values().stream()
+                .collect(Collectors.toMap(
+                        CurrentWeekMenuStockItemRequest::productId,
+                        request -> productRepository.findById(request.productId()).getName(),
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
+
+        List<CurrentWeekMenuStockItemResponse> updatedWeekStock = new ArrayList<>();
+        for (Long productId : productIds) {
+            BigDecimal currentQuantity = currentByProduct.getOrDefault(productId, new CurrentWeekMenuStockItemResponse(productId, null, ZERO)).quantity();
+            BigDecimal requestedQuantity = requestedByProduct.containsKey(productId)
+                    ? scale(requestedByProduct.get(productId).quantity())
+                    : ZERO;
+            BigDecimal delta = requestedQuantity.subtract(currentQuantity);
+            shoppingList = adjustShoppingList(shoppingList, productId, delta);
+            if (requestedQuantity.signum() > 0) {
+                String productName = currentByProduct.containsKey(productId)
+                        ? currentByProduct.get(productId).productName()
+                        : productNames.get(productId);
+                updatedWeekStock.add(new CurrentWeekMenuStockItemResponse(productId, productName, requestedQuantity));
+            }
+        }
+        return new WeekStockUpdateResult(updatedWeekStock, shoppingList);
+    }
+
+    private List<CurrentWeekMenuShoppingListItemResponse> adjustShoppingList(
+            List<CurrentWeekMenuShoppingListItemResponse> shoppingList,
+            Long productId,
+            BigDecimal quantityDelta
+    ) {
+        if (shoppingList == null || shoppingList.isEmpty()) {
+            return List.of();
+        }
+        boolean matched = false;
         List<CurrentWeekMenuShoppingListItemResponse> updatedItems = new ArrayList<>();
-        for (CurrentWeekMenuShoppingListItemResponse item : menu.shoppingList()) {
+        for (CurrentWeekMenuShoppingListItemResponse item : shoppingList) {
             if (!item.productId().equals(productId)) {
                 updatedItems.add(item);
                 continue;
             }
-            matched[0] = true;
-            BigDecimal remaining = scale(item.missingUnits().subtract(quantity));
-            if (remaining.signum() < 0) {
-                throw new IllegalArgumentException("Movement quantity exceeds missing quantity");
-            }
+            matched = true;
+            BigDecimal remaining = scale(item.missingUnits().subtract(quantityDelta));
             if (remaining.signum() > 0) {
                 updatedItems.add(new CurrentWeekMenuShoppingListItemResponse(item.productId(), item.productName(), remaining));
             }
         }
-        if (!matched[0]) {
-            throw new IllegalArgumentException("Menu does not have a shopping list item for the selected product");
+        if (!matched) {
+            return shoppingList;
         }
         return updatedItems;
+    }
+
+    private List<CurrentWeekMenuStockItemResponse> upsertWeekStock(
+            List<CurrentWeekMenuStockItemResponse> weekStock,
+            Long productId,
+            BigDecimal quantityDelta,
+            String productName
+    ) {
+        Map<Long, CurrentWeekMenuStockItemResponse> updated = new LinkedHashMap<>();
+        if (weekStock != null) {
+            weekStock.forEach(item -> updated.put(item.productId(), item));
+        }
+        CurrentWeekMenuStockItemResponse existing = updated.get(productId);
+        BigDecimal currentQuantity = existing == null ? ZERO : scale(existing.quantity());
+        BigDecimal newQuantity = currentQuantity.add(quantityDelta);
+        if (newQuantity.signum() <= 0) {
+            updated.remove(productId);
+            return new ArrayList<>(updated.values());
+        }
+        updated.put(productId, new CurrentWeekMenuStockItemResponse(
+                productId,
+                existing == null ? productName : existing.productName(),
+                scale(newQuantity)
+        ));
+        return new ArrayList<>(updated.values());
     }
 
     private List<MenuStockMovementResponse> append(List<MenuStockMovementResponse> movements, MenuStockMovementResponse movement) {
@@ -852,6 +1002,12 @@ public class CurrentWeekMenuService {
     private record AllocationResult(
             List<CurrentWeekMenuUsedStock> usedStock,
             List<CurrentWeekMenuShoppingListItem> shoppingList
+    ) {
+    }
+
+    private record WeekStockUpdateResult(
+            List<CurrentWeekMenuStockItemResponse> weekStock,
+            List<CurrentWeekMenuShoppingListItemResponse> shoppingList
     ) {
     }
 }

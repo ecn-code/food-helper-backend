@@ -157,11 +157,23 @@ public class JdbcProductRepository implements ProductRepository {
             return List.of();
         }
         return jdbcTemplate.queryForList("""
-                        SELECT product_id
-                        FROM product_supermarkets
-                        WHERE supermarket_id = :supermarketId
-                          AND product_id IN (:productIds)
-                        ORDER BY product_id
+                        SELECT p.id
+                        FROM products p
+                        WHERE p.id IN (:productIds)
+                          AND (
+                                NOT EXISTS (
+                                    SELECT 1
+                                    FROM product_supermarkets ps
+                                    WHERE ps.product_id = p.id
+                                )
+                                OR EXISTS (
+                                    SELECT 1
+                                    FROM product_supermarkets ps
+                                    WHERE ps.product_id = p.id
+                                      AND ps.supermarket_id = :supermarketId
+                                )
+                          )
+                        ORDER BY p.id
                         """,
                 new MapSqlParameterSource()
                         .addValue("supermarketId", supermarketId)

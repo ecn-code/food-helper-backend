@@ -4,6 +4,7 @@ import com.eliascanalesnieto.foodhelper.application.NutritionalRulesService;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenu;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuRecipeProduction;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuShoppingListItem;
+import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuStockItem;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuUsedStock;
 import com.eliascanalesnieto.foodhelper.domain.MenuStockMovement;
 import org.springframework.stereotype.Component;
@@ -29,6 +30,7 @@ public class CurrentWeekMenuApiMapper {
                 toResponse(menu.getNutritionalValues()),
                 toResponse(menu.getStockSummary()),
                 (menu.getUsedStock() == null ? java.util.List.<CurrentWeekMenuUsedStock>of() : menu.getUsedStock()).stream().map(this::toResponse).toList(),
+                (menu.getWeekStock() == null ? java.util.List.<CurrentWeekMenuStockItem>of() : menu.getWeekStock()).stream().map(this::toResponse).toList(),
                 (menu.getShoppingList() == null ? java.util.List.<CurrentWeekMenuShoppingListItem>of() : menu.getShoppingList()).stream().map(this::toResponse).toList(),
                 (menu.getStockMovements() == null ? java.util.List.<MenuStockMovement>of() : menu.getStockMovements()).stream().map(this::toResponse).toList(),
                 (menu.getRecipeProductions() == null ? java.util.List.<CurrentWeekMenuRecipeProduction>of() : menu.getRecipeProductions()).stream().map(this::toResponse).toList(),
@@ -63,6 +65,10 @@ public class CurrentWeekMenuApiMapper {
 
     public java.util.List<CurrentWeekMenuShoppingListItemResponse> toResponseShoppingList(java.util.List<CurrentWeekMenuShoppingListItem> shoppingList) {
         return shoppingList.stream().map(this::toResponse).toList();
+    }
+
+    public java.util.List<CurrentWeekMenuStockItemResponse> toResponseWeekStock(java.util.List<CurrentWeekMenuStockItem> weekStock) {
+        return weekStock.stream().map(this::toResponse).toList();
     }
 
     public java.util.List<MenuStockMovementResponse> toResponseStockMovements(java.util.List<MenuStockMovement> movements) {
@@ -133,6 +139,14 @@ public class CurrentWeekMenuApiMapper {
                 production.getTransferType(),
                 production.getStockEntryId(),
                 production.getTransferredAt()
+        );
+    }
+
+    private CurrentWeekMenuStockItemResponse toResponse(CurrentWeekMenuStockItem weekStockItem) {
+        return new CurrentWeekMenuStockItemResponse(
+                weekStockItem.getProductId(),
+                weekStockItem.getProductName(),
+                weekStockItem.getQuantity()
         );
     }
 

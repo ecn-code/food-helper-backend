@@ -1653,7 +1653,7 @@ paths:
       tags:
         - Menus
       summary: List shopping list for menu
-      description: Returns the products and missing units saved after applying stock when the menu was created. An optional supermarket filter only returns products available there. This operation does not recalculate the menu, consume stock, or persist a supermarket selection.
+      description: Returns the products and missing units saved after applying stock when the week was established. An optional supermarket filter returns products available there and products without any supermarket assignment. This operation does not recalculate the week, consume stock, or persist a supermarket selection.
       operationId: listMenuShoppingList
       parameters:
         - name: id
@@ -1680,6 +1680,77 @@ paths:
                   $ref: '#/components/schemas/MenuShoppingListItemResponse'
         '404':
           description: Menu or supermarket not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/menus/{id}/week-stock:
+    get:
+      tags:
+        - Menus
+      summary: List week stock
+      description: Returns the temporary stock tracked for the established week, separate from the global product stock.
+      operationId: listMenuWeekStock
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Week stock returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WeekStockItemResponse'
+        '404':
+          description: Menu not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    put:
+      tags:
+        - Menus
+      summary: Replace week stock
+      description: Replaces the temporary stock tracked for the established week and updates the shopping list accordingly.
+      operationId: replaceMenuWeekStock
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCurrentWeekMenuStockRequest'
+            example:
+              weekStock:
+                - productId: 1
+                  quantity: 1.5
+      responses:
+        '200':
+          description: Week stock updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuResponse'
+        '400':
+          description: Week stock payload is invalid or the menu cannot be modified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Menu or product not found
           content:
             application/json:
               schema:
@@ -3309,6 +3380,11 @@ components:
           description: Stock entries consumed to satisfy the menu period
           items:
             $ref: '#/components/schemas/MenuUsedStockResponse'
+        weekStock:
+          type: array
+          description: Temporary stock tracked for the established week
+          items:
+            $ref: '#/components/schemas/WeekStockItemResponse'
         shoppingList:
           type: array
           description: Products still missing after consuming stock
@@ -3815,6 +3891,22 @@ components:
           format: date
           description: Date when the stock entry was received
           example: 2026-06-10
+    WeekStockItemResponse:
+      type: object
+      properties:
+        productId:
+          type: integer
+          format: int64
+          description: Product identifier
+          example: 1
+        productName:
+          type: string
+          description: Product name
+          example: Rice
+        quantity:
+          type: number
+          description: Quantity currently available in the week stock
+          example: 1.5
     MenuShoppingListItemResponse:
       type: object
       properties:
@@ -3831,6 +3923,32 @@ components:
           type: number
           description: Units still missing after consuming available stock
           example: 2
+    UpdateCurrentWeekMenuStockRequest:
+      type: object
+      required:
+        - weekStock
+      properties:
+        weekStock:
+          type: array
+          description: Temporary stock items to save for the established week
+          items:
+            $ref: '#/components/schemas/WeekStockItemRequest'
+    WeekStockItemRequest:
+      type: object
+      required:
+        - productId
+        - quantity
+      properties:
+        productId:
+          type: integer
+          format: int64
+          description: Product identifier
+          example: 1
+        quantity:
+          type: number
+          exclusiveMinimum: 0
+          description: Quantity currently available in the week stock
+          example: 1.5
     NutritionalValuesResponse:
       type: object
       properties:

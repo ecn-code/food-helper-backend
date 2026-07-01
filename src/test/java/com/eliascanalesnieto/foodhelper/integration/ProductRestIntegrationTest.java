@@ -24,6 +24,8 @@ import com.eliascanalesnieto.foodhelper.presentation.CreateUserMoneyMovementRequ
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuRecipeProductionResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuShoppingListItemResponse;
+import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuStockItemRequest;
+import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuStockItemResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuStatsResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuUsedStockResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CreateMenuStockMovementRequest;
@@ -42,6 +44,7 @@ import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuStockSummar
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuSectionRequest;
 import com.eliascanalesnieto.foodhelper.presentation.MenuStockMovementResponse;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateCurrentWeekMenuPayerRequest;
+import com.eliascanalesnieto.foodhelper.presentation.UpdateCurrentWeekMenuStockRequest;
 import com.eliascanalesnieto.foodhelper.presentation.RecipeIngredientAssignmentRequest;
 import com.eliascanalesnieto.foodhelper.presentation.RecipeStatsResponse;
 import com.eliascanalesnieto.foodhelper.presentation.RecipeResponse;
@@ -605,10 +608,13 @@ class ProductRestIntegrationTest {
         assertThat(response.getBody()).contains("RecipeStatsResponse");
         assertThat(response.getBody()).contains("/api/v1/menus/{id}/recipe-productions/{recipeProductionId}/transfer");
         assertThat(response.getBody()).contains("/api/v1/menus/{id}/stock-movements");
+        assertThat(response.getBody()).contains("/api/v1/menus/{id}/week-stock");
         assertThat(response.getBody()).contains("/api/v1/menus/{id}/payer");
         assertThat(response.getBody()).contains("MenuRecipeProductionResponse");
         assertThat(response.getBody()).contains("MenuStockMovementResponse");
+        assertThat(response.getBody()).contains("WeekStockItemResponse");
         assertThat(response.getBody()).contains("CreateMenuStockMovementRequest");
+        assertThat(response.getBody()).contains("UpdateCurrentWeekMenuStockRequest");
         assertThat(response.getBody()).contains("UpdateCurrentWeekMenuPayerRequest");
 
         JsonNode contract = objectMapper.readTree(response.getBody());
@@ -653,6 +659,7 @@ class ProductRestIntegrationTest {
                 "/api/v1/menus/{id}/used-stock",
                 "/api/v1/menus/{id}/shopping-list",
                 "/api/v1/menus/{id}/stock-movements",
+                "/api/v1/menus/{id}/week-stock",
                 "/api/v1/menus/{id}/payer",
                 "/api/v1/menus/{id}/close",
                 "/api/v1/menus/{id}/stats"
@@ -1746,6 +1753,20 @@ class ProductRestIntegrationTest {
         );
         assertThat(closed.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(closed.getBody()).isNotNull();
+
+        ResponseEntity<StockEntryResponse[]> riceStock = getAuthorized(
+                productsUrl + "/" + riceId + "/stock",
+                StockEntryResponse[].class
+        );
+        assertThat(riceStock.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(riceStock.getBody()).singleElement().satisfies(stock -> assertThat(stock.quantity()).isEqualByComparingTo("1.00"));
+        ResponseEntity<Void> cleanedRiceStock = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/stock/" + riceStock.getBody()[0].id() + "/remove",
+                HttpMethod.POST,
+                authorizedEntity(new AdjustStockQuantityRequest(new BigDecimal("1.00"))),
+                Void.class
+        );
+        assertThat(cleanedRiceStock.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
     @Test
@@ -2708,6 +2729,169 @@ class ProductRestIntegrationTest {
         );
         assertThat(reestablished.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(reestablished.getBody().planningId()).isEqualTo(planning.getBody().id());
+    }
+
+    @Test
+    void weekStockShouldReduceTheShoppingListAndTransferBackToProductStockWhenClosing() {
+        String productsUrl = "http://localhost:" + port + "/api/v1/products";
+        String dayPartsUrl = "http://localhost:" + port + "/api/v1/planning/day-parts";
+        String proposedMenusUrl = "http://localhost:" + port + "/api/v1/planning";
+        String menusUrl = "http://localhost:" + port + "/api/v1/menus";
+        Long riceId = createProduct(productsUrl, "Week Stock Rice", "Rice", "100", "0", "2.7", "0.3");
+        Long lunchDayPartId = createDayPart(dayPartsUrl, "Lunch week stock", "Main meal of the day", 10);
+
+        ResponseEntity<ProposedWeekMenuResponse> planning = postAuthorized(
+                proposedMenusUrl,
+                new CreateProposedWeekMenuRequest(LocalDate.of(2026, 6, 15), LocalDate.of(2026, 6, 21)),
+                ProposedWeekMenuResponse.class
+        );
+        assertThat(planning.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<ProposedWeekMenuResponse> plannedMenu = restTemplate.exchange(
+                proposedMenusUrl + "/" + planning.getBody().id() + "/days",
+                HttpMethod.PUT,
+                authorizedEntity(new UpsertProposedWeekMenuDayRequest(
+                        LocalDate.of(2026, 6, 15),
+                        List.of(
+                                new ProposedWeekMenuSectionRequest(
+                                        lunchDayPartId,
+                                        List.of(new ProposedWeekMenuProductRequest(riceId, new BigDecimal("2.00"), null, 10))
+                                )
+                        )
+                )),
+                ProposedWeekMenuResponse.class
+        );
+        assertThat(plannedMenu.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<CurrentWeekMenuResponse> established = postAuthorized(
+                proposedMenusUrl + "/" + planning.getBody().id() + "/menu",
+                new EstablishProposedWeekMenuRequest(authenticatedUserId()),
+                CurrentWeekMenuResponse.class
+        );
+        assertThat(established.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(established.getBody()).isNotNull();
+        assertThat(established.getBody().weekStock()).isEmpty();
+        assertThat(established.getBody().shoppingList()).singleElement().satisfies(item ->
+                assertThat(item.missingUnits()).isEqualByComparingTo("2.00")
+        );
+
+        ResponseEntity<CurrentWeekMenuResponse> updated = restTemplate.exchange(
+                menusUrl + "/" + established.getBody().id() + "/week-stock",
+                HttpMethod.PUT,
+                authorizedEntity(new UpdateCurrentWeekMenuStockRequest(List.of(
+                        new CurrentWeekMenuStockItemRequest(riceId, new BigDecimal("1.50"))
+                ))),
+                CurrentWeekMenuResponse.class
+        );
+        assertThat(updated.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(updated.getBody()).isNotNull();
+        assertThat(updated.getBody().weekStock()).singleElement().satisfies(item -> {
+            assertThat(item.productId()).isEqualTo(riceId);
+            assertThat(item.quantity()).isEqualByComparingTo("1.50");
+        });
+        assertThat(updated.getBody().shoppingList()).singleElement().satisfies(item ->
+                assertThat(item.missingUnits()).isEqualByComparingTo("0.50")
+        );
+
+        ResponseEntity<CurrentWeekMenuStockItemResponse[]> weekStock = getAuthorized(
+                menusUrl + "/" + established.getBody().id() + "/week-stock",
+                CurrentWeekMenuStockItemResponse[].class
+        );
+        assertThat(weekStock.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(weekStock.getBody()).isNotNull();
+        assertThat(weekStock.getBody()).singleElement().satisfies(item ->
+                assertThat(item.quantity()).isEqualByComparingTo("1.50")
+        );
+
+        ResponseEntity<CurrentWeekMenuStatsResponse> closed = postAuthorized(
+                menusUrl + "/" + established.getBody().id() + "/close",
+                new CloseCurrentWeekMenuRequest(List.of(authenticatedUserId())),
+                CurrentWeekMenuStatsResponse.class
+        );
+        assertThat(closed.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<StockEntryResponse[]> riceStock = getAuthorized(
+                productsUrl + "/" + riceId + "/stock",
+                StockEntryResponse[].class
+        );
+        assertThat(riceStock.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(riceStock.getBody()).singleElement().satisfies(entry -> {
+            assertThat(entry.quantity()).isEqualByComparingTo("1.50");
+            assertThat(entry.price()).isEqualByComparingTo("0.00");
+        });
+        Long transferredStockEntryId = riceStock.getBody()[0].id();
+        ResponseEntity<Void> revertedStock = restTemplate.exchange(
+                "http://localhost:" + port + "/api/v1/stock/" + transferredStockEntryId + "/remove",
+                HttpMethod.POST,
+                authorizedEntity(new AdjustStockQuantityRequest(new BigDecimal("1.50"))),
+                Void.class
+        );
+        assertThat(revertedStock.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void shoppingListFilteringShouldKeepUnassignedProductsForEverySupermarket() {
+        String productsUrl = "http://localhost:" + port + "/api/v1/products";
+        String dayPartsUrl = "http://localhost:" + port + "/api/v1/planning/day-parts";
+        String proposedMenusUrl = "http://localhost:" + port + "/api/v1/planning";
+        String menusUrl = "http://localhost:" + port + "/api/v1/menus";
+        String supermarketsUrl = "http://localhost:" + port + "/api/v1/supermarkets";
+        Long supermarketAId = createSupermarket(supermarketsUrl, "Filter Market A");
+        Long supermarketBId = createSupermarket(supermarketsUrl, "Filter Market B");
+        Long chickenId = createProduct(productsUrl, "Filter Chicken", "Chicken", "200", "0", "31", "3.6", "2.00", List.of(supermarketAId));
+        Long beansId = createProduct(productsUrl, "Filter Beans", "Beans", "100", "22", "8", "1.2", "1.50", List.of(supermarketBId));
+        Long saltId = createProduct(productsUrl, "Filter Salt", "Salt", "0", "0", "0", "0", "1.00");
+        Long lunchDayPartId = createDayPart(dayPartsUrl, "Lunch filter", "Main meal of the day", 10);
+
+        ResponseEntity<ProposedWeekMenuResponse> planning = postAuthorized(
+                proposedMenusUrl,
+                new CreateProposedWeekMenuRequest(LocalDate.of(2026, 6, 15), LocalDate.of(2026, 6, 21)),
+                ProposedWeekMenuResponse.class
+        );
+        assertThat(planning.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<ProposedWeekMenuResponse> plannedMenu = restTemplate.exchange(
+                proposedMenusUrl + "/" + planning.getBody().id() + "/days",
+                HttpMethod.PUT,
+                authorizedEntity(new UpsertProposedWeekMenuDayRequest(
+                        LocalDate.of(2026, 6, 15),
+                        List.of(
+                                new ProposedWeekMenuSectionRequest(
+                                        lunchDayPartId,
+                                        List.of(
+                                                new ProposedWeekMenuProductRequest(chickenId, new BigDecimal("1.00"), null, 10),
+                                                new ProposedWeekMenuProductRequest(beansId, new BigDecimal("1.00"), null, 20),
+                                                new ProposedWeekMenuProductRequest(saltId, new BigDecimal("1.00"), null, 30)
+                                        )
+                                )
+                        )
+                )),
+                ProposedWeekMenuResponse.class
+        );
+        assertThat(plannedMenu.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<CurrentWeekMenuResponse> established = postAuthorized(
+                proposedMenusUrl + "/" + planning.getBody().id() + "/menu",
+                new EstablishProposedWeekMenuRequest(authenticatedUserId()),
+                CurrentWeekMenuResponse.class
+        );
+        assertThat(established.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<CurrentWeekMenuShoppingListItemResponse[]> supermarketAList = getAuthorized(
+                menusUrl + "/" + established.getBody().id() + "/shopping-list?supermarketId=" + supermarketAId,
+                CurrentWeekMenuShoppingListItemResponse[].class
+        );
+        assertThat(supermarketAList.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(supermarketAList.getBody()).extracting(CurrentWeekMenuShoppingListItemResponse::productId)
+                .containsExactlyInAnyOrder(chickenId, saltId);
+
+        ResponseEntity<CurrentWeekMenuShoppingListItemResponse[]> supermarketBList = getAuthorized(
+                menusUrl + "/" + established.getBody().id() + "/shopping-list?supermarketId=" + supermarketBId,
+                CurrentWeekMenuShoppingListItemResponse[].class
+        );
+        assertThat(supermarketBList.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(supermarketBList.getBody()).extracting(CurrentWeekMenuShoppingListItemResponse::productId)
+                .containsExactlyInAnyOrder(beansId, saltId);
     }
 
     private Long createProduct(String productsUrl, String name, String description, String calories, String carbohydrates, String proteins, String fats) {

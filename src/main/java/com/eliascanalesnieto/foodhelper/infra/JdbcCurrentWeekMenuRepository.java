@@ -42,6 +42,7 @@ public class JdbcCurrentWeekMenuRepository implements CurrentWeekMenuRepository 
                 menu.nutritionalValues(),
                 menu.stockSummary(),
                 menu.usedStock(),
+                menu.weekStock(),
                 menu.shoppingList(),
                 menu.stockMovements(),
                 menu.recipeProductions(),

@@ -20,6 +20,7 @@ public class CurrentWeekMenu {
     NutritionalValues nutritionalValues;
     ProposedWeekMenuStockSummary stockSummary;
     List<CurrentWeekMenuUsedStock> usedStock;
+    List<CurrentWeekMenuStockItem> weekStock;
     List<CurrentWeekMenuShoppingListItem> shoppingList;
     List<MenuStockMovement> stockMovements;
     List<CurrentWeekMenuRecipeProduction> recipeProductions;

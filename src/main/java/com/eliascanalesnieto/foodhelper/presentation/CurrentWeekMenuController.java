@@ -26,7 +26,7 @@ import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/api/v1/menus")
 @RequiredArgsConstructor
-@Tag(name = "Menus", description = "Inspect menu snapshots, consumed stock, recipe-to-stock transfers, missing products, and closure stats")
+@Tag(name = "Menus", description = "Inspect established week snapshots, consumed stock, week stock, recipe-to-stock transfers, missing products, and closure stats")
 public class CurrentWeekMenuController {
     private final CurrentWeekMenuService service;
 
@@ -127,7 +127,7 @@ public class CurrentWeekMenuController {
     @GetMapping("/{id}/shopping-list")
     @Operation(
             summary = "List shopping list for menu",
-            description = "Returns the products and missing units that were not covered by stock when the menu was created. When supermarketId is provided, only products available at that supermarket are returned. This read-only operation never recalculates the menu or changes stock."
+            description = "Returns the products and missing units that were not covered by stock when the week was established. When supermarketId is provided, products assigned to that supermarket and products without any supermarket assignment are returned. This read-only operation never recalculates the week or changes stock."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Shopping list returned",
@@ -141,6 +141,21 @@ public class CurrentWeekMenuController {
             @RequestParam(required = false) Long supermarketId
     ) {
         return service.findShoppingList(id, supermarketId);
+    }
+
+    @GetMapping("/{id}/week-stock")
+    @Operation(
+            summary = "List week stock",
+            description = "Returns the temporary stock tracked for the established week, separate from the global product stock."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Week stock returned",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = CurrentWeekMenuStockItemResponse.class)))),
+            @ApiResponse(responseCode = "404", description = "Menu not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public List<CurrentWeekMenuStockItemResponse> findWeekStock(@PathVariable Long id) {
+        return service.findById(id).weekStock();
     }
 
     @PutMapping("/{id}/payer")
@@ -181,6 +196,26 @@ public class CurrentWeekMenuController {
             @Valid @RequestBody CreateMenuStockMovementRequest request
     ) {
         return service.addStockMovement(id, request);
+    }
+
+    @PutMapping("/{id}/week-stock")
+    @Operation(
+            summary = "Replace week stock",
+            description = "Replaces the temporary stock tracked for the established week and updates the shopping list accordingly."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Week stock updated",
+                    content = @Content(schema = @Schema(implementation = CurrentWeekMenuResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Week stock payload is invalid or the menu cannot be modified",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "404", description = "Menu or product not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public CurrentWeekMenuResponse updateWeekStock(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateCurrentWeekMenuStockRequest request
+    ) {
+        return service.updateWeekStock(id, request);
     }
 
     @PostMapping("/{id}/close")
