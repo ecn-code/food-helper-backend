@@ -105,8 +105,8 @@ public class CurrentWeekMenuApiMapper {
         return new ProposedWeekMenuProductResponse(
                 product.getProductId(),
                 product.getProductName(),
-                product.getUnits(),
-                product.getGrams(),
+                product.getProductId() == null ? null : product.getUnits(),
+                product.getProductId() == null ? null : product.getGrams(),
                 product.getSortOrder(),
                 toResponse(product.getNutritionalValues())
         );
@@ -119,8 +119,7 @@ public class CurrentWeekMenuApiMapper {
                 production.getRecipeName(),
                 production.getProductId(),
                 production.getProductName(),
-                production.getProducedGrams(),
-                production.getProducedUnits(),
+                production.getUnits(),
                 production.getSortOrder()
         );
     }
@@ -132,8 +131,7 @@ public class CurrentWeekMenuApiMapper {
                 production.getRecipeName(),
                 production.getProductId(),
                 production.getProductName(),
-                production.getProducedGrams(),
-                production.getProducedUnits(),
+                production.getUnits(),
                 production.getSortOrder(),
                 production.isTransferred(),
                 production.getTransferType(),

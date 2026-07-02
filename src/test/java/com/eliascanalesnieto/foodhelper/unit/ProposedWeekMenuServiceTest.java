@@ -73,6 +73,16 @@ class ProposedWeekMenuServiceTest {
     }
 
     @Test
+    void shouldStoreTheRequestedUserCountWhenCreatingAPlanning() {
+        when(menuRepository.create(org.mockito.ArgumentMatchers.any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ProposedWeekMenu created = service.create(LocalDate.of(2026, 6, 21), LocalDate.of(2026, 6, 27), 3);
+
+        assertThat(created.getUsers()).isEqualTo(3);
+        verify(menuRepository).create(org.mockito.ArgumentMatchers.argThat(menu -> menu.getUsers().equals(3)));
+    }
+
+    @Test
     void shouldRejectRepeatedProductSortOrdersWithinTheSameSection() {
         when(currentWeekMenuStatsRepository.findByProposedWeekMenuId(1L))
                 .thenThrow(new ResourceNotFoundException("Established week menu not found"));
@@ -117,7 +127,39 @@ class ProposedWeekMenuServiceTest {
 
         assertThatThrownBy(() -> service.upsertDay(1L, day))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Manual products require calories, carbohydrates, proteins, and fats per 100 grams");
+                .hasMessage("Manual products require absolute calories, carbohydrates, proteins, and fats values");
+    }
+
+    @Test
+    void shouldRejectManualProductsThatIncludeQuantity() {
+        when(currentWeekMenuStatsRepository.findByProposedWeekMenuId(1L))
+                .thenThrow(new ResourceNotFoundException("Established week menu not found"));
+
+        ProposedWeekMenuDay day = ProposedWeekMenuDay.builder()
+                .date(LocalDate.of(2026, 6, 15))
+                .sections(List.of(
+                        ProposedWeekMenuSection.builder()
+                                .dayPartId(1L)
+                                .products(List.of(
+                                        ProposedWeekMenuProduct.builder()
+                                                .productName("Homemade bowl")
+                                                .units(new BigDecimal("1"))
+                                                .nutritionalValues(com.eliascanalesnieto.foodhelper.domain.NutritionalValues.builder()
+                                                        .calories(new BigDecimal("180"))
+                                                        .carbohydrates(new BigDecimal("24"))
+                                                        .proteins(new BigDecimal("5"))
+                                                        .fats(new BigDecimal("6"))
+                                                        .build())
+                                                .sortOrder(10)
+                                                .build()
+                                ))
+                                .build()
+                ))
+                .build();
+
+        assertThatThrownBy(() -> service.upsertDay(1L, day))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Manual products must not include units or grams");
     }
 
     @Test
@@ -175,7 +217,6 @@ class ProposedWeekMenuServiceTest {
                                 .products(List.of(
                                         ProposedWeekMenuProduct.builder()
                                                 .productName("Homemade bowl")
-                                                .grams(new BigDecimal("50"))
                                                 .nutritionalValues(com.eliascanalesnieto.foodhelper.domain.NutritionalValues.builder()
                                                         .calories(new BigDecimal("180"))
                                                         .carbohydrates(new BigDecimal("24"))
@@ -193,11 +234,11 @@ class ProposedWeekMenuServiceTest {
 
         assertThat(result.getDays()).hasSize(1);
         assertThat(result.getDays().getFirst().getSections().getFirst().getProducts().getFirst().getUnits())
-                .isEqualByComparingTo("0.50");
+                .isNull();
         assertThat(result.getDays().getFirst().getSections().getFirst().getProducts().getFirst().getNutritionalValues().getCalories())
-                .isEqualByComparingTo("90.00");
+                .isEqualByComparingTo("180.00");
         assertThat(result.getDays().getFirst().getSections().getFirst().getProducts().getFirst().getGrams())
-                .isEqualByComparingTo("50.00");
+                .isNull();
         assertThat(result.getStockSummary().getDistinctProducts()).isZero();
         verify(productRepository, never()).findByIds(org.mockito.ArgumentMatchers.anyList());
     }

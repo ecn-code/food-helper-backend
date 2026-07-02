@@ -72,6 +72,7 @@ import com.eliascanalesnieto.foodhelper.presentation.UserResponse;
 import com.eliascanalesnieto.foodhelper.presentation.UserWeightResponse;
 import com.eliascanalesnieto.foodhelper.presentation.UserWeightStatsResponse;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateUserWeightRequest;
+import com.eliascanalesnieto.foodhelper.domain.QuantityType;
 import java.math.BigDecimal;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
@@ -410,7 +411,7 @@ class ProductRestIntegrationTest {
                         recipeName,
                         "Creamy curry " + suffix,
                         "Cook everything together.",
-                        List.of(new RecipeIngredientAssignmentRequest(chickenId, new BigDecimal("200")))
+                        List.of(new RecipeIngredientAssignmentRequest(chickenId, new BigDecimal("200"), QuantityType.GRAMS))
                 ),
                 RecipeResponse.class
         );
@@ -423,7 +424,7 @@ class ProductRestIntegrationTest {
                         "Soup " + suffix,
                         "Simple soup " + suffix,
                         "Cook gently.",
-                        List.of(new RecipeIngredientAssignmentRequest(chickenId, new BigDecimal("100")))
+                        List.of(new RecipeIngredientAssignmentRequest(chickenId, new BigDecimal("100"), QuantityType.GRAMS))
                 ),
                 RecipeResponse.class
         );
@@ -490,7 +491,7 @@ class ProductRestIntegrationTest {
                         "Paella " + suffix,
                         "Descripción mediterránea",
                         "Cocción lenta con caldo.",
-                        List.of(new RecipeIngredientAssignmentRequest(saffronId, new BigDecimal("100")))
+                        List.of(new RecipeIngredientAssignmentRequest(saffronId, new BigDecimal("100"), QuantityType.GRAMS))
                 ),
                 RecipeResponse.class
         ).getBody();
@@ -500,13 +501,13 @@ class ProductRestIntegrationTest {
                         "Other recipe " + suffix,
                         "Unrelated description",
                         "Bake briefly.",
-                        List.of(new RecipeIngredientAssignmentRequest(saffronId, new BigDecimal("10")))
+                        List.of(new RecipeIngredientAssignmentRequest(saffronId, new BigDecimal("10"), QuantityType.GRAMS))
                 ),
                 RecipeResponse.class
         );
         postAuthorized(
                 recipesUrl + "/" + matching.id() + "/derived-product",
-                new CreateRecipeDerivedProductRequest(new BigDecimal("500"), new BigDecimal("100")),
+                new CreateRecipeDerivedProductRequest(new BigDecimal("5")),
                 RecipeDerivedProductResponse.class
         );
 
@@ -565,6 +566,7 @@ class ProductRestIntegrationTest {
         assertThat(response.getBody()).contains("deletePlanning");
         assertThat(response.getBody()).contains("/api/v1/planning/{id}/days");
         assertThat(response.getBody()).contains("/api/v1/planning/{id}/menu");
+        assertThat(response.getBody()).contains("Number of users covered by the planning");
         assertThat(response.getBody()).contains("/api/v1/planning/day-parts");
         assertThat(response.getBody()).contains("PlanningRecipeProductionRequest");
         assertThat(response.getBody()).contains("PlanningRecipeProductionResponse");
@@ -1083,7 +1085,6 @@ class ProductRestIntegrationTest {
                                                 new ProposedWeekMenuProductRequest(yogurtId, new BigDecimal("1"), new BigDecimal("100"), 10),
                                                 new ProposedWeekMenuProductRequest(
                                                         "Homemade fruit bowl",
-                                                        new BigDecimal("50"),
                                                         new BigDecimal("180"),
                                                         new BigDecimal("24"),
                                                         new BigDecimal("5"),
@@ -1107,15 +1108,15 @@ class ProductRestIntegrationTest {
                 .singleElement()
                 .satisfies(product -> {
                     assertThat(product.productName()).isEqualTo("Homemade fruit bowl");
-                    assertThat(product.units()).isEqualByComparingTo("0.50");
-                    assertThat(product.grams()).isEqualByComparingTo("50.00");
-                    assertThat(product.nutritionalValues().calories()).isEqualByComparingTo("90.00");
-                    assertThat(product.nutritionalValues().carbohydrates()).isEqualByComparingTo("12.00");
-                    assertThat(product.nutritionalValues().proteins()).isEqualByComparingTo("2.50");
-                    assertThat(product.nutritionalValues().fats()).isEqualByComparingTo("3.00");
+                    assertThat(product.units()).isNull();
+                    assertThat(product.grams()).isNull();
+                    assertThat(product.nutritionalValues().calories()).isEqualByComparingTo("180.00");
+                    assertThat(product.nutritionalValues().carbohydrates()).isEqualByComparingTo("24.00");
+                    assertThat(product.nutritionalValues().proteins()).isEqualByComparingTo("5.00");
+                    assertThat(product.nutritionalValues().fats()).isEqualByComparingTo("6.00");
                 });
-        assertThat(updatedMenu.getBody().nutritionalValues().calories()).isEqualByComparingTo("149.00");
-        assertThat(updatedMenu.getBody().nutritionalValues().carbohydrates()).isEqualByComparingTo("15.60");
+        assertThat(updatedMenu.getBody().nutritionalValues().calories()).isEqualByComparingTo("239.00");
+        assertThat(updatedMenu.getBody().nutritionalValues().carbohydrates()).isEqualByComparingTo("27.60");
         assertThat(updatedMenu.getBody().stockSummary().distinctProducts()).isEqualTo(1);
         assertThat(updatedMenu.getBody().stockSummary().requirements()).hasSize(1);
         assertThat(updatedMenu.getBody().stockSummary().requirements().getFirst().productId()).isEqualTo(yogurtId);
@@ -1133,8 +1134,55 @@ class ProductRestIntegrationTest {
                 .singleElement()
                 .satisfies(product -> {
                     assertThat(product.productName()).isEqualTo("Homemade fruit bowl");
-                    assertThat(product.nutritionalValues().calories()).isEqualByComparingTo("90.00");
+                    assertThat(product.units()).isNull();
+                    assertThat(product.grams()).isNull();
+                    assertThat(product.nutritionalValues().calories()).isEqualByComparingTo("180.00");
+                    assertThat(product.nutritionalValues().carbohydrates()).isEqualByComparingTo("24.00");
+                    assertThat(product.nutritionalValues().proteins()).isEqualByComparingTo("5.00");
+                    assertThat(product.nutritionalValues().fats()).isEqualByComparingTo("6.00");
                 });
+    }
+
+    @Test
+    void proposedWeekMenuShouldRejectManualQuantity() {
+        String proposedMenusUrl = "http://localhost:" + port + "/api/v1/planning";
+        Long lunchDayPartId = createDayPart(
+                "http://localhost:" + port + "/api/v1/planning/day-parts",
+                "Lunch quantity",
+                "Main meal of the day",
+                15
+        );
+
+        ResponseEntity<ProposedWeekMenuResponse> createdMenu = postAuthorized(
+                proposedMenusUrl,
+                new CreateProposedWeekMenuRequest(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 7)),
+                ProposedWeekMenuResponse.class
+        );
+
+        ResponseEntity<ProposedWeekMenuResponse> rejectedMenu = restTemplate.exchange(
+                proposedMenusUrl + "/" + createdMenu.getBody().id() + "/days",
+                HttpMethod.PUT,
+                authorizedEntity(new UpsertProposedWeekMenuDayRequest(
+                        LocalDate.of(2026, 9, 1),
+                        List.of(new ProposedWeekMenuSectionRequest(
+                                lunchDayPartId,
+                                List.of(new ProposedWeekMenuProductRequest(
+                                        null,
+                                        "Homemade fruit bowl",
+                                        new BigDecimal("1"),
+                                        new BigDecimal("50"),
+                                        new BigDecimal("180"),
+                                        new BigDecimal("24"),
+                                        new BigDecimal("5"),
+                                        new BigDecimal("6"),
+                                        10
+                                ))
+                        ))
+                )),
+                ProposedWeekMenuResponse.class
+        );
+
+        assertThat(rejectedMenu.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     @Test
@@ -1183,6 +1231,65 @@ class ProductRestIntegrationTest {
         assertThat(byId.values()).allSatisfy(summary -> assertThat(summary.plannedDays()).isGreaterThanOrEqualTo(0));
         assertThat(java.util.Arrays.stream(summaries).map(PlanningSummaryResponse::startDate).toList())
                 .isSortedAccordingTo(java.util.Comparator.reverseOrder());
+    }
+
+    @Test
+    void planningShouldScaleStockRequirementsByTheNumberOfUsers() {
+        String productsUrl = "http://localhost:" + port + "/api/v1/products";
+        String dayPartsUrl = "http://localhost:" + port + "/api/v1/planning/day-parts";
+        String proposedMenusUrl = "http://localhost:" + port + "/api/v1/planning";
+
+        Long riceId = createProduct(productsUrl, "Users Rice", "Rice", "100", "0", "2.7", "0.3", "1.20");
+        Long lunchDayPartId = createDayPart(dayPartsUrl, "Lunch users", "Main meal of the day", 10);
+
+        postAuthorized(
+                productsUrl + "/" + riceId + "/stock",
+                new CreateStockEntryRequest(new BigDecimal("2.00"), new BigDecimal("1.25"), null, LocalDate.of(2026, 6, 12)),
+                StockEntryResponse.class
+        );
+
+        ResponseEntity<ProposedWeekMenuResponse> planning = postAuthorized(
+                proposedMenusUrl,
+                new CreateProposedWeekMenuRequest(LocalDate.of(2026, 6, 15), LocalDate.of(2026, 6, 21), 3),
+                ProposedWeekMenuResponse.class
+        );
+        assertThat(planning.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(planning.getBody()).isNotNull();
+        assertThat(planning.getBody().users()).isEqualTo(3);
+
+        ResponseEntity<ProposedWeekMenuResponse> plannedMenu = restTemplate.exchange(
+                proposedMenusUrl + "/" + planning.getBody().id() + "/days",
+                HttpMethod.PUT,
+                authorizedEntity(new UpsertProposedWeekMenuDayRequest(
+                        LocalDate.of(2026, 6, 15),
+                        List.of(
+                                new ProposedWeekMenuSectionRequest(
+                                        lunchDayPartId,
+                                        List.of(new ProposedWeekMenuProductRequest(riceId, new BigDecimal("1.00"), null, 10))
+                                )
+                        )
+                )),
+                ProposedWeekMenuResponse.class
+        );
+        assertThat(plannedMenu.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(plannedMenu.getBody()).isNotNull();
+        assertThat(plannedMenu.getBody().stockSummary().requirements()).singleElement().satisfies(requirement -> {
+            assertThat(requirement.requiredUnits()).isEqualByComparingTo("3.00");
+            assertThat(requirement.availableUnits()).isEqualByComparingTo("2.00");
+            assertThat(requirement.coveredUnits()).isEqualByComparingTo("2.00");
+            assertThat(requirement.missingUnits()).isEqualByComparingTo("1.00");
+        });
+
+        ResponseEntity<CurrentWeekMenuResponse> established = postAuthorized(
+                proposedMenusUrl + "/" + planning.getBody().id() + "/menu",
+                new EstablishProposedWeekMenuRequest(authenticatedUserId()),
+                CurrentWeekMenuResponse.class
+        );
+        assertThat(established.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(established.getBody()).isNotNull();
+        assertThat(established.getBody().shoppingList()).singleElement().satisfies(item ->
+                assertThat(item.missingUnits()).isEqualByComparingTo("1.00")
+        );
     }
 
     @Test
@@ -2213,8 +2320,8 @@ class ProductRestIntegrationTest {
                         "Stats curry description",
                         "Cook everything together.",
                         List.of(
-                                new RecipeIngredientAssignmentRequest(chickenId, new BigDecimal("200")),
-                                new RecipeIngredientAssignmentRequest(riceId, new BigDecimal("150"))
+                                new RecipeIngredientAssignmentRequest(chickenId, new BigDecimal("200"), QuantityType.GRAMS),
+                                new RecipeIngredientAssignmentRequest(riceId, new BigDecimal("150"), QuantityType.GRAMS)
                         )
                 ),
                 RecipeResponse.class
@@ -2316,9 +2423,9 @@ class ProductRestIntegrationTest {
                         "Stats curry updated",
                         "Cook longer.",
                         List.of(
-                                new RecipeIngredientAssignmentRequest(chickenId, new BigDecimal("250")),
-                                new RecipeIngredientAssignmentRequest(riceId, new BigDecimal("150")),
-                                new RecipeIngredientAssignmentRequest(beansId, new BigDecimal("50"))
+                                new RecipeIngredientAssignmentRequest(chickenId, new BigDecimal("250"), QuantityType.GRAMS),
+                                new RecipeIngredientAssignmentRequest(riceId, new BigDecimal("150"), QuantityType.GRAMS),
+                                new RecipeIngredientAssignmentRequest(beansId, new BigDecimal("50"), QuantityType.GRAMS)
                         )
                 )),
                 RecipeResponse.class
@@ -2349,8 +2456,8 @@ class ProductRestIntegrationTest {
                         "Creamy curry",
                         "Cook everything together.",
                         List.of(
-                                new RecipeIngredientAssignmentRequest(chickenId, new BigDecimal("200")),
-                                new RecipeIngredientAssignmentRequest(coconutMilkId, new BigDecimal("100"))
+                                new RecipeIngredientAssignmentRequest(chickenId, new BigDecimal("200"), QuantityType.GRAMS),
+                                new RecipeIngredientAssignmentRequest(coconutMilkId, new BigDecimal("100"), QuantityType.GRAMS)
                         )
                 ),
                 RecipeResponse.class
@@ -2364,7 +2471,7 @@ class ProductRestIntegrationTest {
         Long recipeId = createdRecipe.getBody().id();
         ResponseEntity<RecipeDerivedProductResponse> derivedProduct = postAuthorized(
                 recipesUrl + "/" + recipeId + "/derived-product",
-                new CreateRecipeDerivedProductRequest(new BigDecimal("400"), new BigDecimal("100")),
+                new CreateRecipeDerivedProductRequest(new BigDecimal("4")),
                 RecipeDerivedProductResponse.class
         );
 
@@ -2380,8 +2487,8 @@ class ProductRestIntegrationTest {
                         "Creamy curry updated",
                         "Cook slowly and reduce.",
                         List.of(
-                                new RecipeIngredientAssignmentRequest(chickenId, new BigDecimal("250")),
-                                new RecipeIngredientAssignmentRequest(coconutMilkId, new BigDecimal("100"))
+                                new RecipeIngredientAssignmentRequest(chickenId, new BigDecimal("250"), QuantityType.GRAMS),
+                                new RecipeIngredientAssignmentRequest(coconutMilkId, new BigDecimal("100"), QuantityType.GRAMS)
                         )
                 )),
                 RecipeResponse.class
@@ -2393,11 +2500,11 @@ class ProductRestIntegrationTest {
         assertThat(updatedRecipe.getBody().derivedProduct()).isNotNull();
 
         NutritionalValuesEntity linkedProductValues = nutritionalValuesRepository.findById(derivedProduct.getBody().productId()).orElseThrow();
-        assertThat(linkedProductValues.calories()).isEqualByComparingTo("642.50");
+        assertThat(linkedProductValues.calories()).isEqualByComparingTo("160.63");
 
         ResponseEntity<String> secondDerivedProductAttempt = postAuthorized(
                 recipesUrl + "/" + recipeId + "/derived-product",
-                new CreateRecipeDerivedProductRequest(new BigDecimal("400"), new BigDecimal("100")),
+                new CreateRecipeDerivedProductRequest(new BigDecimal("4")),
                 String.class
         );
         assertThat(secondDerivedProductAttempt.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
@@ -2416,13 +2523,13 @@ class ProductRestIntegrationTest {
                         "Recipe A " + suffix,
                         "Recipe A",
                         "Prepare recipe A.",
-                        List.of(new RecipeIngredientAssignmentRequest(ingredientId, new BigDecimal("100")))
+                        List.of(new RecipeIngredientAssignmentRequest(ingredientId, new BigDecimal("100"), QuantityType.GRAMS))
                 ),
                 RecipeResponse.class
         );
         ResponseEntity<RecipeDerivedProductResponse> derivedA = postAuthorized(
                 baseUrl + "/recipes/" + recipeA.getBody().id() + "/derived-product",
-                new CreateRecipeDerivedProductRequest(new BigDecimal("400"), new BigDecimal("100")),
+                new CreateRecipeDerivedProductRequest(new BigDecimal("4")),
                 RecipeDerivedProductResponse.class
         );
 
@@ -2432,13 +2539,13 @@ class ProductRestIntegrationTest {
                         "Recipe B " + suffix,
                         "Recipe B",
                         "Prepare recipe B.",
-                        List.of(new RecipeIngredientAssignmentRequest(ingredientId, new BigDecimal("120")))
+                        List.of(new RecipeIngredientAssignmentRequest(ingredientId, new BigDecimal("120"), QuantityType.GRAMS))
                 ),
                 RecipeResponse.class
         );
         ResponseEntity<RecipeDerivedProductResponse> derivedB = postAuthorized(
                 baseUrl + "/recipes/" + recipeB.getBody().id() + "/derived-product",
-                new CreateRecipeDerivedProductRequest(new BigDecimal("600"), new BigDecimal("100")),
+                new CreateRecipeDerivedProductRequest(new BigDecimal("6")),
                 RecipeDerivedProductResponse.class
         );
 
@@ -2530,7 +2637,7 @@ class ProductRestIntegrationTest {
                         "Photo Rice Bowl",
                         "Recipe with photo",
                         "Cook and serve.",
-                        List.of(new RecipeIngredientAssignmentRequest(ingredientId, new BigDecimal("180"))),
+                        List.of(new RecipeIngredientAssignmentRequest(ingredientId, new BigDecimal("180"), QuantityType.GRAMS)),
                         samplePhoto("recipe-photo")
                 ),
                 RecipeResponse.class

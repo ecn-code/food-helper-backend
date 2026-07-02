@@ -9,9 +9,9 @@ public record ProposedWeekMenuProductResponse(
         Long productId,
         @Schema(description = "Product name or manual label", example = "Apple")
         String productName,
-        @Schema(description = "Consumed units. For manual items, this is normalized from 100-gram servings when possible.", example = "2", nullable = true)
+        @Schema(description = "Consumed units. Null for manual items.", example = "2", nullable = true)
         BigDecimal units,
-        @Schema(description = "Consumed grams", example = "300", nullable = true)
+        @Schema(description = "Consumed grams. Null for manual items.", example = "300", nullable = true)
         BigDecimal grams,
         @Schema(description = "Explicit display order within the section. Values are unique within the section.", example = "10")
         Integer sortOrder,

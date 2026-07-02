@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS products (
     name VARCHAR(150) NOT NULL UNIQUE,
     description TEXT NOT NULL,
     grams_per_unit NUMERIC(10,2) NOT NULL DEFAULT 100.00,
+    nutrition_basis VARCHAR(30) NOT NULL DEFAULT 'PER_100_GRAMS',
     default_price NUMERIC(10,2),
     media_id BIGINT
 );
@@ -58,6 +59,7 @@ CREATE TABLE IF NOT EXISTS recipes (
     name VARCHAR(150) NOT NULL UNIQUE,
     description TEXT NOT NULL,
     instructions TEXT NOT NULL,
+    default_units_produced NUMERIC(10,2),
     media_id BIGINT
 );
 
@@ -65,7 +67,8 @@ CREATE TABLE IF NOT EXISTS recipe_products (
     id BIGSERIAL PRIMARY KEY,
     recipe_id BIGINT NOT NULL,
     product_id BIGINT NOT NULL,
-    grams NUMERIC(10,2) NOT NULL,
+    quantity NUMERIC(10,2) NOT NULL,
+    quantity_type VARCHAR(10) NOT NULL,
     CONSTRAINT fk_recipe_products_recipe
         FOREIGN KEY (recipe_id)
         REFERENCES recipes(id)
@@ -79,13 +82,28 @@ CREATE TABLE IF NOT EXISTS recipe_products (
 CREATE TABLE IF NOT EXISTS recipe_product_origins (
     recipe_id BIGINT PRIMARY KEY,
     product_id BIGINT NOT NULL UNIQUE,
-    produced_grams NUMERIC(10,2) NOT NULL,
-    grams_per_unit NUMERIC(10,2) NOT NULL,
+    units_produced NUMERIC(10,2) NOT NULL,
     CONSTRAINT fk_recipe_product_origins_recipe
         FOREIGN KEY (recipe_id)
         REFERENCES recipes(id)
         ON DELETE CASCADE,
     CONSTRAINT fk_recipe_product_origins_product
+        FOREIGN KEY (product_id)
+        REFERENCES products(id)
+        ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS recipe_derived_product_ingredients (
+    recipe_id BIGINT NOT NULL,
+    product_id BIGINT NOT NULL,
+    quantity NUMERIC(10,2) NOT NULL,
+    quantity_type VARCHAR(10) NOT NULL,
+    CONSTRAINT pk_recipe_derived_product_ingredients PRIMARY KEY (recipe_id, product_id),
+    CONSTRAINT fk_recipe_derived_product_ingredients_recipe
+        FOREIGN KEY (recipe_id)
+        REFERENCES recipes(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_recipe_derived_product_ingredients_product
         FOREIGN KEY (product_id)
         REFERENCES products(id)
         ON DELETE CASCADE
@@ -111,6 +129,7 @@ CREATE TABLE IF NOT EXISTS proposed_week_menus (
     id BIGSERIAL PRIMARY KEY,
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
+    users INTEGER NOT NULL DEFAULT 1,
     CONSTRAINT chk_proposed_week_menus_dates CHECK (start_date <= end_date)
 );
 
@@ -168,6 +187,8 @@ CREATE TABLE IF NOT EXISTS proposed_week_menu_products (
     CONSTRAINT fk_proposed_week_menu_products_product
         FOREIGN KEY (product_id)
         REFERENCES products(id),
+    CONSTRAINT chk_proposed_week_menu_products_manual_quantity
+        CHECK (product_id IS NOT NULL OR (units IS NULL AND grams IS NULL)),
     CONSTRAINT uq_proposed_week_menu_products_order UNIQUE (section_id, sort_order)
 );
 
@@ -329,7 +350,7 @@ CREATE TABLE IF NOT EXISTS proposed_week_menu_recipe_productions (
     id BIGSERIAL PRIMARY KEY,
     day_id BIGINT NOT NULL,
     recipe_id BIGINT NOT NULL,
-    produced_grams NUMERIC(12,2) NOT NULL,
+    units NUMERIC(12,2) NOT NULL,
     sort_order INT NOT NULL,
     CONSTRAINT fk_proposed_week_menu_recipe_productions_day
         FOREIGN KEY (day_id)

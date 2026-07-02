@@ -23,6 +23,7 @@ public class ProposedWeekMenuApiMapper {
         java.util.List<ProposedWeekMenuDay> days = menu.getDays() == null ? java.util.List.of() : menu.getDays();
         return new ProposedWeekMenuResponse(
                 menu.getId(),
+                menu.getUsers(),
                 menu.getStartDate(),
                 menu.getEndDate(),
                 days.stream().map(this::toResponse).toList(),
@@ -77,7 +78,7 @@ public class ProposedWeekMenuApiMapper {
     private ProposedWeekMenuRecipeProduction toDomain(ProposedWeekMenuRecipeProductionRequest request) {
         return ProposedWeekMenuRecipeProduction.builder()
                 .recipeId(request.recipeId())
-                .producedGrams(request.producedGrams())
+                .units(request.units())
                 .sortOrder(request.sortOrder())
                 .build();
     }
@@ -108,8 +109,8 @@ public class ProposedWeekMenuApiMapper {
         return new ProposedWeekMenuProductResponse(
                 product.getProductId(),
                 product.getProductName(),
-                product.getUnits(),
-                product.getGrams(),
+                product.getProductId() == null ? null : product.getUnits(),
+                product.getProductId() == null ? null : product.getGrams(),
                 product.getSortOrder(),
                 toResponse(product.getNutritionalValues())
         );
@@ -122,8 +123,7 @@ public class ProposedWeekMenuApiMapper {
                 production.getRecipeName(),
                 production.getProductId(),
                 production.getProductName(),
-                production.getProducedGrams(),
-                production.getProducedUnits(),
+                production.getUnits(),
                 production.getSortOrder()
         );
     }

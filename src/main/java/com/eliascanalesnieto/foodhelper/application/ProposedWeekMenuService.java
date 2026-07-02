@@ -43,7 +43,6 @@ public class ProposedWeekMenuService {
     private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
     private static final BigDecimal ZERO = new BigDecimal("0.00");
     private static final BigDecimal DEFAULT_UNITS = BigDecimal.ONE;
-    private static final BigDecimal DEFAULT_GRAMS = ONE_HUNDRED;
     private static final int SCALE = 2;
     private static final long MAX_MENU_DAYS = 16;
 
@@ -55,13 +54,20 @@ public class ProposedWeekMenuService {
 
     @Transactional
     public ProposedWeekMenu create(LocalDate startDate, LocalDate endDate) {
+        return create(startDate, endDate, 1);
+    }
+
+    @Transactional
+    public ProposedWeekMenu create(LocalDate startDate, LocalDate endDate, Integer users) {
         if (endDate.isBefore(startDate)) {
             throw new IllegalArgumentException("End date must be on or after start date");
         }
         if (ChronoUnit.DAYS.between(startDate, endDate) + 1 > MAX_MENU_DAYS) {
             throw new IllegalArgumentException("Planning cannot span more than 16 days");
         }
+        int normalizedUsers = normalizeUsers(users);
         return enrich(menuRepository.create(ProposedWeekMenu.builder()
+                .users(normalizedUsers)
                 .startDate(startDate)
                 .endDate(endDate)
                 .days(List.of())
@@ -168,12 +174,11 @@ public class ProposedWeekMenuService {
 
     private ProposedWeekMenuProduct completeProduct(ProposedWeekMenuProduct product, Product linkedProduct) {
         if (product.getProductId() == null) {
-            BigDecimal grams = normalizeManualGrams(product);
-            BigDecimal units = normalizeManualUnits(product, grams);
+            validateManualProductQuantity(product);
             return product.toBuilder()
-                    .units(scale(units))
-                    .grams(scale(grams))
-                    .nutritionalValues(calculateContribution(product.getNutritionalValues(), scale(grams)))
+                    .units(null)
+                    .grams(null)
+                    .nutritionalValues(scale(product.getNutritionalValues()))
                     .build();
         }
         BigDecimal units = product.getUnits() == null ? DEFAULT_UNITS : product.getUnits();
@@ -213,7 +218,7 @@ public class ProposedWeekMenuService {
         return menu.toBuilder()
                 .days(enrichedDays)
                 .nutritionalValues(sumDays(enrichedDays))
-                .stockSummary(buildStockSummary(enrichedDays, productsById))
+                .stockSummary(buildStockSummary(enrichedDays, productsById, menu.getUsers()))
                 .build();
     }
 
@@ -244,6 +249,8 @@ public class ProposedWeekMenuService {
     private ProposedWeekMenuProduct enrichProduct(ProposedWeekMenuProduct menuProduct, Product product) {
         if (menuProduct.getProductId() == null) {
             return menuProduct.toBuilder()
+                    .units(null)
+                    .grams(null)
                     .nutritionalValues(scale(menuProduct.getNutritionalValues()))
                     .build();
         }
@@ -344,17 +351,16 @@ public class ProposedWeekMenuService {
         if (product == null) {
             throw new ResourceNotFoundException("Derived product not found for recipe production");
         }
-        BigDecimal producedUnits = scale(recipeProduction.getProducedGrams()
-                .divide(derivedProduct.getGramsPerUnit(), SCALE, RoundingMode.HALF_UP));
         return recipeProduction.toBuilder()
                 .recipeName(recipe.getName())
                 .productId(product.getId())
                 .productName(product.getName())
-                .producedUnits(producedUnits)
+                .units(scale(recipeProduction.getUnits()))
                 .build();
     }
 
-    private ProposedWeekMenuStockSummary buildStockSummary(List<ProposedWeekMenuDay> days, Map<Long, Product> productsById) {
+    private ProposedWeekMenuStockSummary buildStockSummary(List<ProposedWeekMenuDay> days, Map<Long, Product> productsById, Integer users) {
+        BigDecimal userMultiplier = BigDecimal.valueOf(normalizeUsers(users));
         if (days.isEmpty()) {
             return ProposedWeekMenuStockSummary.builder()
                     .plannedDays(0)
@@ -385,7 +391,7 @@ public class ProposedWeekMenuService {
                         continue;
                     }
                     Product linkedProduct = productsById.get(product.getProductId());
-                    BigDecimal requiredUnits = normalizeRequiredUnits(product, linkedProduct);
+                    BigDecimal requiredUnits = scale(normalizeRequiredUnits(product, linkedProduct).multiply(userMultiplier));
                     StockRequirementAccumulator accumulator = requirements.computeIfAbsent(
                             product.getProductId(),
                             productId -> new StockRequirementAccumulator(productId, linkedProduct.getName())
@@ -490,6 +496,10 @@ public class ProposedWeekMenuService {
         return DEFAULT_UNITS;
     }
 
+    private int normalizeUsers(Integer users) {
+        return users == null || users < 1 ? 1 : users;
+    }
+
     private void validateProductModes(ProposedWeekMenuDay day) {
         for (ProposedWeekMenuSection section : safeSections(day)) {
             for (ProposedWeekMenuProduct product : section.getProducts()) {
@@ -504,32 +514,24 @@ public class ProposedWeekMenuService {
                 if (product.getProductName() == null || product.getProductName().isBlank()) {
                     throw new IllegalArgumentException("Manual products require a product name");
                 }
+                if (product.getUnits() != null || product.getGrams() != null) {
+                    throw new IllegalArgumentException("Manual products must not include units or grams");
+                }
                 if (product.getNutritionalValues() == null
                         || product.getNutritionalValues().getCalories() == null
                         || product.getNutritionalValues().getCarbohydrates() == null
                         || product.getNutritionalValues().getProteins() == null
                         || product.getNutritionalValues().getFats() == null) {
-                    throw new IllegalArgumentException("Manual products require calories, carbohydrates, proteins, and fats per 100 grams");
+                    throw new IllegalArgumentException("Manual products require absolute calories, carbohydrates, proteins, and fats values");
                 }
             }
         }
     }
 
-    private BigDecimal normalizeManualGrams(ProposedWeekMenuProduct product) {
-        if (product.getGrams() != null) {
-            return product.getGrams();
+    private void validateManualProductQuantity(ProposedWeekMenuProduct product) {
+        if (product.getUnits() != null || product.getGrams() != null) {
+            throw new IllegalArgumentException("Manual products must not include units or grams");
         }
-        if (product.getUnits() != null) {
-            return product.getUnits().multiply(ONE_HUNDRED);
-        }
-        return DEFAULT_GRAMS;
-    }
-
-    private BigDecimal normalizeManualUnits(ProposedWeekMenuProduct product, BigDecimal grams) {
-        if (product.getUnits() != null) {
-            return product.getUnits();
-        }
-        return grams.divide(ONE_HUNDRED, SCALE, RoundingMode.HALF_UP);
     }
 
     private Comparator<ProposedWeekMenuStockSummaryDayCalories> dayCaloriesComparator() {

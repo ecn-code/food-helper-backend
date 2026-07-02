@@ -51,7 +51,7 @@ public class ProposedWeekMenuController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
             summary = "Create planning",
-            description = "Starts empty menu planning for an inclusive date range of up to 16 calendar days. Planning may contain fewer days than the date range."
+            description = "Starts empty menu planning for an inclusive date range of up to 16 calendar days and a user count used to scale stock requirements. Planning may contain fewer days than the date range."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Planning created",
@@ -60,7 +60,7 @@ public class ProposedWeekMenuController {
                     content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
     public ProposedWeekMenuResponse create(@Valid @RequestBody CreateProposedWeekMenuRequest request) {
-        return mapper.toResponse(service.create(request.startDate(), request.endDate()));
+        return mapper.toResponse(service.create(request.startDate(), request.endDate(), request.users()));
     }
 
     @GetMapping("/{id}")
@@ -97,12 +97,12 @@ public class ProposedWeekMenuController {
     @PutMapping("/{id}/days")
     @Operation(
             summary = "Create or replace planned day",
-            description = "Creates or replaces one planned day. Each selected day part can appear only once, products keep their explicit order, manual items can add nutrition without a catalog product, and optional recipe productions generate stock instead of being eaten."
+            description = "Creates or replaces one planned day. Each selected day part can appear only once, products keep their explicit order, manual items can add absolute nutrition without a catalog product, manual items must not include units or grams, and optional recipe productions generate stock instead of being eaten."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Planning updated",
                     content = @Content(schema = @Schema(implementation = ProposedWeekMenuResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Invalid request",
+            @ApiResponse(responseCode = "400", description = "Invalid request or manual quantity",
                     content = @Content(schema = @Schema(implementation = ApiError.class))),
             @ApiResponse(responseCode = "404", description = "Planning or product not found",
                     content = @Content(schema = @Schema(implementation = ApiError.class)))

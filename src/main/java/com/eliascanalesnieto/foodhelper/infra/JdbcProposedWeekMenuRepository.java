@@ -38,11 +38,12 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
             PreparedStatement ps = connection.prepareStatement("""
-                    INSERT INTO proposed_week_menus (start_date, end_date)
-                    VALUES (?, ?)
+                    INSERT INTO proposed_week_menus (start_date, end_date, users)
+                    VALUES (?, ?, ?)
                     """, new String[]{"id"});
             ps.setDate(1, Date.valueOf(menu.getStartDate()));
             ps.setDate(2, Date.valueOf(menu.getEndDate()));
+            ps.setInt(3, menu.getUsers() == null ? 1 : menu.getUsers());
             return ps;
         }, keyHolder);
         return menu.toBuilder()
@@ -54,7 +55,7 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
     @Override
     public ProposedWeekMenu findById(Long id) {
         ProposedWeekMenu menu = jdbcTemplate.query("""
-                        SELECT id, start_date, end_date
+                        SELECT id, start_date, end_date, users
                         FROM proposed_week_menus
                         WHERE id = ?
                         """,
@@ -181,7 +182,7 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
 
     private List<ProposedWeekMenuRecipeProduction> findRecipeProductions(Long dayId) {
         return jdbcTemplate.query("""
-                        SELECT id, recipe_id, produced_grams, sort_order
+                        SELECT id, recipe_id, units, sort_order
                         FROM proposed_week_menu_recipe_productions
                         WHERE day_id = ?
                         ORDER BY sort_order, id
@@ -189,7 +190,7 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
                 (rs, rowNum) -> ProposedWeekMenuRecipeProduction.builder()
                         .id(rs.getLong("id"))
                         .recipeId(rs.getLong("recipe_id"))
-                        .producedGrams(rs.getBigDecimal("produced_grams"))
+                        .units(rs.getBigDecimal("units"))
                         .sortOrder(rs.getInt("sort_order"))
                         .build(),
                 dayId
@@ -232,12 +233,12 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
             return;
         }
         jdbcTemplate.batchUpdate("""
-                INSERT INTO proposed_week_menu_recipe_productions (day_id, recipe_id, produced_grams, sort_order)
+                INSERT INTO proposed_week_menu_recipe_productions (day_id, recipe_id, units, sort_order)
                 VALUES (?, ?, ?, ?)
                 """, recipeProductions, recipeProductions.size(), (ps, recipeProduction) -> {
             ps.setLong(1, dayId);
             ps.setLong(2, recipeProduction.getRecipeId());
-            ps.setBigDecimal(3, recipeProduction.getProducedGrams());
+            ps.setBigDecimal(3, recipeProduction.getUnits());
             ps.setInt(4, recipeProduction.getSortOrder());
         });
     }
@@ -273,8 +274,13 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
                 ps.setLong(2, product.getProductId());
             }
             ps.setString(3, product.getProductName());
-            ps.setBigDecimal(4, product.getUnits());
-            ps.setBigDecimal(5, product.getGrams());
+            if (product.getProductId() == null) {
+                ps.setNull(4, Types.NUMERIC);
+                ps.setNull(5, Types.NUMERIC);
+            } else {
+                ps.setBigDecimal(4, product.getUnits());
+                ps.setBigDecimal(5, product.getGrams());
+            }
             NutritionalValues nutritionalValues = product.getNutritionalValues();
             ps.setBigDecimal(6, nutritionalValues == null ? null : nutritionalValues.getCalories());
             ps.setBigDecimal(7, nutritionalValues == null ? null : nutritionalValues.getCarbohydrates());
@@ -303,6 +309,7 @@ public class JdbcProposedWeekMenuRepository implements ProposedWeekMenuRepositor
     private RowMapper<ProposedWeekMenu> menuRowMapper() {
         return (rs, rowNum) -> ProposedWeekMenu.builder()
                 .id(rs.getLong("id"))
+                .users(rs.getInt("users"))
                 .startDate(rs.getDate("start_date").toLocalDate())
                 .endDate(rs.getDate("end_date").toLocalDate())
                 .build();

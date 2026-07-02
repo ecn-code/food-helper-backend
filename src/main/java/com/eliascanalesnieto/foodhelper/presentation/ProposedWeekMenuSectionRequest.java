@@ -10,7 +10,7 @@ import java.util.List;
 public record ProposedWeekMenuSectionRequest(
         @Schema(description = "Reusable day part identifier", example = "1")
         @NotNull Long dayPartId,
-        @Schema(description = "Ordered products consumed in this section. Each product sortOrder must be unique within the section.")
+        @Schema(description = "Ordered products consumed in this section. Each product sortOrder must be unique within the section. Manual products must provide absolute nutritional values and must not include units or grams.")
         @NotEmpty List<@Valid ProposedWeekMenuProductRequest> products
 ) {
 }
