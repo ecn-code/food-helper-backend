@@ -11,7 +11,7 @@ public record EstablishProposedWeekMenuRequest(
         @Schema(description = "User identifier that assumes the menu cost", example = "1")
         Long payerUserId,
         @Valid
-        @Schema(description = "Optional user-confirmed stock allocation. When omitted, stock is allocated automatically by earliest expiration date. An empty list consumes no stock.")
+        @Schema(description = "Optional user-confirmed stock allocation. When omitted or empty, stock is allocated automatically by earliest expiration date.")
         List<MenuStockAllocationRequest> stockAllocations
 ) {
     public EstablishProposedWeekMenuRequest(Long payerUserId) {

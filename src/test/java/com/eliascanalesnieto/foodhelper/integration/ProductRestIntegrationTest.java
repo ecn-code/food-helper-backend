@@ -1657,6 +1657,68 @@ class ProductRestIntegrationTest {
     }
 
     @Test
+    void establishingAProposedWeekWithEmptyStockAllocationsShouldAutoConsumeAvailableStock() {
+        String productsUrl = "http://localhost:" + port + "/api/v1/products";
+        String dayPartsUrl = "http://localhost:" + port + "/api/v1/planning/day-parts";
+        String stockUrl = "http://localhost:" + port + "/api/v1/stock";
+        String proposedMenusUrl = "http://localhost:" + port + "/api/v1/planning";
+        Long riceId = createProduct(productsUrl, "Auto Allocate Rice", "Rice", "100", "0", "0", "0", "2");
+        Long lunchDayPartId = createDayPart(dayPartsUrl, "Lunch auto allocate", "Main meal of the day", 10);
+
+        ResponseEntity<StockEntryResponse> riceStock = postAuthorized(
+                productsUrl + "/" + riceId + "/stock",
+                new CreateStockEntryRequest(new BigDecimal("3.00"), new BigDecimal("2.00"), LocalDate.of(2026, 6, 20), LocalDate.of(2026, 6, 10)),
+                StockEntryResponse.class
+        );
+        assertThat(riceStock.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<ProposedWeekMenuResponse> planning = postAuthorized(
+                proposedMenusUrl,
+                new CreateProposedWeekMenuRequest(LocalDate.of(2026, 6, 15), LocalDate.of(2026, 6, 21)),
+                ProposedWeekMenuResponse.class
+        );
+        assertThat(planning.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(planning.getBody()).isNotNull();
+
+        restTemplate.exchange(
+                proposedMenusUrl + "/" + planning.getBody().id() + "/days",
+                HttpMethod.PUT,
+                authorizedEntity(new UpsertProposedWeekMenuDayRequest(
+                        LocalDate.of(2026, 6, 15),
+                        List.of(
+                                new ProposedWeekMenuSectionRequest(
+                                        lunchDayPartId,
+                                        List.of(new ProposedWeekMenuProductRequest(riceId, new BigDecimal("2.00"), null, 10))
+                                )
+                        )
+                )),
+                ProposedWeekMenuResponse.class
+        );
+
+        ResponseEntity<CurrentWeekMenuResponse> established = postAuthorized(
+                proposedMenusUrl + "/" + planning.getBody().id() + "/menu",
+                new EstablishProposedWeekMenuRequest(authenticatedUserId(), List.of()),
+                CurrentWeekMenuResponse.class
+        );
+
+        assertThat(established.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(established.getBody()).isNotNull();
+        assertThat(established.getBody().usedStock()).singleElement().satisfies(used -> {
+            assertThat(used.productId()).isEqualTo(riceId);
+            assertThat(used.usedUnits()).isEqualByComparingTo("2.00");
+        });
+        assertThat(established.getBody().shoppingList()).isEmpty();
+
+        ResponseEntity<StockEntryResponse[]> appliedStock = getAuthorized(
+                stockUrl + "?productIds=" + riceId,
+                StockEntryResponse[].class
+        );
+        assertThat(appliedStock.getBody()).singleElement().satisfies(stock ->
+                assertThat(stock.quantity()).isEqualByComparingTo("1.00")
+        );
+    }
+
+    @Test
     void menuRangeStatsShouldAggregateMenusInsideTheRequestedWindow() {
         String productsUrl = "http://localhost:" + port + "/api/v1/products";
         String dayPartsUrl = "http://localhost:" + port + "/api/v1/planning/day-parts";

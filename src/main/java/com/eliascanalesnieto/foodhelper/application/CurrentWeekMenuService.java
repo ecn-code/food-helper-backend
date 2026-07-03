@@ -600,7 +600,7 @@ public class CurrentWeekMenuService {
         productsForStock.putAll(compositionProductsById);
         Map<Long, BigDecimal> requiredUnitsByProduct = requiredUnitsByProduct(menu.getDays(), menu.getUsers(), productsForStock);
         List<StockEntry> availableStock = stockRepository.findStock(null, requiredUnitsByProduct.keySet());
-        if (requestedAllocations != null) {
+        if (requestedAllocations != null && !requestedAllocations.isEmpty()) {
             return allocateRequestedStock(
                     productsForStock,
                     requiredUnitsByProduct,
