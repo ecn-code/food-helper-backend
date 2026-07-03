@@ -19,6 +19,7 @@ import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuUsedStock;
 import com.eliascanalesnieto.foodhelper.domain.MenuStockMovement;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
 import com.eliascanalesnieto.foodhelper.domain.MenuStockMovementRepository;
+import com.eliascanalesnieto.foodhelper.domain.RecipeRepository;
 import com.eliascanalesnieto.foodhelper.domain.StockRepository;
 import com.eliascanalesnieto.foodhelper.domain.SupermarketRepository;
 import com.eliascanalesnieto.foodhelper.domain.UserMenuHistoryRepository;
@@ -52,6 +53,7 @@ class CurrentWeekMenuHistoryServiceTest {
     @Mock CurrentWeekMenuStatsRepository statsRepository;
     @Mock CurrentWeekMenuStatsService statsService;
     @Mock ProductRepository productRepository;
+    @Mock RecipeRepository recipeRepository;
     @Mock StockRepository stockRepository;
     @Mock SupermarketRepository supermarketRepository;
     @Mock AppUserRepository userRepository;
@@ -273,7 +275,6 @@ class CurrentWeekMenuHistoryServiceTest {
                 "Recipe",
                 55L,
                 "Derived Product",
-                new BigDecimal("400.00"),
                 new BigDecimal("4.00"),
                 1,
                 false,
@@ -290,7 +291,7 @@ class CurrentWeekMenuHistoryServiceTest {
                         LocalDate.of(2026, 6, 3),
                         List.of(),
                         List.of(new com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuRecipeProductionResponse(
-                                91L, 77L, "Recipe", 55L, "Derived Product", new BigDecimal("400.00"), new BigDecimal("4.00"), 1
+                                91L, 77L, "Recipe", 55L, "Derived Product", new BigDecimal("4.00"), 1
                         )),
                         new com.eliascanalesnieto.foodhelper.presentation.NutritionalValuesResponse(
                                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO
@@ -339,7 +340,7 @@ class CurrentWeekMenuHistoryServiceTest {
                         LocalDate.of(2026, 6, 3),
                         List.of(),
                         List.of(new com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuRecipeProductionResponse(
-                                91L, 77L, "Recipe", 55L, "Derived Product", new BigDecimal("400.00"), new BigDecimal("4.00"), 1
+                                91L, 77L, "Recipe", 55L, "Derived Product", new BigDecimal("4.00"), 1
                         )),
                         new com.eliascanalesnieto.foodhelper.presentation.NutritionalValuesResponse(
                                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO
@@ -354,7 +355,7 @@ class CurrentWeekMenuHistoryServiceTest {
                 List.of(),
                 List.of(new CurrentWeekMenuRecipeProductionResponse(
                         91L, 77L, "Recipe", 55L, "Derived Product",
-                        new BigDecimal("400.00"), new BigDecimal("4.00"), 1,
+                        new BigDecimal("4.00"), 1,
                         false, null, null, null
                 )),
                 null

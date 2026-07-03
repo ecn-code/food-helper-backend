@@ -12,7 +12,7 @@ public class ProposedWeekMenuRecipeProduction {
     String recipeName;
     Long productId;
     String productName;
-    BigDecimal producedGrams;
-    BigDecimal producedUnits;
+    BigDecimal units;
+    BigDecimal grams;
     Integer sortOrder;
 }

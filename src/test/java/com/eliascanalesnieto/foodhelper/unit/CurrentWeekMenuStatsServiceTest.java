@@ -4,11 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.eliascanalesnieto.foodhelper.application.CurrentWeekMenuStatsService;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuPeriodStatsResponse;
+import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuRangeStatsResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuStatsResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuUsedStockResponse;
 import com.eliascanalesnieto.foodhelper.presentation.MenuStockMovementResponse;
 import com.eliascanalesnieto.foodhelper.presentation.NutritionalValuesResponse;
+import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuProductResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuDayResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuSectionResponse;
 import java.math.BigDecimal;
@@ -59,6 +61,53 @@ class CurrentWeekMenuStatsServiceTest {
         ));
     }
 
+    @Test
+    void shouldSummarizeRangeAcrossPartialAndMultipleMenus() {
+        CurrentWeekMenuResponse juneMenu = menu(
+                10L,
+                LocalDate.of(2026, 6, 1),
+                List.of(
+                        day(LocalDate.of(2026, 6, 3), "100", "10", "5", "1", 101L),
+                        day(LocalDate.of(2026, 6, 4), "200", "20", "10", "2", 102L)
+                ),
+                List.of(usedStock("12.50")),
+                List.of(stockMovement("5.00"))
+        );
+        CurrentWeekMenuResponse juneMenuTwo = menu(
+                11L,
+                LocalDate.of(2026, 6, 8),
+                List.of(
+                        day(LocalDate.of(2026, 6, 8), "300", "30", "15", "3", 201L),
+                        day(LocalDate.of(2026, 6, 10), "400", "40", "20", "4", 202L)
+                ),
+                List.of(usedStock("7.50")),
+                List.of(stockMovement("2.50"))
+        );
+
+        CurrentWeekMenuRangeStatsResponse partial = service.summarizeRange(List.of(juneMenu, juneMenuTwo), LocalDate.of(2026, 6, 4), LocalDate.of(2026, 6, 4));
+        assertThat(partial.from()).isEqualTo(LocalDate.of(2026, 6, 4));
+        assertThat(partial.to()).isEqualTo(LocalDate.of(2026, 6, 4));
+        assertThat(partial.plannedDays()).isEqualTo(1);
+        assertThat(partial.calories()).isEqualByComparingTo("200.00");
+        assertThat(partial.distinctProducts()).isEqualTo(1L);
+        assertThat(partial.estimatedCost()).isEqualByComparingTo("17.50");
+        assertThat(partial.menuIds()).containsExactly(10L);
+
+        CurrentWeekMenuRangeStatsResponse multi = service.summarizeRange(List.of(juneMenu, juneMenuTwo), LocalDate.of(2026, 6, 4), LocalDate.of(2026, 6, 10));
+        assertThat(multi.plannedDays()).isEqualTo(3);
+        assertThat(multi.calories()).isEqualByComparingTo("900.00");
+        assertThat(multi.distinctProducts()).isEqualTo(3L);
+        assertThat(multi.estimatedCost()).isEqualByComparingTo("27.50");
+        assertThat(multi.menuIds()).containsExactly(10L, 11L);
+
+        CurrentWeekMenuRangeStatsResponse empty = service.summarizeRange(List.of(juneMenu, juneMenuTwo), LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 7));
+        assertThat(empty.plannedDays()).isZero();
+        assertThat(empty.calories()).isEqualByComparingTo("0.00");
+        assertThat(empty.distinctProducts()).isZero();
+        assertThat(empty.estimatedCost()).isEqualByComparingTo("0.00");
+        assertThat(empty.menuIds()).isEmpty();
+    }
+
     private CurrentWeekMenuResponse menu(
             Long id,
             LocalDate endDate,
@@ -90,11 +139,62 @@ class CurrentWeekMenuStatsServiceTest {
         );
     }
 
+    private CurrentWeekMenuResponse menu(
+            Long id,
+            LocalDate startDate,
+            List<ProposedWeekMenuDayResponse> days,
+            List<CurrentWeekMenuUsedStockResponse> usedStock,
+            List<MenuStockMovementResponse> stockMovements
+    ) {
+        LocalDate endDate = days.get(days.size() - 1).date();
+        return new CurrentWeekMenuResponse(
+                id,
+                5L,
+                1L,
+                "elias",
+                List.of(),
+                startDate,
+                endDate,
+                days,
+                new NutritionalValuesResponse(
+                        days.stream().map(day -> day.nutritionalValues().calories()).reduce(BigDecimal.ZERO, BigDecimal::add),
+                        days.stream().map(day -> day.nutritionalValues().carbohydrates()).reduce(BigDecimal.ZERO, BigDecimal::add),
+                        days.stream().map(day -> day.nutritionalValues().proteins()).reduce(BigDecimal.ZERO, BigDecimal::add),
+                        days.stream().map(day -> day.nutritionalValues().fats()).reduce(BigDecimal.ZERO, BigDecimal::add)
+                ),
+                null,
+                usedStock,
+                List.of(),
+                List.of(),
+                stockMovements,
+                List.of(),
+                null
+        );
+    }
+
     private ProposedWeekMenuDayResponse day(LocalDate date, String calories, String carbohydrates, String proteins, String fats) {
+        return day(date, calories, carbohydrates, proteins, fats, 1L);
+    }
+
+    private ProposedWeekMenuDayResponse day(LocalDate date, String calories, String carbohydrates, String proteins, String fats, Long productId) {
         return new ProposedWeekMenuDayResponse(
                 1L,
                 date,
-                List.of(new ProposedWeekMenuSectionResponse(1L, 1L, "Lunch", "", 1, List.of(), new NutritionalValuesResponse(
+                List.of(new ProposedWeekMenuSectionResponse(1L, 1L, "Lunch", "", 1, List.of(
+                        new ProposedWeekMenuProductResponse(
+                                productId,
+                                "Product " + productId,
+                                new BigDecimal("1.00"),
+                                null,
+                                1,
+                                new NutritionalValuesResponse(
+                                        new BigDecimal(calories),
+                                        new BigDecimal(carbohydrates),
+                                        new BigDecimal(proteins),
+                                        new BigDecimal(fats)
+                                )
+                        )
+                ), new NutritionalValuesResponse(
                         new BigDecimal(calories),
                         new BigDecimal(carbohydrates),
                         new BigDecimal(proteins),

@@ -2,9 +2,11 @@ package com.eliascanalesnieto.foodhelper.application;
 
 import com.eliascanalesnieto.foodhelper.domain.Media;
 import com.eliascanalesnieto.foodhelper.domain.MediaUpload;
+import com.eliascanalesnieto.foodhelper.domain.NutritionBasis;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
+import com.eliascanalesnieto.foodhelper.domain.QuantityType;
 import com.eliascanalesnieto.foodhelper.domain.Recipe;
 import com.eliascanalesnieto.foodhelper.domain.RecipeDerivedProduct;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
@@ -32,12 +34,13 @@ public class RecipeService {
     private final MediaService mediaService;
 
     @Transactional
-    public Recipe create(String name, String description, String instructions, List<RecipeIngredient> ingredients, MediaUpload photoUpload) {
+    public Recipe create(String name, String description, String instructions, BigDecimal defaultUnitsProduced, List<RecipeIngredient> ingredients, MediaUpload photoUpload) {
         Media photo = mediaService.createOptimized(photoUpload);
         Recipe recipe = enrichRecipe(Recipe.builder()
                 .name(name)
                 .description(description)
                 .instructions(instructions)
+                .defaultUnitsProduced(scaleOptional(defaultUnitsProduced))
                 .ingredients(ingredients)
                 .photo(photo)
                 .build());
@@ -45,7 +48,7 @@ public class RecipeService {
     }
 
     @Transactional
-    public Recipe update(Long id, String name, String description, String instructions, List<RecipeIngredient> ingredients, MediaUpload photoUpload) {
+    public Recipe update(Long id, String name, String description, String instructions, BigDecimal defaultUnitsProduced, Boolean stockFromComposition, List<RecipeIngredient> ingredients, MediaUpload photoUpload) {
         Recipe existing = recipeRepository.findById(id);
         Media photo = photoUpload == null ? existing.getPhoto() : mediaService.createOptimized(photoUpload);
         Recipe recipe = enrichRecipe(Recipe.builder()
@@ -53,6 +56,7 @@ public class RecipeService {
                 .name(name)
                 .description(description)
                 .instructions(instructions)
+                .defaultUnitsProduced(scaleOptional(defaultUnitsProduced))
                 .ingredients(ingredients)
                 .photo(photo)
                 .build());
@@ -61,7 +65,7 @@ public class RecipeService {
             mediaService.delete(existing.getPhoto().getId());
         }
         recipeRepository.findDerivedProductByRecipeId(id)
-                .ifPresent(derivedProduct -> syncDerivedProduct(savedRecipe, derivedProduct));
+                .ifPresent(derivedProduct -> syncDerivedProduct(savedRecipe, derivedProduct, stockFromComposition));
         return attachDerivedProduct(savedRecipe);
     }
 
@@ -104,22 +108,32 @@ public class RecipeService {
     }
 
     @Transactional
-    public RecipeDerivedProduct createDerivedProduct(Long recipeId, BigDecimal producedGrams, BigDecimal gramsPerUnit) {
+    public RecipeDerivedProduct createDerivedProduct(Long recipeId, String name, BigDecimal units, Boolean stockFromComposition) {
         if (recipeRepository.findDerivedProductByRecipeId(recipeId).isPresent()) {
             throw new DuplicateResourceException("Recipe already has a derived product");
         }
+        if (productRepository.findByName(name).isPresent()) {
+            throw new DuplicateResourceException("Product name already exists");
+        }
         Recipe recipe = loadRecipe(recipeId);
+        Map<Long, Product> productsById = loadProducts(recipe.getIngredients());
+        List<RecipeIngredient> composition = divideIngredients(recipe.getIngredients(), units);
+        BigDecimal gramsPerUnit = calculateTotalGrams(recipe.getIngredients(), productsById).divide(units, SCALE, RoundingMode.HALF_UP);
+        boolean resolvedStockFromComposition = resolveStockFromComposition(stockFromComposition, true);
         Product createdProduct = productRepository.create(Product.builder()
-                .name(recipe.getName())
+                .name(name)
                 .description(recipe.getDescription())
                 .gramsPerUnit(scale(gramsPerUnit))
-                .nutritionalValues(recipe.getNutritionalValues())
+                .nutritionBasis(NutritionBasis.PER_UNIT)
+                .nutritionalValues(divideNutrients(recipe.getNutritionalValues(), units))
                 .build());
-        RecipeDerivedProduct linkedProduct = recipeRepository.linkDerivedProduct(
+        RecipeDerivedProduct linkedProduct = recipeRepository.saveDerivedProduct(
                 recipeId,
                 createdProduct.getId(),
-                scale(producedGrams),
-                scale(gramsPerUnit)
+                createdProduct.getName(),
+                scale(units),
+                resolvedStockFromComposition,
+                composition
         );
         return completeDerivedProduct(linkedProduct);
     }
@@ -154,20 +168,70 @@ public class RecipeService {
     }
 
     private RecipeIngredient enrichIngredient(RecipeIngredient ingredient, Product product) {
+        validateIngredientCompatibility(ingredient, product);
+        BigDecimal quantity = scale(ingredient.getQuantity());
         return RecipeIngredient.builder()
                 .productId(product.getId())
                 .productName(product.getName())
-                .grams(scale(ingredient.getGrams()))
-                .nutritionalValues(calculateContribution(product.getNutritionalValues(), ingredient.getGrams()))
+                .quantity(quantity)
+                .quantityType(ingredient.getQuantityType())
+                .nutritionalValues(calculateContribution(product.getNutritionalValues(), quantity, ingredient.getQuantityType()))
                 .build();
     }
 
-    private NutritionalValues calculateContribution(NutritionalValues nutritionalValues, BigDecimal grams) {
+    private void validateIngredientCompatibility(RecipeIngredient ingredient, Product product) {
+        if (ingredient.getQuantityType() == QuantityType.GRAMS && product.getNutritionBasis() != NutritionBasis.PER_100_GRAMS) {
+            throw new IllegalArgumentException("Products measured in grams must use per-100-grams nutrition");
+        }
+        if (ingredient.getQuantityType() == QuantityType.UNITS && product.getNutritionBasis() != NutritionBasis.PER_UNIT) {
+            throw new IllegalArgumentException("Products measured in units must use per-unit nutrition");
+        }
+    }
+
+    private NutritionalValues calculateContribution(NutritionalValues nutritionalValues, BigDecimal quantity, QuantityType quantityType) {
+        return switch (quantityType) {
+            case GRAMS -> NutritionalValues.builder()
+                    .calories(scale(calculatePerHundredValue(nutritionalValues.getCalories(), quantity)))
+                    .carbohydrates(scale(calculatePerHundredValue(nutritionalValues.getCarbohydrates(), quantity)))
+                    .proteins(scale(calculatePerHundredValue(nutritionalValues.getProteins(), quantity)))
+                    .fats(scale(calculatePerHundredValue(nutritionalValues.getFats(), quantity)))
+                    .build();
+            case UNITS -> NutritionalValues.builder()
+                    .calories(scale(nutritionalValues.getCalories().multiply(quantity)))
+                    .carbohydrates(scale(nutritionalValues.getCarbohydrates().multiply(quantity)))
+                    .proteins(scale(nutritionalValues.getProteins().multiply(quantity)))
+                    .fats(scale(nutritionalValues.getFats().multiply(quantity)))
+                    .build();
+        };
+    }
+
+    private NutritionalValues divideNutrients(NutritionalValues nutritionalValues, BigDecimal units) {
         return NutritionalValues.builder()
-                .calories(scale(calculateValue(nutritionalValues.getCalories(), grams)))
-                .carbohydrates(scale(calculateValue(nutritionalValues.getCarbohydrates(), grams)))
-                .proteins(scale(calculateValue(nutritionalValues.getProteins(), grams)))
-                .fats(scale(calculateValue(nutritionalValues.getFats(), grams)))
+                .calories(scale(nutritionalValues.getCalories().divide(units, SCALE, RoundingMode.HALF_UP)))
+                .carbohydrates(scale(nutritionalValues.getCarbohydrates().divide(units, SCALE, RoundingMode.HALF_UP)))
+                .proteins(scale(nutritionalValues.getProteins().divide(units, SCALE, RoundingMode.HALF_UP)))
+                .fats(scale(nutritionalValues.getFats().divide(units, SCALE, RoundingMode.HALF_UP)))
+                .build();
+    }
+
+    private List<RecipeIngredient> divideIngredients(List<RecipeIngredient> ingredients, BigDecimal units) {
+        return ingredients.stream()
+                .map(ingredient -> RecipeIngredient.builder()
+                        .productId(ingredient.getProductId())
+                        .productName(ingredient.getProductName())
+                        .quantity(scale(ingredient.getQuantity().divide(units, SCALE, RoundingMode.HALF_UP)))
+                        .quantityType(ingredient.getQuantityType())
+                        .nutritionalValues(divideNutritionalContribution(ingredient.getNutritionalValues(), units))
+                        .build())
+                .toList();
+    }
+
+    private NutritionalValues divideNutritionalContribution(NutritionalValues nutritionalValues, BigDecimal units) {
+        return NutritionalValues.builder()
+                .calories(scale(nutritionalValues.getCalories().divide(units, SCALE, RoundingMode.HALF_UP)))
+                .carbohydrates(scale(nutritionalValues.getCarbohydrates().divide(units, SCALE, RoundingMode.HALF_UP)))
+                .proteins(scale(nutritionalValues.getProteins().divide(units, SCALE, RoundingMode.HALF_UP)))
+                .fats(scale(nutritionalValues.getFats().divide(units, SCALE, RoundingMode.HALF_UP)))
                 .build();
     }
 
@@ -192,8 +256,20 @@ public class RecipeService {
                 .build();
     }
 
-    private BigDecimal calculateValue(BigDecimal perHundredGramsValue, BigDecimal grams) {
+    private BigDecimal calculatePerHundredValue(BigDecimal perHundredGramsValue, BigDecimal grams) {
         return perHundredGramsValue.multiply(grams).divide(ONE_HUNDRED, SCALE, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateTotalGrams(List<RecipeIngredient> ingredients, Map<Long, Product> productsById) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (RecipeIngredient ingredient : ingredients) {
+            Product product = productsById.get(ingredient.getProductId());
+            total = total.add(switch (ingredient.getQuantityType()) {
+                case GRAMS -> ingredient.getQuantity();
+                case UNITS -> ingredient.getQuantity().multiply(product.getGramsPerUnit());
+            });
+        }
+        return scale(total);
     }
 
     private Recipe attachDerivedProduct(Recipe recipe) {
@@ -206,24 +282,53 @@ public class RecipeService {
     }
 
     private RecipeDerivedProduct completeDerivedProduct(RecipeDerivedProduct derivedProduct) {
+        Map<Long, Product> productsById = loadProducts(derivedProduct.getIngredients());
         return RecipeDerivedProduct.builder()
                 .productId(derivedProduct.getProductId())
-                .producedGrams(scale(derivedProduct.getProducedGrams()))
-                .gramsPerUnit(scale(derivedProduct.getGramsPerUnit()))
-                .unitsProduced(scale(derivedProduct.getProducedGrams().divide(derivedProduct.getGramsPerUnit(), SCALE, RoundingMode.HALF_UP)))
+                .name(derivedProduct.getName())
+                .unitsProduced(scale(derivedProduct.getUnitsProduced()))
+                .stockFromComposition(derivedProduct.isStockFromComposition())
+                .ingredients(derivedProduct.getIngredients().stream()
+                        .map(ingredient -> enrichIngredient(ingredient, productsById.get(ingredient.getProductId())))
+                        .toList())
                 .build();
     }
 
-    private void syncDerivedProduct(Recipe recipe, RecipeDerivedProduct derivedProduct) {
-        productRepository.update(derivedProduct.getProductId(), Product.builder()
-                .name(recipe.getName())
+    private void syncDerivedProduct(Recipe recipe, RecipeDerivedProduct derivedProduct, Boolean stockFromComposition) {
+        Product existingProduct = productRepository.findById(derivedProduct.getProductId());
+        BigDecimal units = derivedProduct.getUnitsProduced();
+        Map<Long, Product> productsById = loadProducts(recipe.getIngredients());
+        List<RecipeIngredient> composition = divideIngredients(recipe.getIngredients(), units);
+        boolean resolvedStockFromComposition = resolveStockFromComposition(stockFromComposition, derivedProduct.isStockFromComposition());
+        productRepository.update(derivedProduct.getProductId(), existingProduct.toBuilder()
+                .name(derivedProduct.getName())
                 .description(recipe.getDescription())
-                .gramsPerUnit(scale(derivedProduct.getGramsPerUnit()))
-                .nutritionalValues(recipe.getNutritionalValues())
+                .gramsPerUnit(scale(calculateTotalGrams(recipe.getIngredients(), productsById).divide(units, SCALE, RoundingMode.HALF_UP)))
+                .nutritionBasis(NutritionBasis.PER_UNIT)
+                .nutritionalValues(divideNutrients(recipe.getNutritionalValues(), units))
+                .derivedProduct(RecipeDerivedProduct.builder()
+                        .productId(derivedProduct.getProductId())
+                        .name(derivedProduct.getName())
+                        .unitsProduced(units)
+                        .stockFromComposition(resolvedStockFromComposition)
+                        .ingredients(composition)
+                        .build())
                 .build());
+        recipeRepository.saveDerivedProduct(recipe.getId(), derivedProduct.getProductId(), derivedProduct.getName(), units, resolvedStockFromComposition, composition);
     }
 
     private BigDecimal scale(BigDecimal value) {
         return value.setScale(SCALE, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal scaleOptional(BigDecimal value) {
+        if (value == null) {
+            return null;
+        }
+        return scale(value);
+    }
+
+    private boolean resolveStockFromComposition(Boolean requestedValue, boolean defaultValue) {
+        return requestedValue == null ? defaultValue : requestedValue;
     }
 }

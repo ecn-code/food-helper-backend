@@ -3,6 +3,7 @@ package com.eliascanalesnieto.foodhelper.unit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,10 +14,13 @@ import com.eliascanalesnieto.foodhelper.domain.MediaUpload;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
+import com.eliascanalesnieto.foodhelper.domain.RecipeRepository;
 import com.eliascanalesnieto.foodhelper.domain.SupermarketRepository;
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -36,8 +40,16 @@ class ProductServiceTest {
     @Mock
     private MediaService mediaService;
 
+    @Mock
+    private RecipeRepository recipeRepository;
+
     @InjectMocks
     private ProductService service;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(recipeRepository.findDerivedProductByProductId(any())).thenReturn(Optional.empty());
+    }
 
     @Test
     void shouldCreateProduct() {

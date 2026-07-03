@@ -1,15 +1,24 @@
 package com.eliascanalesnieto.foodhelper.application;
 
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuPeriodStatsDayResponse;
+import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuRangeStatsResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuPeriodStatsResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuStatsResponse;
+import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuDayResponse;
+import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuProductResponse;
+import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuSectionResponse;
+import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuStockItemResponse;
 import com.eliascanalesnieto.foodhelper.presentation.MenuStockMovementResponse;
+import com.eliascanalesnieto.foodhelper.presentation.NutritionalValuesResponse;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
+import java.util.LinkedHashSet;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -85,6 +94,50 @@ public class CurrentWeekMenuStatsService {
         );
     }
 
+    public CurrentWeekMenuRangeStatsResponse summarizeRange(List<CurrentWeekMenuResponse> menus, LocalDate from, LocalDate to) {
+        validateRange(from, to);
+
+        List<CurrentWeekMenuResponse> filteredMenus = menus.stream()
+                .map(menu -> filterMenu(menu, from, to))
+                .filter(menu -> !menu.days().isEmpty())
+                .toList();
+
+        if (filteredMenus.isEmpty()) {
+            return new CurrentWeekMenuRangeStatsResponse(from, to, 0, ZERO, 0, ZERO, List.of());
+        }
+
+        List<ProposedWeekMenuDayResponse> days = filteredMenus.stream()
+                .flatMap(menu -> menu.days().stream())
+                .toList();
+
+        BigDecimal calories = days.stream()
+                .map(day -> safeNutrition(day).calories())
+                .map(this::normalize)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        Set<Long> distinctProductIds = days.stream()
+                .flatMap(day -> safeSections(day).stream())
+                .flatMap(section -> safeProducts(section).stream())
+                .map(ProposedWeekMenuProductResponse::productId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+
+        BigDecimal estimatedCost = filteredMenus.stream()
+                .map(menu -> summarize(List.of(menu)).moneySpent())
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(SCALE, RoundingMode.HALF_UP);
+
+        return new CurrentWeekMenuRangeStatsResponse(
+                from,
+                to,
+                days.size(),
+                calories.setScale(SCALE, RoundingMode.HALF_UP),
+                distinctProductIds.size(),
+                estimatedCost,
+                filteredMenus.stream().map(CurrentWeekMenuResponse::id).toList()
+        );
+    }
+
     private Comparator<CurrentWeekMenuPeriodStatsDayResponse> dayComparator() {
         return Comparator
                 .comparing(CurrentWeekMenuPeriodStatsDayResponse::calories)
@@ -95,11 +148,78 @@ public class CurrentWeekMenuStatsService {
         return total.divide(BigDecimal.valueOf(count), SCALE, RoundingMode.HALF_UP);
     }
 
+    private void validateRange(LocalDate from, LocalDate to) {
+        if (from == null || to == null) {
+            throw new IllegalArgumentException("Range start and end are required");
+        }
+        if (from.isAfter(to)) {
+            throw new IllegalArgumentException("Range start must not be after range end");
+        }
+    }
+
+    private CurrentWeekMenuResponse filterMenu(CurrentWeekMenuResponse menu, LocalDate from, LocalDate to) {
+        List<ProposedWeekMenuDayResponse> days = safeDays(menu).stream()
+                .filter(day -> !day.date().isBefore(from) && !day.date().isAfter(to))
+                .toList();
+        return new CurrentWeekMenuResponse(
+                menu.id(),
+                menu.planningId(),
+                menu.payerUserId(),
+                menu.payerUsername(),
+                safePersonIds(menu),
+                menu.startDate(),
+                menu.endDate(),
+                days,
+                menu.nutritionalValues(),
+                menu.stockSummary(),
+                menu.usedStock(),
+                safeWeekStock(menu),
+                menu.shoppingList(),
+                safeStockMovements(menu),
+                safeRecipeProductions(menu),
+                menu.nutritionalRules()
+        );
+    }
+
+    private NutritionalValuesResponse safeNutrition(ProposedWeekMenuDayResponse day) {
+        return day.nutritionalValues() == null
+                ? new NutritionalValuesResponse(ZERO, ZERO, ZERO, ZERO)
+                : day.nutritionalValues();
+    }
+
+    private List<ProposedWeekMenuSectionResponse> safeSections(ProposedWeekMenuDayResponse day) {
+        return day.sections() == null ? List.of() : day.sections();
+    }
+
+    private List<ProposedWeekMenuProductResponse> safeProducts(ProposedWeekMenuSectionResponse section) {
+        return section.products() == null ? List.of() : section.products();
+    }
+
+    private List<Long> safePersonIds(CurrentWeekMenuResponse menu) {
+        return menu.personIds() == null ? List.of() : menu.personIds();
+    }
+
+    private List<ProposedWeekMenuDayResponse> safeDays(CurrentWeekMenuResponse menu) {
+        return menu.days() == null ? List.of() : menu.days();
+    }
+
     private List<com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuUsedStockResponse> safeUsedStock(CurrentWeekMenuResponse menu) {
         return menu.usedStock() == null ? List.of() : menu.usedStock();
     }
 
+    private List<CurrentWeekMenuStockItemResponse> safeWeekStock(CurrentWeekMenuResponse menu) {
+        return menu.weekStock() == null ? List.of() : menu.weekStock();
+    }
+
     private List<MenuStockMovementResponse> safeStockMovements(CurrentWeekMenuResponse menu) {
         return menu.stockMovements() == null ? List.of() : menu.stockMovements();
+    }
+
+    private List<com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuRecipeProductionResponse> safeRecipeProductions(CurrentWeekMenuResponse menu) {
+        return menu.recipeProductions() == null ? List.of() : menu.recipeProductions();
+    }
+
+    private BigDecimal normalize(BigDecimal value) {
+        return value == null ? ZERO : value;
     }
 }

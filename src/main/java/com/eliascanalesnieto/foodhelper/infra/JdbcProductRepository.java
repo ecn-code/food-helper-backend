@@ -1,6 +1,7 @@
 package com.eliascanalesnieto.foodhelper.infra;
 
 import com.eliascanalesnieto.foodhelper.domain.Media;
+import com.eliascanalesnieto.foodhelper.domain.NutritionBasis;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.RowMapper;
@@ -30,6 +32,7 @@ public class JdbcProductRepository implements ProductRepository {
                    p.name,
                    p.description,
                    p.grams_per_unit,
+                   p.nutrition_basis,
                    p.default_price,
                    m.id AS media_id,
                    m.file_name,
@@ -60,6 +63,7 @@ public class JdbcProductRepository implements ProductRepository {
                     product.getName(),
                     product.getDescription(),
                     product.getGramsPerUnit(),
+                    product.getNutritionBasis() == null ? NutritionBasis.PER_100_GRAMS.name() : product.getNutritionBasis().name(),
                     product.getDefaultPrice(),
                     mediaId(product)
             ));
@@ -83,6 +87,7 @@ public class JdbcProductRepository implements ProductRepository {
                     product.getName(),
                     product.getDescription(),
                     product.getGramsPerUnit(),
+                    product.getNutritionBasis() == null ? NutritionBasis.PER_100_GRAMS.name() : product.getNutritionBasis().name(),
                     product.getDefaultPrice(),
                     mediaId(product)
             ));
@@ -108,8 +113,17 @@ public class JdbcProductRepository implements ProductRepository {
     }
 
     @Override
+    public Optional<Product> findByName(String name) {
+        return jdbcTemplate.query(
+                SELECT_PRODUCTS_WITH_VALUES + " WHERE p.name = :name",
+                new MapSqlParameterSource("name", name),
+                productRowMapper()
+        ).stream().findFirst().map(this::attachSupermarkets);
+    }
+
+    @Override
     public List<Product> findAll() {
-        return jdbcTemplate.query(SELECT_PRODUCTS_WITH_VALUES + " ORDER BY p.id", productRowMapper()).stream()
+        return jdbcTemplate.query(SELECT_PRODUCTS_WITH_VALUES + " ORDER BY LOWER(p.name), p.id", productRowMapper()).stream()
                 .map(this::attachSupermarkets)
                 .toList();
     }
@@ -121,7 +135,7 @@ public class JdbcProductRepository implements ProductRepository {
                 .addValue("offset", offset);
         StringBuilder sql = new StringBuilder(SELECT_PRODUCTS_WITH_VALUES);
         appendFilters(sql, params, searchCriteria);
-        sql.append(" ORDER BY p.id LIMIT :limit OFFSET :offset");
+        sql.append(" ORDER BY LOWER(p.name), p.id LIMIT :limit OFFSET :offset");
         return jdbcTemplate.query(
                 sql.toString(),
                 params,
@@ -207,6 +221,7 @@ public class JdbcProductRepository implements ProductRepository {
                 .name(product.name())
                 .description(product.description())
                 .gramsPerUnit(product.gramsPerUnit())
+                .nutritionBasis(product.nutritionBasis() == null ? NutritionBasis.PER_100_GRAMS : NutritionBasis.valueOf(product.nutritionBasis()))
                 .defaultPrice(product.defaultPrice())
                 .photo(product.mediaId() == null ? null : Media.builder()
                         .id(product.mediaId())
@@ -248,6 +263,7 @@ public class JdbcProductRepository implements ProductRepository {
                 .name(rs.getString("name"))
                 .description(rs.getString("description"))
                 .gramsPerUnit(rs.getBigDecimal("grams_per_unit"))
+                .nutritionBasis(NutritionBasis.valueOf(rs.getString("nutrition_basis")))
                 .defaultPrice(rs.getBigDecimal("default_price"))
                 .photo(mapMedia(rs))
                 .nutritionalValues(NutritionalValues.builder()

@@ -1,6 +1,7 @@
 package com.eliascanalesnieto.foodhelper.domain;
 
 import java.math.BigDecimal;
+import java.util.List;
 import lombok.Builder;
 import lombok.Value;
 
@@ -8,7 +9,9 @@ import lombok.Value;
 @Builder
 public class RecipeDerivedProduct {
     Long productId;
-    BigDecimal producedGrams;
-    BigDecimal gramsPerUnit;
+    String name;
     BigDecimal unitsProduced;
+    @Builder.Default
+    boolean stockFromComposition = true;
+    List<RecipeIngredient> ingredients;
 }

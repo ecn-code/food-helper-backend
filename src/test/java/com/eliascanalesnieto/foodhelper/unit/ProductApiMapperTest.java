@@ -3,7 +3,9 @@ package com.eliascanalesnieto.foodhelper.unit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
+import com.eliascanalesnieto.foodhelper.domain.NutritionBasis;
 import com.eliascanalesnieto.foodhelper.domain.Product;
+import com.eliascanalesnieto.foodhelper.domain.QuantityType;
 import com.eliascanalesnieto.foodhelper.domain.Recipe;
 import com.eliascanalesnieto.foodhelper.domain.RecipeDerivedProduct;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
@@ -26,6 +28,7 @@ class ProductApiMapperTest {
                 .name("Apple")
                 .description("Fresh apple")
                 .gramsPerUnit(new BigDecimal("150"))
+                .nutritionBasis(NutritionBasis.PER_100_GRAMS)
                 .defaultPrice(new BigDecimal("2.49"))
                 .nutritionalValues(NutritionalValues.builder()
                         .productId(1L)
@@ -62,7 +65,8 @@ class ProductApiMapperTest {
                 .ingredients(List.of(RecipeIngredient.builder()
                         .productId(1L)
                         .productName("Chicken")
-                        .grams(new BigDecimal("200"))
+                        .quantity(new BigDecimal("200"))
+                        .quantityType(QuantityType.GRAMS)
                         .nutritionalValues(NutritionalValues.builder()
                                 .calories(new BigDecimal("330"))
                                 .carbohydrates(new BigDecimal("0"))
@@ -72,9 +76,15 @@ class ProductApiMapperTest {
                         .build()))
                 .derivedProduct(RecipeDerivedProduct.builder()
                         .productId(9L)
-                        .producedGrams(new BigDecimal("400"))
-                        .gramsPerUnit(new BigDecimal("100"))
+                        .name("Curry base")
                         .unitsProduced(new BigDecimal("4"))
+                        .stockFromComposition(true)
+                        .ingredients(List.of(RecipeIngredient.builder()
+                                .productId(1L)
+                                .productName("Chicken")
+                                .quantity(new BigDecimal("50"))
+                                .quantityType(QuantityType.GRAMS)
+                                .build()))
                         .build())
                 .build();
 
@@ -84,6 +94,9 @@ class ProductApiMapperTest {
         assertThat(response.products()).hasSize(1);
         assertThat(response.products().getFirst().productName()).isEqualTo("Chicken");
         assertThat(response.derivedProduct()).isNotNull();
+        assertThat(response.derivedProduct().name()).isEqualTo("Curry base");
         assertThat(response.derivedProduct().unitsProduced()).isEqualByComparingTo("4");
+        assertThat(response.derivedProduct().stockFromComposition()).isTrue();
+        assertThat(response.derivedProduct().ingredients()).hasSize(1);
     }
 }

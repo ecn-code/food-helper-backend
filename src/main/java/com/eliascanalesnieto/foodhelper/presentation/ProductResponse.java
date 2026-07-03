@@ -3,6 +3,7 @@ package com.eliascanalesnieto.foodhelper.presentation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.util.List;
+import com.eliascanalesnieto.foodhelper.domain.NutritionBasis;
 
 @Schema(name = "ProductResponse", description = "API representation of a product")
 public record ProductResponse(
@@ -14,6 +15,8 @@ public record ProductResponse(
         String description,
         @Schema(description = "Default grams represented by one unit of this product", example = "150")
         BigDecimal gramsPerUnit,
+        @Schema(description = "Nutrition basis used by this product", example = "PER_100_GRAMS")
+        NutritionBasis nutritionBasis,
         @Schema(description = "Optional default price for this product", example = "2.49", nullable = true)
         BigDecimal defaultPrice,
         @Schema(description = "Product nutritional values")
@@ -21,6 +24,8 @@ public record ProductResponse(
         @Schema(description = "Optional signed photo URL that expires with the authentication token lifetime", example = "/api/v1/media/12?expiresAt=1781611200&signature=5f2a...")
         String photo,
         @Schema(description = "Supermarkets where the product is available")
-        List<SupermarketResponse> supermarkets
+        List<SupermarketResponse> supermarkets,
+        @Schema(description = "Derived recipe information when this product comes from a recipe", nullable = true)
+        RecipeDerivedProductResponse derivedProduct
 ) {
 }

@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.time.LocalDate;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -251,5 +252,25 @@ public class CurrentWeekMenuController {
     })
     public CurrentWeekMenuStatsResponse findStats(@PathVariable Long id) {
         return service.findStatsById(id);
+    }
+
+    @GetMapping("/stats")
+    @Operation(
+            summary = "Get menu stats for a date range",
+            description = "Returns the aggregated calories, estimated cost, distinct products, and included menu identifiers for the menus whose planned days fall inside the requested inclusive date range."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Range stats returned",
+                    content = @Content(schema = @Schema(implementation = CurrentWeekMenuRangeStatsResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Range is invalid",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public CurrentWeekMenuRangeStatsResponse findStatsByRange(
+            @io.swagger.v3.oas.annotations.Parameter(description = "Inclusive start date for the range", example = "2026-06-01")
+            @RequestParam LocalDate from,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Inclusive end date for the range", example = "2026-06-30")
+            @RequestParam LocalDate to
+    ) {
+        return service.findStatsByRange(from, to);
     }
 }

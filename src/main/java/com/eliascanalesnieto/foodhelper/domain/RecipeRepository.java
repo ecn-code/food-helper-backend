@@ -25,5 +25,7 @@ public interface RecipeRepository {
 
     Optional<RecipeDerivedProduct> findDerivedProductByRecipeId(Long recipeId);
 
-    RecipeDerivedProduct linkDerivedProduct(Long recipeId, Long productId, BigDecimal producedGrams, BigDecimal gramsPerUnit);
+    Optional<RecipeDerivedProduct> findDerivedProductByProductId(Long productId);
+
+    RecipeDerivedProduct saveDerivedProduct(Long recipeId, Long productId, String name, BigDecimal unitsProduced, boolean stockFromComposition, List<RecipeIngredient> ingredients);
 }

@@ -9,6 +9,7 @@ import lombok.Value;
 public class RecipeIngredient {
     Long productId;
     String productName;
-    BigDecimal grams;
+    BigDecimal quantity;
+    QuantityType quantityType;
     NutritionalValues nutritionalValues;
 }

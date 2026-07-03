@@ -892,7 +892,7 @@ paths:
       tags:
         - Recipes
       summary: Update recipe
-      description: Updates a recipe, recalculates nutritional totals, and synchronizes its derived product if it exists.
+      description: Updates a recipe, recalculates nutritional totals, and synchronizes its derived product if it exists. If a stock mode is provided, it also switches the derived product between component stock and self stock.
       operationId: updateRecipe
       parameters:
         - name: id
@@ -920,6 +920,7 @@ paths:
                     - productId: 2
                       quantity: 100
                       quantityType: GRAMS
+                  stockFromComposition: false
       responses:
         '200':
           description: Recipe updated
@@ -972,7 +973,7 @@ paths:
       tags:
         - Recipes
       summary: Create derived product from recipe
-      description: Creates a product from a recipe once and stores the yield metadata used to calculate produced units.
+      description: Creates a product from a recipe once, lets the caller choose the derived product name and stock mode, stores the yield metadata used to calculate produced units, and keeps the derived product synchronized with future recipe changes.
       operationId: createDerivedProduct
       parameters:
         - name: id
@@ -990,7 +991,9 @@ paths:
             examples:
               default:
                 value:
+                  name: Curry base
                   units: 4
+                  stockFromComposition: true
       responses:
         '201':
           description: Derived product created
@@ -2047,6 +2050,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /api/v1/menus/stats:
+    get:
+      tags:
+        - Menus
+      summary: Get menu stats for a date range
+      description: Returns the aggregated calories, estimated cost, distinct products, and included menu identifiers for the menus whose planned days fall inside the requested inclusive date range.
+      operationId: getMenuRangeStats
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2026-06-01'
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2026-06-30'
+      responses:
+        '200':
+          description: Range stats returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuRangeStatsResponse'
+        '400':
+          description: Range is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /api/v1/planning/day-parts:
     get:
       tags:
@@ -2703,6 +2741,12 @@ components:
     UpdateRecipeRequest:
       allOf:
         - $ref: '#/components/schemas/CreateRecipeRequest'
+      properties:
+        stockFromComposition:
+          type: boolean
+          nullable: true
+          description: Optional flag to switch the derived product stock between component stock and self stock
+          example: true
     RecipeIngredientAssignmentRequest:
       type: object
       required:
@@ -2727,13 +2771,24 @@ components:
     CreateRecipeDerivedProductRequest:
       type: object
       required:
+        - name
         - units
+        - stockFromComposition
       properties:
+        name:
+          type: string
+          maxLength: 150
+          description: Name for the derived product
+          example: Curry base
         units:
           type: number
           exclusiveMinimum: 0
           description: Number of units produced by the recipe
           example: 4
+        stockFromComposition:
+          type: boolean
+          description: Whether stock should be expanded into the recipe ingredients instead of tracked as this product itself
+          example: true
     RecipeResponse:
       type: object
       properties:
@@ -2864,9 +2919,17 @@ components:
           type: integer
           format: int64
           example: 7
+        name:
+          type: string
+          description: Derived product name
+          example: Curry base
         unitsProduced:
           type: number
           example: 4
+        stockFromComposition:
+          type: boolean
+          description: Whether stock is expanded into the recipe ingredients instead of tracked as this product itself
+          example: true
         ingredients:
           type: array
           items:
@@ -3541,6 +3604,43 @@ components:
           $ref: '#/components/schemas/MenuPeriodStatsResponse'
         month:
           $ref: '#/components/schemas/MenuPeriodStatsResponse'
+    MenuRangeStatsResponse:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+          description: Start date of the requested range
+          example: '2026-06-01'
+        to:
+          type: string
+          format: date
+          description: End date of the requested range
+          example: '2026-06-30'
+        plannedDays:
+          type: integer
+          format: int64
+          description: Number of planned days that fall inside the range
+          example: 14
+        calories:
+          type: number
+          description: Total calories planned inside the range
+          example: 21500.5
+        distinctProducts:
+          type: integer
+          format: int64
+          description: Number of distinct products included in the range
+          example: 18
+        estimatedCost:
+          type: number
+          description: Estimated cost of the menus included in the range
+          example: 54.3
+        menuIds:
+          type: array
+          description: Identifiers of the menus contributing to the range
+          items:
+            type: integer
+            format: int64
     MenuPeriodStatsResponse:
       type: object
       properties:

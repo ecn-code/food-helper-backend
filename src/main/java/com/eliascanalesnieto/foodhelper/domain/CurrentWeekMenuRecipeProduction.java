@@ -13,8 +13,8 @@ public class CurrentWeekMenuRecipeProduction {
     String recipeName;
     Long productId;
     String productName;
-    BigDecimal producedGrams;
-    BigDecimal producedUnits;
+    BigDecimal units;
+    BigDecimal grams;
     Integer sortOrder;
     boolean transferred;
     String transferType;

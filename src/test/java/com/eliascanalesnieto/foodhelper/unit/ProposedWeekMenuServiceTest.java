@@ -18,6 +18,11 @@ import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDay;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuProduct;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuSection;
+import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
+import com.eliascanalesnieto.foodhelper.domain.QuantityType;
+import com.eliascanalesnieto.foodhelper.domain.RecipeDerivedProduct;
+import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
+import com.eliascanalesnieto.foodhelper.domain.StockEntry;
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -262,5 +267,130 @@ class ProposedWeekMenuServiceTest {
         service.delete(42L);
 
         verify(menuRepository).delete(42L);
+    }
+
+    @Test
+    void shouldExpandCompositionDerivedProductsIntoIngredientRequirements() {
+        when(currentWeekMenuStatsRepository.findByProposedWeekMenuId(1L))
+                .thenThrow(new ResourceNotFoundException("Established week menu not found"));
+
+        RecipeDerivedProduct derivedProduct = RecipeDerivedProduct.builder()
+                .productId(302L)
+                .name("Albondigas de calabaza y queso")
+                .unitsProduced(new BigDecimal("2.00"))
+                .stockFromComposition(true)
+                .ingredients(List.of(
+                        RecipeIngredient.builder()
+                                .productId(401L)
+                                .productName("Planning Pumpkin")
+                                .quantity(new BigDecimal("100.00"))
+                                .quantityType(QuantityType.GRAMS)
+                                .build(),
+                        RecipeIngredient.builder()
+                                .productId(402L)
+                                .productName("Planning Cheese")
+                                .quantity(new BigDecimal("25.00"))
+                                .quantityType(QuantityType.GRAMS)
+                                .build()
+                ))
+                .build();
+
+        when(productRepository.findByIds(org.mockito.ArgumentMatchers.anyList())).thenAnswer(invocation -> {
+            List<Long> ids = invocation.getArgument(0);
+            return ids.stream()
+                    .map(id -> switch (id.intValue()) {
+                        case 302 -> product(302L, "Albondigas de calabaza y queso", "255");
+                        case 401 -> product(401L, "Planning Pumpkin", "100");
+                        case 402 -> product(402L, "Planning Cheese", "100");
+                        default -> null;
+                    })
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+        });
+        when(recipeRepository.findDerivedProductByProductId(302L)).thenReturn(java.util.Optional.of(derivedProduct));
+        when(stockRepository.findStock(null, null)).thenReturn(List.of(
+                stockEntry(11L, 401L, "Planning Pumpkin", "100.00", LocalDate.of(2026, 6, 10)),
+                stockEntry(12L, 402L, "Planning Cheese", "25.00", LocalDate.of(2026, 6, 10))
+        ));
+        when(menuRepository.upsertDay(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> {
+                    ProposedWeekMenuDay completedDay = invocation.getArgument(1);
+                    return ProposedWeekMenu.builder()
+                            .id(1L)
+                            .users(1)
+                            .startDate(LocalDate.of(2026, 6, 15))
+                            .endDate(LocalDate.of(2026, 6, 21))
+                            .days(List.of(completedDay))
+                            .build();
+                });
+
+        ProposedWeekMenuDay day = ProposedWeekMenuDay.builder()
+                .date(LocalDate.of(2026, 6, 15))
+                .sections(List.of(
+                        ProposedWeekMenuSection.builder()
+                                .dayPartId(1L)
+                                .products(List.of(
+                                        ProposedWeekMenuProduct.builder()
+                                                .productId(302L)
+                                                .units(new BigDecimal("1.00"))
+                                                .grams(new BigDecimal("255.00"))
+                                                .sortOrder(10)
+                                                .build()
+                                ))
+                                .build()
+                ))
+                .build();
+
+        ProposedWeekMenu planned = service.upsertDay(1L, day);
+
+        assertThat(planned.getStockSummary().getDistinctProducts()).isEqualTo(2);
+        assertThat(planned.getStockSummary().getRequirements())
+                .filteredOn(requirement -> requirement.getProductId().equals(401L))
+                .singleElement()
+                .satisfies(requirement -> {
+                    assertThat(requirement.getProductName()).isEqualTo("Planning Pumpkin");
+                    assertThat(requirement.getRequiredUnits()).isEqualByComparingTo("100.00");
+                    assertThat(requirement.getAvailableUnits()).isEqualByComparingTo("100.00");
+                    assertThat(requirement.getCoveredUnits()).isEqualByComparingTo("100.00");
+                    assertThat(requirement.getMissingUnits()).isEqualByComparingTo("0.00");
+                    assertThat(requirement.getEstimatedCost()).isEqualByComparingTo("200.00");
+                });
+        assertThat(planned.getStockSummary().getRequirements())
+                .filteredOn(requirement -> requirement.getProductId().equals(402L))
+                .singleElement()
+                .satisfies(requirement -> {
+                    assertThat(requirement.getProductName()).isEqualTo("Planning Cheese");
+                    assertThat(requirement.getRequiredUnits()).isEqualByComparingTo("25.00");
+                    assertThat(requirement.getAvailableUnits()).isEqualByComparingTo("25.00");
+                    assertThat(requirement.getCoveredUnits()).isEqualByComparingTo("25.00");
+                    assertThat(requirement.getMissingUnits()).isEqualByComparingTo("0.00");
+                    assertThat(requirement.getEstimatedCost()).isEqualByComparingTo("50.00");
+                });
+    }
+
+    private com.eliascanalesnieto.foodhelper.domain.Product product(Long id, String name, String gramsPerUnit) {
+        return com.eliascanalesnieto.foodhelper.domain.Product.builder()
+                .id(id)
+                .name(name)
+                .gramsPerUnit(new BigDecimal(gramsPerUnit))
+                .nutritionalValues(NutritionalValues.builder()
+                        .calories(BigDecimal.ZERO)
+                        .carbohydrates(BigDecimal.ZERO)
+                        .proteins(BigDecimal.ZERO)
+                        .fats(BigDecimal.ZERO)
+                        .build())
+                .build();
+    }
+
+    private StockEntry stockEntry(Long id, Long productId, String productName, String quantity, LocalDate entryDate) {
+        return StockEntry.builder()
+                .id(id)
+                .productId(productId)
+                .productName(productName)
+                .quantity(new BigDecimal(quantity))
+                .price(new BigDecimal("2.00"))
+                .expirationDate(null)
+                .entryDate(entryDate)
+                .build();
     }
 }

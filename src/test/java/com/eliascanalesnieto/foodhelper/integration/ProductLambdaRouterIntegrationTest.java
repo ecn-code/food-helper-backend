@@ -58,23 +58,24 @@ class ProductLambdaRouterIntegrationTest {
     void shouldHandleApiGatewayStyleRequests() {
         AuthSession auth = registerAndReadAuth();
         String token = auth.token();
+        String suffix = Long.toString(System.nanoTime());
         APIGatewayProxyRequestEvent create = new APIGatewayProxyRequestEvent()
                 .withHttpMethod("POST")
                 .withPath("/api/v1/products")
                 .withHeaders(authHeaders(token))
-                .withBody("{\"name\":\"Apple\",\"description\":\"Fresh apple\",\"gramsPerUnit\":150,\"calories\":52,\"carbohydrates\":14,\"proteins\":0.3,\"fats\":0.2,\"defaultPrice\":2.49}");
+                .withBody("{\"name\":\"Banana " + suffix + "\",\"description\":\"Fresh banana " + suffix + "\",\"gramsPerUnit\":120,\"calories\":89,\"carbohydrates\":23,\"proteins\":1.1,\"fats\":0.3,\"defaultPrice\":2.49}");
 
         APIGatewayProxyResponseEvent createResponse = productHttpHandler.apply(create);
         assertThat(createResponse.getStatusCode()).isEqualTo(201);
-        assertThat(createResponse.getBody()).contains("Apple");
-        assertThat(createResponse.getBody()).contains("Fresh apple");
+        assertThat(createResponse.getBody()).contains("Banana " + suffix);
+        assertThat(createResponse.getBody()).contains("Fresh banana " + suffix);
         assertThat(createResponse.getBody()).contains("\"defaultPrice\":2.49");
 
         APIGatewayProxyRequestEvent createSecond = new APIGatewayProxyRequestEvent()
                 .withHttpMethod("POST")
                 .withPath("/api/v1/products")
                 .withHeaders(authHeaders(token))
-                .withBody("{\"name\":\"Banana\",\"description\":\"Fresh banana\",\"gramsPerUnit\":120,\"calories\":89,\"carbohydrates\":23,\"proteins\":1.1,\"fats\":0.3}");
+                .withBody("{\"name\":\"Apple " + suffix + "\",\"description\":\"Fresh apple " + suffix + "\",\"gramsPerUnit\":150,\"calories\":52,\"carbohydrates\":14,\"proteins\":0.3,\"fats\":0.2}");
 
         APIGatewayProxyResponseEvent secondCreateResponse = productHttpHandler.apply(createSecond);
         assertThat(secondCreateResponse.getStatusCode()).isEqualTo(201);
@@ -83,31 +84,18 @@ class ProductLambdaRouterIntegrationTest {
                 .withHttpMethod("GET")
                 .withPath("/api/v1/products")
                 .withHeaders(authHeaders(token))
-                .withQueryStringParameters(Map.of("page", "0", "size", "1"));
+                .withQueryStringParameters(Map.of("search", suffix, "page", "0", "size", "2"));
 
         APIGatewayProxyResponseEvent listProductsResponse = productHttpHandler.apply(listProducts);
         assertThat(listProductsResponse.getStatusCode()).isEqualTo(200);
         JsonNode productsPage = readNode(listProductsResponse.getBody());
-        assertThat(productsPage.get("items").size()).isEqualTo(1);
+        assertThat(productsPage.get("items").size()).isEqualTo(2);
         assertThat(productsPage.get("page").asInt()).isEqualTo(0);
-        assertThat(productsPage.get("size").asInt()).isEqualTo(1);
-        assertThat(productsPage.get("totalElements").asInt()).isGreaterThanOrEqualTo(2);
-        assertThat(productsPage.get("totalPages").asInt()).isGreaterThanOrEqualTo(2);
-
-        int totalElements = productsPage.get("totalElements").asInt();
-        APIGatewayProxyResponseEvent previousProductPage = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
-                .withHttpMethod("GET")
-                .withPath("/api/v1/products")
-                .withHeaders(authHeaders(token))
-                .withQueryStringParameters(Map.of("page", Integer.toString(totalElements - 2), "size", "1")));
-        APIGatewayProxyResponseEvent lastProductPage = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
-                .withHttpMethod("GET")
-                .withPath("/api/v1/products")
-                .withHeaders(authHeaders(token))
-                .withQueryStringParameters(Map.of("page", Integer.toString(totalElements - 1), "size", "1")));
-
-        assertThat(readNode(previousProductPage.getBody()).get("items").get(0).get("name").asText()).isEqualTo("Apple");
-        assertThat(readNode(lastProductPage.getBody()).get("items").get(0).get("name").asText()).isEqualTo("Banana");
+        assertThat(productsPage.get("size").asInt()).isEqualTo(2);
+        assertThat(productsPage.get("totalElements").asInt()).isEqualTo(2);
+        assertThat(productsPage.get("totalPages").asInt()).isEqualTo(1);
+        assertThat(productsPage.get("items").get(0).get("name").asText()).isEqualTo("Apple " + suffix);
+        assertThat(productsPage.get("items").get(1).get("name").asText()).isEqualTo("Banana " + suffix);
 
         APIGatewayProxyRequestEvent health = new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")
@@ -273,76 +261,65 @@ class ProductLambdaRouterIntegrationTest {
     void shouldHandleRecipeRequests() {
         AuthSession auth = registerAndReadAuth();
         String token = auth.token();
+        String suffix = Long.toString(System.nanoTime());
         APIGatewayProxyRequestEvent createIngredient = new APIGatewayProxyRequestEvent()
                 .withHttpMethod("POST")
                 .withPath("/api/v1/products")
                 .withHeaders(authHeaders(token))
-                .withBody("{\"name\":\"Chicken breast\",\"description\":\"Chicken\",\"gramsPerUnit\":100,\"calories\":165,\"carbohydrates\":0,\"proteins\":31,\"fats\":3.6}");
+                .withBody("{\"name\":\"Chicken breast " + suffix + "\",\"description\":\"Chicken " + suffix + "\",\"gramsPerUnit\":100,\"calories\":165,\"carbohydrates\":0,\"proteins\":31,\"fats\":3.6}");
 
         APIGatewayProxyResponseEvent ingredientResponse = productHttpHandler.apply(createIngredient);
         assertThat(ingredientResponse.getStatusCode()).isEqualTo(201);
         long ingredientId = readLong(ingredientResponse.getBody(), "id");
 
-        APIGatewayProxyRequestEvent createRecipe = new APIGatewayProxyRequestEvent()
-                .withHttpMethod("POST")
-                .withPath("/api/v1/recipes")
-                .withHeaders(authHeaders(token))
-                .withBody("{\"name\":\"Curry\",\"description\":\"Homemade curry\",\"instructions\":\"Cook slowly.\",\"products\":[{\"productId\":" + ingredientId + ",\"grams\":200}]}");
-
-        APIGatewayProxyResponseEvent recipeResponse = productHttpHandler.apply(createRecipe);
-        assertThat(recipeResponse.getStatusCode()).isEqualTo(201);
-        assertThat(recipeResponse.getBody()).contains("Curry");
-        assertThat(recipeResponse.getBody()).contains("330.00");
-        long recipeId = readLong(recipeResponse.getBody(), "id");
-
         APIGatewayProxyRequestEvent createSecondRecipe = new APIGatewayProxyRequestEvent()
                 .withHttpMethod("POST")
                 .withPath("/api/v1/recipes")
                 .withHeaders(authHeaders(token))
-                .withBody("{\"name\":\"Soup\",\"description\":\"Homemade soup\",\"instructions\":\"Cook gently.\",\"products\":[{\"productId\":" + ingredientId + ",\"grams\":100}]}");
+                .withBody("{\"name\":\"Soup " + suffix + "\",\"description\":\"Homemade soup " + suffix + "\",\"instructions\":\"Cook gently.\",\"products\":[{\"productId\":" + ingredientId + ",\"quantity\":100,\"quantityType\":\"GRAMS\"}]}");
 
         APIGatewayProxyResponseEvent secondRecipeResponse = productHttpHandler.apply(createSecondRecipe);
         assertThat(secondRecipeResponse.getStatusCode()).isEqualTo(201);
+
+        APIGatewayProxyRequestEvent createRecipe = new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath("/api/v1/recipes")
+                .withHeaders(authHeaders(token))
+                .withBody("{\"name\":\"Curry " + suffix + "\",\"description\":\"Homemade curry " + suffix + "\",\"instructions\":\"Cook slowly.\",\"products\":[{\"productId\":" + ingredientId + ",\"quantity\":200,\"quantityType\":\"GRAMS\"}]}");
+
+        APIGatewayProxyResponseEvent recipeResponse = productHttpHandler.apply(createRecipe);
+        assertThat(recipeResponse.getStatusCode()).isEqualTo(201);
+        assertThat(recipeResponse.getBody()).contains("Curry " + suffix);
+        assertThat(recipeResponse.getBody()).contains("330.00");
+        long recipeId = readLong(recipeResponse.getBody(), "id");
 
         APIGatewayProxyRequestEvent listRecipes = new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")
                 .withPath("/api/v1/recipes")
                 .withHeaders(authHeaders(token))
-                .withQueryStringParameters(Map.of("page", "0", "size", "1"));
+                .withQueryStringParameters(Map.of("search", suffix, "page", "0", "size", "2"));
 
         APIGatewayProxyResponseEvent listRecipesResponse = productHttpHandler.apply(listRecipes);
         assertThat(listRecipesResponse.getStatusCode()).isEqualTo(200);
         JsonNode recipesPage = readNode(listRecipesResponse.getBody());
-        assertThat(recipesPage.get("items").size()).isEqualTo(1);
+        assertThat(recipesPage.get("items").size()).isEqualTo(2);
         assertThat(recipesPage.get("page").asInt()).isEqualTo(0);
-        assertThat(recipesPage.get("size").asInt()).isEqualTo(1);
-        assertThat(recipesPage.get("totalElements").asInt()).isGreaterThanOrEqualTo(2);
-        assertThat(recipesPage.get("totalPages").asInt()).isGreaterThanOrEqualTo(2);
-
-        int totalElements = recipesPage.get("totalElements").asInt();
-        APIGatewayProxyResponseEvent previousRecipePage = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
-                .withHttpMethod("GET")
-                .withPath("/api/v1/recipes")
-                .withHeaders(authHeaders(token))
-                .withQueryStringParameters(Map.of("page", Integer.toString(totalElements - 2), "size", "1")));
-        APIGatewayProxyResponseEvent lastRecipePage = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
-                .withHttpMethod("GET")
-                .withPath("/api/v1/recipes")
-                .withHeaders(authHeaders(token))
-                .withQueryStringParameters(Map.of("page", Integer.toString(totalElements - 1), "size", "1")));
-
-        assertThat(readNode(previousRecipePage.getBody()).get("items").get(0).get("name").asText()).isEqualTo("Curry");
-        assertThat(readNode(lastRecipePage.getBody()).get("items").get(0).get("name").asText()).isEqualTo("Soup");
+        assertThat(recipesPage.get("size").asInt()).isEqualTo(2);
+        assertThat(recipesPage.get("totalElements").asInt()).isEqualTo(2);
+        assertThat(recipesPage.get("totalPages").asInt()).isEqualTo(1);
+        assertThat(recipesPage.get("items").get(0).get("name").asText()).isEqualTo("Curry " + suffix);
+        assertThat(recipesPage.get("items").get(1).get("name").asText()).isEqualTo("Soup " + suffix);
 
         APIGatewayProxyRequestEvent createDerivedProduct = new APIGatewayProxyRequestEvent()
                 .withHttpMethod("POST")
                 .withPath("/api/v1/recipes/" + recipeId + "/derived-product")
                 .withHeaders(authHeaders(token))
-                .withBody("{\"producedGrams\":400,\"gramsPerUnit\":100}");
+                .withBody("{\"name\":\"Lambda Curry Base " + suffix + "\",\"units\":4,\"stockFromComposition\":true}");
 
         APIGatewayProxyResponseEvent derivedProductResponse = productHttpHandler.apply(createDerivedProduct);
         assertThat(derivedProductResponse.getStatusCode()).isEqualTo(201);
         assertThat(derivedProductResponse.getBody()).contains("4.00");
+        assertThat(derivedProductResponse.getBody()).contains("Lambda Curry Base " + suffix);
 
         APIGatewayProxyResponseEvent filteredRecipes = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")
@@ -494,7 +471,7 @@ class ProductLambdaRouterIntegrationTest {
                 .withHttpMethod("POST")
                 .withPath("/api/v1/recipes")
                 .withHeaders(authHeaders(token))
-                .withBody("{\"name\":\"Lambda Curry\",\"description\":\"Desc\",\"instructions\":\"Cook\",\"products\":[{\"productId\":" + chickenId + ",\"grams\":200},{\"productId\":" + riceId + ",\"grams\":150}]}"));
+                .withBody("{\"name\":\"Lambda Curry\",\"description\":\"Desc\",\"instructions\":\"Cook\",\"products\":[{\"productId\":" + chickenId + ",\"quantity\":200,\"quantityType\":\"GRAMS\"},{\"productId\":" + riceId + ",\"quantity\":150,\"quantityType\":\"GRAMS\"}]}"));
         assertThat(recipeResponse.getStatusCode()).isEqualTo(201);
 
         APIGatewayProxyResponseEvent productStatsResponse = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
@@ -721,6 +698,19 @@ class ProductLambdaRouterIntegrationTest {
                 .withHeaders(authHeaders(token)));
         assertThat(stats.getStatusCode()).isEqualTo(200);
         assertThat(readDecimal(stats.getBody(), "period.moneySpent")).isEqualByComparingTo("5.40");
+
+        APIGatewayProxyResponseEvent rangeStats = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/menus/stats")
+                .withQueryStringParameters(Map.of(
+                        "from", startDate.toString(),
+                        "to", endDate.toString()
+                ))
+                .withHeaders(authHeaders(token)));
+        assertThat(rangeStats.getStatusCode()).isEqualTo(200);
+        assertThat(readDecimal(rangeStats.getBody(), "estimatedCost")).isEqualByComparingTo("5.40");
+        assertThat(readNode(rangeStats.getBody()).get("menuIds")).hasSize(1);
+        assertThat(readLong(rangeStats.getBody(), "menuIds.0")).isEqualTo(currentWeekMenuId);
     }
 
     @Test

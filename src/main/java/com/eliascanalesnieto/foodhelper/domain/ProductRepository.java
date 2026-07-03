@@ -2,6 +2,7 @@ package com.eliascanalesnieto.foodhelper.domain;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface ProductRepository {
     Product create(Product product);
@@ -23,6 +24,8 @@ public interface ProductRepository {
     long count(ProductSearchCriteria searchCriteria);
 
     Product findById(Long id);
+
+    Optional<Product> findByName(String name);
 
     List<Product> findByIds(Collection<Long> ids);
 

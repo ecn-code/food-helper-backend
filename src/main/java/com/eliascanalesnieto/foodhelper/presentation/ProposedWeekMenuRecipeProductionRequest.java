@@ -10,8 +10,8 @@ import java.math.BigDecimal;
 public record ProposedWeekMenuRecipeProductionRequest(
         @Schema(description = "Recipe identifier", example = "12")
         @NotNull Long recipeId,
-        @Schema(description = "Produced grams that should become product stock", example = "400")
-        @NotNull @Positive BigDecimal producedGrams,
+        @Schema(description = "Produced units that should become product stock", example = "4")
+        @NotNull @Positive BigDecimal units,
         @Schema(description = "Explicit display order within the day. Must be unique among recipe productions in the same day.", example = "10")
         @NotNull @PositiveOrZero Integer sortOrder
 ) {

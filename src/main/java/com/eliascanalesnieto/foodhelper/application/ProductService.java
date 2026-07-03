@@ -2,10 +2,12 @@ package com.eliascanalesnieto.foodhelper.application;
 
 import com.eliascanalesnieto.foodhelper.domain.Media;
 import com.eliascanalesnieto.foodhelper.domain.MediaUpload;
+import com.eliascanalesnieto.foodhelper.domain.NutritionBasis;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
-import com.eliascanalesnieto.foodhelper.domain.ProductSearchCriteria;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
+import com.eliascanalesnieto.foodhelper.domain.ProductSearchCriteria;
+import com.eliascanalesnieto.foodhelper.domain.RecipeRepository;
 import com.eliascanalesnieto.foodhelper.domain.SupermarketRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -18,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ProductService {
     private final ProductRepository repository;
+    private final RecipeRepository recipeRepository;
     private final SupermarketRepository supermarketRepository;
     private final MediaService mediaService;
 
@@ -34,14 +37,13 @@ public class ProductService {
                 .name(name)
                 .description(description)
                 .gramsPerUnit(scale(gramsPerUnit))
+                .nutritionBasis(NutritionBasis.PER_100_GRAMS)
                 .defaultPrice(scaleOptional(defaultPrice))
                 .nutritionalValues(buildNutritionalValues(calories, carbohydrates, proteins, fats))
                 .photo(photo)
                 .supermarkets(supermarkets)
                 .build());
-        return created.toBuilder()
-                .photo(photo)
-                .build();
+        return attachDerived(created.toBuilder().photo(photo).build());
     }
 
     @Transactional
@@ -59,6 +61,7 @@ public class ProductService {
                 .name(name)
                 .description(description)
                 .gramsPerUnit(scale(gramsPerUnit))
+                .nutritionBasis(existing.getNutritionBasis() == null ? NutritionBasis.PER_100_GRAMS : existing.getNutritionBasis())
                 .defaultPrice(resolvedDefaultPrice)
                 .nutritionalValues(buildNutritionalValues(calories, carbohydrates, proteins, fats))
                 .photo(photo)
@@ -67,14 +70,14 @@ public class ProductService {
         if (photoUpload != null && existing.getPhoto() != null) {
             mediaService.delete(existing.getPhoto().getId());
         }
-        return updated.toBuilder()
-                .photo(photo)
-                .build();
+        return attachDerived(updated.toBuilder().photo(photo).build());
     }
 
     @Transactional(readOnly = true)
     public List<Product> findAll() {
-        return repository.findAll();
+        return repository.findAll().stream()
+                .map(this::attachDerived)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -84,7 +87,9 @@ public class ProductService {
 
     @Transactional(readOnly = true)
     public PageResult<Product> findPage(PaginationRequest pagination, ProductSearchCriteria searchCriteria) {
-        List<Product> items = repository.findPage(pagination.offset(), pagination.size(), searchCriteria);
+        List<Product> items = repository.findPage(pagination.offset(), pagination.size(), searchCriteria).stream()
+                .map(this::attachDerived)
+                .toList();
         return new PageResult<>(items, pagination.page(), pagination.size(), repository.count(searchCriteria));
     }
 
@@ -95,6 +100,12 @@ public class ProductService {
         if (existing.getPhoto() != null) {
             mediaService.delete(existing.getPhoto().getId());
         }
+    }
+
+    private Product attachDerived(Product product) {
+        return product.toBuilder()
+                .derivedProduct(recipeRepository.findDerivedProductByProductId(product.getId()).orElse(null))
+                .build();
     }
 
     private NutritionalValues buildNutritionalValues(BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats) {

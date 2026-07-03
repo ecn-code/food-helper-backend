@@ -3,6 +3,7 @@ package com.eliascanalesnieto.foodhelper.application;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
+import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
 import com.eliascanalesnieto.foodhelper.domain.Recipe;
 import com.eliascanalesnieto.foodhelper.domain.RecipeDerivedProduct;
 import com.eliascanalesnieto.foodhelper.domain.RecipeRepository;
@@ -285,7 +286,9 @@ public class ProposedWeekMenuService {
             throw new ResourceNotFoundException("One or more products were not found");
         }
         Map<Long, Product> productsById = new LinkedHashMap<>();
-        loadedProducts.forEach(product -> productsById.put(product.getId(), product));
+        loadedProducts.stream()
+                .map(this::attachDerivedProduct)
+                .forEach(product -> productsById.put(product.getId(), product));
         return productsById;
     }
 
@@ -310,8 +313,84 @@ public class ProposedWeekMenuService {
             throw new ResourceNotFoundException("Derived product not found for recipe production");
         }
         Map<Long, Product> productsById = new LinkedHashMap<>();
-        loadedProducts.forEach(product -> productsById.put(product.getId(), product));
+        loadedProducts.stream()
+                .map(this::attachDerivedProduct)
+                .forEach(product -> productsById.put(product.getId(), product));
         return productsById;
+    }
+
+    private Product attachDerivedProduct(Product product) {
+        return product.toBuilder()
+                .derivedProduct(recipeRepository.findDerivedProductByProductId(product.getId()).orElse(null))
+                .build();
+    }
+
+    private Map<Long, Product> loadCompositionProducts(Map<Long, Product> productsById) {
+        List<Long> ingredientIds = productsById.values().stream()
+                .map(Product::getDerivedProduct)
+                .filter(java.util.Objects::nonNull)
+                .filter(derivedProduct -> derivedProduct.isStockFromComposition()
+                        && derivedProduct.getIngredients() != null
+                        && !derivedProduct.getIngredients().isEmpty())
+                .flatMap(derivedProduct -> derivedProduct.getIngredients().stream())
+                .map(RecipeIngredient::getProductId)
+                .filter(java.util.Objects::nonNull)
+                .filter(productId -> !productsById.containsKey(productId))
+                .distinct()
+                .toList();
+        if (ingredientIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Product> loadedProducts = productRepository.findByIds(ingredientIds);
+        if (loadedProducts.size() != ingredientIds.size()) {
+            throw new ResourceNotFoundException("One or more ingredient products were not found");
+        }
+        Map<Long, Product> compositionProductsById = new LinkedHashMap<>();
+        loadedProducts.forEach(product -> compositionProductsById.put(product.getId(), product));
+        return compositionProductsById;
+    }
+
+    private void accumulateCompositionRequirements(
+            Map<Long, StockRequirementAccumulator> requirements,
+            Map<Long, Product> productsById,
+            Product linkedProduct,
+            BigDecimal requiredUnits
+    ) {
+        RecipeDerivedProduct derivedProduct = linkedProduct.getDerivedProduct();
+        if (derivedProduct == null || derivedProduct.getIngredients() == null || derivedProduct.getIngredients().isEmpty()) {
+            StockRequirementAccumulator accumulator = requirements.computeIfAbsent(
+                    linkedProduct.getId(),
+                    productId -> new StockRequirementAccumulator(productId, linkedProduct.getName())
+            );
+            accumulator.requiredUnits = accumulator.requiredUnits.add(requiredUnits);
+            return;
+        }
+
+        for (RecipeIngredient ingredient : derivedProduct.getIngredients()) {
+            Product ingredientProduct = productsById.get(ingredient.getProductId());
+            if (ingredientProduct == null) {
+                throw new ResourceNotFoundException("One or more ingredient products were not found");
+            }
+            BigDecimal ingredientRequiredUnits = scale(requiredUnits.multiply(normalizeIngredientUnits(ingredient)));
+            StockRequirementAccumulator accumulator = requirements.computeIfAbsent(
+                    ingredientProduct.getId(),
+                    productId -> new StockRequirementAccumulator(productId, ingredientProduct.getName())
+            );
+            accumulator.requiredUnits = accumulator.requiredUnits.add(ingredientRequiredUnits);
+        }
+    }
+
+    private BigDecimal normalizeIngredientUnits(RecipeIngredient ingredient) {
+        BigDecimal quantity = scale(ingredient.getQuantity());
+        return quantity;
+    }
+
+    private boolean usesCompositionStock(Product product) {
+        RecipeDerivedProduct derivedProduct = product == null ? null : product.getDerivedProduct();
+        return derivedProduct != null
+                && derivedProduct.isStockFromComposition()
+                && derivedProduct.getIngredients() != null
+                && !derivedProduct.getIngredients().isEmpty();
     }
 
     private Map<Long, Recipe> loadRecipes(List<ProposedWeekMenuRecipeProduction> recipeProductions) {
@@ -376,6 +455,9 @@ public class ProposedWeekMenuService {
         Map<Long, StockRequirementAccumulator> requirements = new LinkedHashMap<>();
         List<ProposedWeekMenuStockSummaryDayCalories> dayCalories = new ArrayList<>(days.size());
         BigDecimal totalCalories = BigDecimal.ZERO;
+        Map<Long, Product> compositionProductsById = loadCompositionProducts(productsById);
+        Map<Long, Product> productsForStock = new LinkedHashMap<>(productsById);
+        productsForStock.putAll(compositionProductsById);
 
         for (ProposedWeekMenuDay day : days) {
             BigDecimal calories = normalize(day.getNutritionalValues().getCalories());
@@ -392,16 +474,20 @@ public class ProposedWeekMenuService {
                     }
                     Product linkedProduct = productsById.get(product.getProductId());
                     BigDecimal requiredUnits = scale(normalizeRequiredUnits(product, linkedProduct).multiply(userMultiplier));
-                    StockRequirementAccumulator accumulator = requirements.computeIfAbsent(
-                            product.getProductId(),
-                            productId -> new StockRequirementAccumulator(productId, linkedProduct.getName())
-                    );
-                    accumulator.requiredUnits = accumulator.requiredUnits.add(requiredUnits);
+                    if (usesCompositionStock(linkedProduct)) {
+                        accumulateCompositionRequirements(requirements, productsForStock, linkedProduct, requiredUnits);
+                    } else {
+                        StockRequirementAccumulator accumulator = requirements.computeIfAbsent(
+                                product.getProductId(),
+                                productId -> new StockRequirementAccumulator(productId, linkedProduct.getName())
+                        );
+                        accumulator.requiredUnits = accumulator.requiredUnits.add(requiredUnits);
+                    }
                 }
             }
         }
 
-        Map<Long, List<StockEntry>> stockByProduct = stockRepository.findStock(null, requirements.keySet()).stream()
+        Map<Long, List<StockEntry>> stockByProduct = stockRepository.findStock(null, null).stream()
                 .collect(Collectors.groupingBy(
                         StockEntry::getProductId,
                         LinkedHashMap::new,
@@ -571,6 +657,19 @@ public class ProposedWeekMenuService {
         }
 
         private void applyStock(List<StockEntry> stockEntries) {
+            applyDirectStock(stockEntries);
+        }
+
+        private void applyStock(Product product, Map<Long, Product> productsById, Map<Long, List<StockEntry>> stockByProduct) {
+            List<StockEntry> directStockEntries = stockByProduct.getOrDefault(productId, List.of());
+            if (usesCompositionStock(product) && directStockEntries.isEmpty()) {
+                applyCompositionStock(product, productsById, stockByProduct);
+                return;
+            }
+            applyDirectStock(directStockEntries);
+        }
+
+        private void applyDirectStock(List<StockEntry> stockEntries) {
             BigDecimal remainingRequiredUnits = requiredUnits;
             for (StockEntry stockEntry : stockEntries) {
                 BigDecimal quantity = scale(stockEntry.getQuantity());
@@ -584,6 +683,100 @@ public class ProposedWeekMenuService {
                 remainingRequiredUnits = remainingRequiredUnits.subtract(coveredByEntry);
             }
             missingUnits = requiredUnits.subtract(coveredUnits);
+        }
+
+        private void applyCompositionStock(Product product, Map<Long, Product> productsById, Map<Long, List<StockEntry>> stockByProduct) {
+            RecipeDerivedProduct derivedProduct = product.getDerivedProduct();
+            if (derivedProduct == null || derivedProduct.getIngredients() == null || derivedProduct.getIngredients().isEmpty()) {
+                applyDirectStock(List.of());
+                return;
+            }
+
+            BigDecimal availableProductUnits = null;
+            for (RecipeIngredient ingredient : derivedProduct.getIngredients()) {
+                BigDecimal ingredientQuantity = normalize(ingredient.getQuantity());
+                if (ingredientQuantity.signum() <= 0) {
+                    continue;
+                }
+                Product ingredientProduct = productsById.get(ingredient.getProductId());
+                BigDecimal availableIngredientQuantity = stockByProduct.getOrDefault(ingredient.getProductId(), List.of()).stream()
+                        .map(stockEntry -> toIngredientBasisQuantity(stockEntry, ingredientProduct, ingredient))
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                BigDecimal unitsFromIngredient = scale(availableIngredientQuantity.divide(ingredientQuantity, SCALE, RoundingMode.HALF_UP));
+                availableProductUnits = availableProductUnits == null ? unitsFromIngredient : availableProductUnits.min(unitsFromIngredient);
+            }
+
+            if (availableProductUnits == null) {
+                missingUnits = requiredUnits;
+                return;
+            }
+
+            availableUnits = availableProductUnits;
+            coveredUnits = requiredUnits.min(availableProductUnits);
+
+            for (RecipeIngredient ingredient : derivedProduct.getIngredients()) {
+                BigDecimal ingredientQuantity = normalize(ingredient.getQuantity());
+                if (ingredientQuantity.signum() <= 0) {
+                    continue;
+                }
+                Product ingredientProduct = productsById.get(ingredient.getProductId());
+                BigDecimal quantityToConsume = coveredUnits.multiply(ingredientQuantity);
+                estimatedCost = estimatedCost.add(costForQuantity(
+                        stockByProduct.getOrDefault(ingredient.getProductId(), List.of()),
+                        quantityToConsume,
+                        ingredientProduct,
+                        ingredient
+                ));
+            }
+            missingUnits = requiredUnits.subtract(coveredUnits);
+        }
+
+        private boolean usesCompositionStock(Product product) {
+            RecipeDerivedProduct derivedProduct = product == null ? null : product.getDerivedProduct();
+            return derivedProduct != null
+                    && derivedProduct.isStockFromComposition()
+                    && derivedProduct.getIngredients() != null
+                    && !derivedProduct.getIngredients().isEmpty();
+        }
+
+        private BigDecimal costForQuantity(List<StockEntry> stockEntries, BigDecimal quantityToConsume, Product ingredientProduct, RecipeIngredient ingredient) {
+            BigDecimal remaining = quantityToConsume;
+            BigDecimal cost = BigDecimal.ZERO;
+            for (StockEntry stockEntry : stockEntries) {
+                if (remaining.signum() <= 0) {
+                    break;
+                }
+                BigDecimal available = toIngredientBasisQuantity(stockEntry, ingredientProduct, ingredient);
+                BigDecimal consumed = available.min(remaining);
+                if (consumed.signum() <= 0) {
+                    continue;
+                }
+                BigDecimal consumedStockUnits = toStockUnits(consumed, ingredientProduct, ingredient);
+                cost = cost.add(consumedStockUnits.multiply(scale(stockEntry.getPrice())));
+                remaining = remaining.subtract(consumed);
+            }
+            return cost;
+        }
+
+        private BigDecimal toIngredientBasisQuantity(StockEntry stockEntry, Product ingredientProduct, RecipeIngredient ingredient) {
+            BigDecimal stockUnits = scale(stockEntry.getQuantity());
+            if (ingredient.getQuantityType() == com.eliascanalesnieto.foodhelper.domain.QuantityType.UNITS) {
+                return stockUnits;
+            }
+            BigDecimal gramsPerUnit = ingredientProduct == null || ingredientProduct.getGramsPerUnit() == null
+                    ? BigDecimal.ONE
+                    : ingredientProduct.getGramsPerUnit();
+            return stockUnits.multiply(gramsPerUnit);
+        }
+
+        private BigDecimal toStockUnits(BigDecimal ingredientBasisQuantity, Product ingredientProduct, RecipeIngredient ingredient) {
+            if (ingredient.getQuantityType() == com.eliascanalesnieto.foodhelper.domain.QuantityType.UNITS) {
+                return ingredientBasisQuantity;
+            }
+            BigDecimal gramsPerUnit = ingredientProduct == null || ingredientProduct.getGramsPerUnit() == null
+                    ? BigDecimal.ONE
+                    : ingredientProduct.getGramsPerUnit();
+            return ingredientBasisQuantity.divide(gramsPerUnit, SCALE, RoundingMode.HALF_UP);
         }
 
         private ProposedWeekMenuStockRequirement toDomain() {

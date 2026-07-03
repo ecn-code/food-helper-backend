@@ -1,12 +1,15 @@
 package com.eliascanalesnieto.foodhelper.unit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import com.eliascanalesnieto.foodhelper.application.StatsService;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
+import com.eliascanalesnieto.foodhelper.domain.NutritionBasis;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
+import com.eliascanalesnieto.foodhelper.domain.QuantityType;
 import com.eliascanalesnieto.foodhelper.domain.Recipe;
 import com.eliascanalesnieto.foodhelper.domain.RecipeDerivedProduct;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
@@ -21,6 +24,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -41,6 +45,12 @@ class StatsServiceTest {
 
     @InjectMocks
     private StatsService service;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(recipeRepository.findDerivedProductByProductId(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(Optional.empty());
+    }
 
     @Test
     void shouldReturnStableDefaultsWhenCatalogIsEmpty() {
@@ -141,12 +151,101 @@ class StatsServiceTest {
         assertThat(recipeStats.recipesWithDerivedProduct()).isZero();
     }
 
+    @Test
+    void shouldExpandDerivedProductStockIntoItsIngredientProducts() {
+        Product chicken = product(1L, "Chicken", "165", "0", "31", "3.6");
+        Product rice = product(2L, "Rice", "130", "28", "2.7", "0.3");
+        RecipeDerivedProduct derivedProduct = RecipeDerivedProduct.builder()
+                .productId(3L)
+                .name("Curry base")
+                .unitsProduced(new BigDecimal("2.00"))
+                .stockFromComposition(true)
+                .ingredients(List.of(
+                        RecipeIngredient.builder()
+                                .productId(1L)
+                                .productName("Chicken")
+                                .quantity(new BigDecimal("100.00"))
+                                .quantityType(QuantityType.GRAMS)
+                                .build(),
+                        RecipeIngredient.builder()
+                                .productId(2L)
+                                .productName("Rice")
+                                .quantity(new BigDecimal("50.00"))
+                                .quantityType(QuantityType.GRAMS)
+                                .build()
+                ))
+                .build();
+        Product curryBase = product(3L, "Curry base", "290", "14", "16", "12");
+
+        when(productRepository.findAll()).thenReturn(List.of(chicken, rice, curryBase));
+        when(recipeRepository.findDerivedProductByProductId(3L)).thenReturn(Optional.of(derivedProduct));
+        when(stockRepository.findStock(null, null)).thenReturn(List.of(
+                stockEntry(10L, 3L, "Curry base", "2.00", LocalDate.of(2026, 6, 20), LocalDate.of(2026, 6, 1))
+        ));
+
+        ProductStatsResponse productStats = service.getProductStats();
+
+        assertThat(productStats.stock().totalQuantity()).isEqualByComparingTo("300.00");
+        assertThat(productStats.stock().batchCount()).isEqualTo(2);
+        assertThat(productStats.earliestExpiration()).isEqualTo(new ProductStatsExpirationResponse(1L, "Chicken", new BigDecimal("200.00"), LocalDate.of(2026, 6, 20), null));
+        assertThat(productStats.summaries()).containsExactly(
+                new ProductStatsSummaryResponse(1L, "Chicken", new BigDecimal("200.00"), 1, LocalDate.of(2026, 6, 20), null),
+                new ProductStatsSummaryResponse(2L, "Rice", new BigDecimal("100.00"), 1, LocalDate.of(2026, 6, 20), null),
+                new ProductStatsSummaryResponse(3L, "Curry base", new BigDecimal("0.00"), 0, null, "Sin lotes")
+        );
+    }
+
+    @Test
+    void shouldKeepDerivedProductStockAsSelfWhenCompositionModeIsDisabled() {
+        Product chicken = product(1L, "Chicken", "165", "0", "31", "3.6");
+        Product rice = product(2L, "Rice", "130", "28", "2.7", "0.3");
+        RecipeDerivedProduct derivedProduct = RecipeDerivedProduct.builder()
+                .productId(3L)
+                .name("Curry base")
+                .unitsProduced(new BigDecimal("2.00"))
+                .stockFromComposition(false)
+                .ingredients(List.of(
+                        RecipeIngredient.builder()
+                                .productId(1L)
+                                .productName("Chicken")
+                                .quantity(new BigDecimal("100.00"))
+                                .quantityType(QuantityType.GRAMS)
+                                .build(),
+                        RecipeIngredient.builder()
+                                .productId(2L)
+                                .productName("Rice")
+                                .quantity(new BigDecimal("50.00"))
+                                .quantityType(QuantityType.GRAMS)
+                                .build()
+                ))
+                .build();
+        Product curryBase = product(3L, "Curry base", "290", "14", "16", "12");
+
+        when(productRepository.findAll()).thenReturn(List.of(chicken, rice, curryBase));
+        when(recipeRepository.findDerivedProductByProductId(3L)).thenReturn(Optional.of(derivedProduct));
+        when(stockRepository.findStock(null, null)).thenReturn(List.of(
+                stockEntry(10L, 3L, "Curry base", "2.00", LocalDate.of(2026, 6, 20), LocalDate.of(2026, 6, 1))
+        ));
+
+        ProductStatsResponse productStats = service.getProductStats();
+
+        assertThat(productStats.stock().totalQuantity()).isEqualByComparingTo("2.00");
+        assertThat(productStats.stock().batchCount()).isEqualTo(1);
+        assertThat(productStats.earliestExpiration()).isEqualTo(new ProductStatsExpirationResponse(3L, "Curry base", new BigDecimal("2.00"), LocalDate.of(2026, 6, 20), null));
+        assertThat(productStats.summaries()).containsExactly(
+                new ProductStatsSummaryResponse(1L, "Chicken", new BigDecimal("0.00"), 0, null, "Sin lotes"),
+                new ProductStatsSummaryResponse(2L, "Rice", new BigDecimal("0.00"), 0, null, "Sin lotes"),
+                new ProductStatsSummaryResponse(3L, "Curry base", new BigDecimal("2.00"), 1, LocalDate.of(2026, 6, 20), null)
+        );
+    }
+
     private Product product(Long id, String name, String calories, String carbohydrates, String proteins, String fats) {
         return Product.builder()
                 .id(id)
                 .name(name)
                 .description(name + " description")
                 .gramsPerUnit(new BigDecimal("100"))
+                .nutritionBasis(NutritionBasis.PER_100_GRAMS)
                 .nutritionalValues(NutritionalValues.builder()
                         .productId(id)
                         .calories(new BigDecimal(calories))
@@ -177,7 +276,8 @@ class StatsServiceTest {
                 .ingredients(java.util.stream.IntStream.range(0, ingredients)
                         .mapToObj(index -> RecipeIngredient.builder()
                                 .productId((long) index + 1)
-                                .grams(new BigDecimal("100"))
+                                .quantity(new BigDecimal("100"))
+                                .quantityType(QuantityType.GRAMS)
                                 .build())
                         .toList())
                 .nutritionalValues(NutritionalValues.builder()
@@ -189,9 +289,9 @@ class StatsServiceTest {
                         .build())
                 .derivedProduct(derivedProduct ? RecipeDerivedProduct.builder()
                         .productId(id)
-                        .producedGrams(new BigDecimal("400"))
-                        .gramsPerUnit(new BigDecimal("100"))
                         .unitsProduced(new BigDecimal("4.00"))
+                        .stockFromComposition(true)
+                        .ingredients(List.of())
                         .build() : null)
                 .build();
     }

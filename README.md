@@ -47,6 +47,8 @@ The OpenAPI contract is the source of truth for endpoints, parameters, authentic
 
 Every new endpoint, and every change to request or response data in an existing endpoint, must be documented in Swagger/OpenAPI within the same change.
 
+Planning creation requests accept a `users` count so stock requirements can be scaled for multi-person weeks.
+
 ## Tests
 - Unit tests for service and mapper
 - Integration tests with PostgreSQL Testcontainers

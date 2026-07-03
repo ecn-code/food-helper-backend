@@ -1,6 +1,7 @@
 package com.eliascanalesnieto.foodhelper.presentation;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.math.BigDecimal;
 import java.util.List;
 
 @Schema(name = "RecipeResponse", description = "API representation of a recipe")
@@ -13,6 +14,8 @@ public record RecipeResponse(
         String description,
         @Schema(description = "Recipe preparation instructions", example = "Saute vegetables, add chicken, then simmer.")
         String instructions,
+        @Schema(description = "Optional default number of units produced by the recipe", example = "4", nullable = true)
+        BigDecimal defaultUnitsProduced,
         @Schema(description = "Recipe nutritional totals calculated from the assigned ingredient grams")
         NutritionalValuesResponse nutritionalValues,
         @Schema(description = "Assigned ingredient products")

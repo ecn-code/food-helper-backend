@@ -11,6 +11,7 @@ import lombok.Value;
 @Jacksonized
 public class ProposedWeekMenu {
     Long id;
+    Integer users;
     LocalDate startDate;
     LocalDate endDate;
     List<ProposedWeekMenuDay> days;

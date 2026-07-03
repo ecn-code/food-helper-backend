@@ -39,7 +39,7 @@ public class ProductController {
     @GetMapping
     @Operation(
             summary = "List products",
-            description = "Returns a paginated list of products ordered by identifier ascending. Optional filters are combined with AND, use inclusive min/max ranges, and search matches product name and description."
+            description = "Returns a paginated list of products ordered alphabetically by name, with identifier as a stable tiebreaker. Optional filters are combined with AND, use inclusive min/max ranges, and search matches product name and description."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Products returned",

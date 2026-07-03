@@ -259,6 +259,7 @@ public class LambdaHttpRouter {
                     body.name(),
                     body.description(),
                     body.instructions(),
+                    body.defaultUnitsProduced(),
                     toDomainIngredients(body.products()),
                     body.photo() == null ? null : body.photo().toDomain()
             )));
@@ -312,7 +313,7 @@ public class LambdaHttpRouter {
                 Long id = parseId(path.substring(0, path.lastIndexOf('/')));
                 if ("POST".equals(method)) {
                     CreateRecipeDerivedProductRequest body = parseDerivedProductCreate(request.getBody());
-                    return json(201, mapper.toResponse(recipeService.createDerivedProduct(id, body.producedGrams(), body.gramsPerUnit())));
+                    return json(201, mapper.toResponse(recipeService.createDerivedProduct(id, body.name(), body.units(), body.stockFromComposition())));
                 }
             }
 
@@ -324,6 +325,8 @@ public class LambdaHttpRouter {
                         body.name(),
                         body.description(),
                         body.instructions(),
+                        body.defaultUnitsProduced(),
+                        body.stockFromComposition(),
                         toDomainIngredients(body.products()),
                         body.photo() == null ? null : body.photo().toDomain()
                 )));
@@ -336,6 +339,13 @@ public class LambdaHttpRouter {
 
         if ("GET".equals(method) && "/api/v1/menus".equals(path)) {
             return json(200, currentWeekMenuService.findAll());
+        }
+
+        if ("GET".equals(method) && "/api/v1/menus/stats".equals(path)) {
+            return json(200, currentWeekMenuService.findStatsByRange(
+                    parseOptionalDate(queryParam(request, "from")),
+                    parseOptionalDate(queryParam(request, "to"))
+            ));
         }
 
         if (path != null && path.startsWith("/api/v1/menus/")) {
@@ -752,7 +762,8 @@ public class LambdaHttpRouter {
         return products.stream()
                 .map(product -> RecipeIngredient.builder()
                         .productId(product.productId())
-                        .grams(product.grams())
+                        .quantity(product.quantity())
+                        .quantityType(product.quantityType())
                         .build())
                 .toList();
     }

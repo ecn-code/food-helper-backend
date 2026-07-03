@@ -41,7 +41,7 @@ public class RecipeController {
     @GetMapping
     @Operation(
             summary = "List recipes",
-            description = "Returns recipes ordered by identifier ascending. Text search ignores case and accents across name, description, instructions, and ingredients; nutritional ranges apply to calculated recipe totals."
+            description = "Returns recipes ordered alphabetically by name, with identifier as a stable tiebreaker. Text search ignores case and accents across name, description, instructions, and ingredients; nutritional ranges apply to calculated recipe totals."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Recipes returned",
@@ -104,7 +104,7 @@ public class RecipeController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
             summary = "Create recipe",
-            description = "Creates a recipe from existing products and calculates its nutritional totals based on assigned grams."
+            description = "Creates a recipe from existing products and calculates its nutritional totals from assigned quantities."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Recipe created",
@@ -121,6 +121,7 @@ public class RecipeController {
                 request.name(),
                 request.description(),
                 request.instructions(),
+                request.defaultUnitsProduced(),
                 toDomainIngredients(request.products()),
                 request.photo() == null ? null : request.photo().toDomain()
         ));
@@ -129,7 +130,7 @@ public class RecipeController {
     @PutMapping("/{id}")
     @Operation(
             summary = "Update recipe",
-            description = "Updates an existing recipe, recalculates its nutritional totals, and synchronizes its derived product if it exists."
+            description = "Updates an existing recipe, recalculates its nutritional totals, and synchronizes its derived product if it exists. If a stock mode is provided, it also switches the derived product between composition stock and self stock."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Recipe updated",
@@ -147,6 +148,8 @@ public class RecipeController {
                 request.name(),
                 request.description(),
                 request.instructions(),
+                request.defaultUnitsProduced(),
+                request.stockFromComposition(),
                 toDomainIngredients(request.products()),
                 request.photo() == null ? null : request.photo().toDomain()
         ));
@@ -171,7 +174,7 @@ public class RecipeController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
             summary = "Create derived product from recipe",
-            description = "Creates a product from a recipe once, stores the yield metadata, and keeps the derived product synchronized with future recipe changes."
+            description = "Creates a product from a recipe once, lets the caller choose the derived product name and stock mode, stores the yield metadata, and keeps the derived product synchronized with future recipe changes."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Derived product created",
@@ -187,14 +190,15 @@ public class RecipeController {
             @PathVariable Long id,
             @Valid @RequestBody CreateRecipeDerivedProductRequest request
     ) {
-        return mapper.toResponse(service.createDerivedProduct(id, request.producedGrams(), request.gramsPerUnit()));
+        return mapper.toResponse(service.createDerivedProduct(id, request.name(), request.units(), request.stockFromComposition()));
     }
 
     private List<RecipeIngredient> toDomainIngredients(List<RecipeIngredientAssignmentRequest> products) {
         return products.stream()
                 .map(product -> RecipeIngredient.builder()
                         .productId(product.productId())
-                        .grams(product.grams())
+                        .quantity(product.quantity())
+                        .quantityType(product.quantityType())
                         .build())
                 .toList();
     }

@@ -17,6 +17,9 @@ import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDay;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuProduct;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuRecipeProduction;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuSection;
+import com.eliascanalesnieto.foodhelper.domain.RecipeDerivedProduct;
+import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
+import com.eliascanalesnieto.foodhelper.domain.RecipeRepository;
 import com.eliascanalesnieto.foodhelper.domain.StockEntry;
 import com.eliascanalesnieto.foodhelper.domain.StockRepository;
 import com.eliascanalesnieto.foodhelper.domain.SupermarketRepository;
@@ -26,6 +29,7 @@ import com.eliascanalesnieto.foodhelper.domain.UserMoneyRepository;
 import com.eliascanalesnieto.foodhelper.domain.UserMenuHistoryRepository;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuApiMapper;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuRecipeProductionResponse;
+import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuRangeStatsResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuShoppingListItemResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuStatsResponse;
@@ -37,6 +41,8 @@ import com.eliascanalesnieto.foodhelper.presentation.MenuStockMovementResponse;
 import com.eliascanalesnieto.foodhelper.presentation.MenuStockAllocationRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateCurrentWeekMenuStockRequest;
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuDayResponse;
+import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuProductResponse;
+import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuSectionResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuRecipeProductionResponse;
 import com.eliascanalesnieto.foodhelper.presentation.NutritionalValuesResponse;
 import com.eliascanalesnieto.foodhelper.presentation.UserMenuHistoryEntryResponse;
@@ -77,6 +83,7 @@ public class CurrentWeekMenuService {
     private final CurrentWeekMenuStatsRepository currentWeekMenuStatsRepository;
     private final CurrentWeekMenuStatsService currentWeekMenuStatsService;
     private final ProductRepository productRepository;
+    private final RecipeRepository recipeRepository;
     private final StockRepository stockRepository;
     private final SupermarketRepository supermarketRepository;
     private final AppUserRepository appUserRepository;
@@ -180,7 +187,7 @@ public class CurrentWeekMenuService {
             Long id,
             Long supermarketId
     ) {
-        CurrentWeekMenuResponse menu = currentWeekMenuRepository.findById(id);
+        CurrentWeekMenuResponse menu = normalizeShoppingList(currentWeekMenuRepository.findById(id));
         if (supermarketId == null) {
             return menu.shoppingList();
         }
@@ -199,6 +206,11 @@ public class CurrentWeekMenuService {
     @Transactional(readOnly = true)
     public CurrentWeekMenuStatsResponse findStatsById(Long id) {
         return currentWeekMenuStatsRepository.findByCurrentWeekMenuId(id);
+    }
+
+    @Transactional(readOnly = true)
+    public CurrentWeekMenuRangeStatsResponse findStatsByRange(LocalDate from, LocalDate to) {
+        return currentWeekMenuStatsService.summarizeRange(currentWeekMenuRepository.findAll(), from, to);
     }
 
     @Transactional
@@ -255,7 +267,7 @@ public class CurrentWeekMenuService {
 
     @Transactional
     public CurrentWeekMenuResponse addStockMovement(Long id, CreateMenuStockMovementRequest request) {
-        CurrentWeekMenuResponse menu = currentWeekMenuRepository.findById(id);
+        CurrentWeekMenuResponse menu = normalizeShoppingList(currentWeekMenuRepository.findById(id));
         ensureMenuIsOpen(id);
         Long userId = request.userId() == null ? menu.payerUserId() : request.userId();
         AppUser person = appUserRepository.findById(userId);
@@ -321,7 +333,7 @@ public class CurrentWeekMenuService {
 
     @Transactional
     public CurrentWeekMenuResponse updateWeekStock(Long id, UpdateCurrentWeekMenuStockRequest request) {
-        CurrentWeekMenuResponse menu = currentWeekMenuRepository.findById(id);
+        CurrentWeekMenuResponse menu = normalizeShoppingList(currentWeekMenuRepository.findById(id));
         ensureMenuIsOpen(id);
         WeekStockUpdateResult updated = replaceWeekStock(menu, request.weekStock());
         CurrentWeekMenuResponse updatedMenu = new CurrentWeekMenuResponse(
@@ -389,7 +401,7 @@ public class CurrentWeekMenuService {
         }
         Product product = productRepository.findById(production.productId());
         StockEntry createdStock = stockRepository.create(product.getId(), StockEntry.builder()
-                .quantity(production.producedUnits())
+                .quantity(production.units())
                 .price(BigDecimal.ZERO.setScale(SCALE, RoundingMode.HALF_UP))
                 .expirationDate(null)
                 .entryDate(findMenuDayDate(menu, production.id()))
@@ -402,8 +414,7 @@ public class CurrentWeekMenuService {
                                 current.recipeName(),
                                 current.productId(),
                                 current.productName(),
-                                current.producedGrams(),
-                                current.producedUnits(),
+                                current.units(),
                                 current.sortOrder(),
                                 true,
                                 transferType,
@@ -425,8 +436,7 @@ public class CurrentWeekMenuService {
                                                 current.recipeName(),
                                                 current.productId(),
                                                 current.productName(),
-                                                current.producedGrams(),
-                                                current.producedUnits(),
+                                                current.units(),
                                                 current.sortOrder()
                                         )
                                         : current)
@@ -482,8 +492,7 @@ public class CurrentWeekMenuService {
                         .recipeName(production.getRecipeName())
                         .productId(production.getProductId())
                         .productName(production.getProductName())
-                        .producedGrams(production.getProducedGrams())
-                        .producedUnits(production.getProducedUnits())
+                        .units(production.getUnits())
                         .sortOrder(production.getSortOrder())
                         .transferred(false)
                         .transferType(null)
@@ -586,11 +595,14 @@ public class CurrentWeekMenuService {
             List<MenuStockAllocationRequest> requestedAllocations
     ) {
         Map<Long, Product> productsById = loadProducts(menu.getDays());
-        Map<Long, BigDecimal> requiredUnitsByProduct = requiredUnitsByProduct(menu.getDays());
+        Map<Long, Product> compositionProductsById = loadCompositionProducts(productsById);
+        Map<Long, Product> productsForStock = new LinkedHashMap<>(productsById);
+        productsForStock.putAll(compositionProductsById);
+        Map<Long, BigDecimal> requiredUnitsByProduct = requiredUnitsByProduct(menu.getDays(), menu.getUsers(), productsForStock);
         List<StockEntry> availableStock = stockRepository.findStock(null, requiredUnitsByProduct.keySet());
         if (requestedAllocations != null) {
             return allocateRequestedStock(
-                    productsById,
+                    productsForStock,
                     requiredUnitsByProduct,
                     availableStock,
                     requestedAllocations
@@ -608,7 +620,7 @@ public class CurrentWeekMenuService {
 
         for (Map.Entry<Long, BigDecimal> requirement : requiredUnitsByProduct.entrySet()) {
             Long productId = requirement.getKey();
-            Product product = productsById.get(productId);
+            Product product = productsForStock.get(productId);
             BigDecimal remainingRequiredUnits = scale(requirement.getValue());
             for (StockEntry stockEntry : stockByProduct.getOrDefault(productId, List.of())) {
                 if (remainingRequiredUnits.signum() <= 0) {
@@ -760,20 +772,39 @@ public class CurrentWeekMenuService {
             return Map.of();
         }
         List<Product> products = productRepository.findByIds(productIds);
+        if (products.size() != productIds.size()) {
+            throw new ResourceNotFoundException("One or more products were not found");
+        }
         Map<Long, Product> productsById = new HashMap<>();
-        products.forEach(product -> productsById.put(product.getId(), product));
+        products.stream()
+                .map(this::attachDerivedProduct)
+                .forEach(product -> productsById.put(product.getId(), product));
         return productsById;
     }
 
-    private Map<Long, BigDecimal> requiredUnitsByProduct(List<ProposedWeekMenuDay> days) {
+    private Map<Long, BigDecimal> requiredUnitsByProduct(
+            List<ProposedWeekMenuDay> days,
+            Integer users,
+            Map<Long, Product> productsById
+    ) {
         Map<Long, BigDecimal> requiredUnits = new LinkedHashMap<>();
+        BigDecimal userMultiplier = BigDecimal.valueOf(normalizeUsers(users));
         for (ProposedWeekMenuDay day : days) {
             for (ProposedWeekMenuSection section : day.getSections()) {
                 for (ProposedWeekMenuProduct product : section.getProducts()) {
                     if (product.getProductId() == null) {
                         continue;
                     }
-                    requiredUnits.merge(product.getProductId(), normalizeRequiredUnits(product), BigDecimal::add);
+                    Product linkedProduct = productsById.get(product.getProductId());
+                    if (linkedProduct == null) {
+                        throw new ResourceNotFoundException("Product not found");
+                    }
+                    BigDecimal requiredUnitsForProduct = scale(normalizeRequiredUnits(product).multiply(userMultiplier));
+                    if (usesCompositionStock(linkedProduct)) {
+                        accumulateCompositionRequirements(requiredUnits, productsById, linkedProduct, requiredUnitsForProduct);
+                    } else {
+                        requiredUnits.merge(product.getProductId(), requiredUnitsForProduct, BigDecimal::add);
+                    }
                 }
             }
         }
@@ -791,8 +822,197 @@ public class CurrentWeekMenuService {
         return BigDecimal.ONE.setScale(SCALE, RoundingMode.HALF_UP);
     }
 
+    private int normalizeUsers(Integer users) {
+        return users == null || users < 1 ? 1 : users;
+    }
+
     private BigDecimal scale(BigDecimal value) {
         return value.setScale(SCALE, RoundingMode.HALF_UP);
+    }
+
+    private CurrentWeekMenuResponse normalizeShoppingList(CurrentWeekMenuResponse menu) {
+        List<CurrentWeekMenuShoppingListItemResponse> shoppingList = menu.shoppingList() == null
+                ? List.of()
+                : menu.shoppingList();
+        if (shoppingList.isEmpty() || menu.days() == null || menu.days().isEmpty()) {
+            return menu.shoppingList() == null
+                    ? menu
+                    : new CurrentWeekMenuResponse(
+                            menu.id(),
+                            menu.planningId(),
+                            menu.payerUserId(),
+                            menu.payerUsername(),
+                            menu.personIds(),
+                            menu.startDate(),
+                            menu.endDate(),
+                            menu.days(),
+                            menu.nutritionalValues(),
+                            menu.stockSummary(),
+                            menu.usedStock(),
+                            menu.weekStock(),
+                            shoppingList,
+                            menu.stockMovements(),
+                            menu.recipeProductions(),
+                            menu.nutritionalRules()
+                    );
+        }
+
+        Map<Long, Product> productsById = loadProductsFromResponseDays(menu.days());
+        Map<Long, CurrentWeekMenuShoppingListItemResponse> normalized = new LinkedHashMap<>();
+        for (CurrentWeekMenuShoppingListItemResponse item : shoppingList) {
+            Product product = productsById.get(item.productId());
+            if (usesCompositionStock(product)) {
+                for (RecipeIngredient ingredient : product.getDerivedProduct().getIngredients()) {
+                    Product ingredientProduct = productsById.get(ingredient.getProductId());
+                    if (ingredientProduct == null) {
+                        throw new ResourceNotFoundException("One or more ingredient products were not found");
+                    }
+                    BigDecimal expandedMissingUnits = scale(item.missingUnits().multiply(scale(ingredient.getQuantity())));
+                    normalized.merge(
+                            ingredientProduct.getId(),
+                            new CurrentWeekMenuShoppingListItemResponse(
+                                    ingredientProduct.getId(),
+                                    ingredientProduct.getName(),
+                                    expandedMissingUnits
+                            ),
+                            (left, right) -> new CurrentWeekMenuShoppingListItemResponse(
+                                    left.productId(),
+                                    left.productName(),
+                                    scale(left.missingUnits().add(right.missingUnits()))
+                            )
+                    );
+                }
+                continue;
+            }
+            normalized.merge(
+                    item.productId(),
+                    item,
+                    (left, right) -> new CurrentWeekMenuShoppingListItemResponse(
+                            left.productId(),
+                            left.productName(),
+                            scale(left.missingUnits().add(right.missingUnits()))
+                    )
+            );
+        }
+
+        return new CurrentWeekMenuResponse(
+                menu.id(),
+                menu.planningId(),
+                menu.payerUserId(),
+                menu.payerUsername(),
+                menu.personIds(),
+                menu.startDate(),
+                menu.endDate(),
+                menu.days(),
+                menu.nutritionalValues(),
+                menu.stockSummary(),
+                menu.usedStock(),
+                menu.weekStock(),
+                new ArrayList<>(normalized.values()),
+                menu.stockMovements(),
+                menu.recipeProductions(),
+                menu.nutritionalRules()
+        );
+    }
+
+    private Map<Long, Product> loadProductsFromResponseDays(List<ProposedWeekMenuDayResponse> days) {
+        Collection<Long> productIds = days.stream()
+                .filter(java.util.Objects::nonNull)
+                .flatMap(day -> safeSections(day).stream())
+                .flatMap(section -> safeProducts(section).stream())
+                .map(ProposedWeekMenuProductResponse::productId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (productIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Product> products = productRepository.findByIds(productIds);
+        if (products.size() != productIds.size()) {
+            throw new ResourceNotFoundException("One or more products were not found");
+        }
+        Map<Long, Product> productsById = new HashMap<>();
+        products.stream()
+                .map(this::attachDerivedProduct)
+                .forEach(product -> productsById.put(product.getId(), product));
+        productsById.putAll(loadCompositionProducts(productsById));
+        return productsById;
+    }
+
+    private List<ProposedWeekMenuSectionResponse> safeSections(ProposedWeekMenuDayResponse day) {
+        return day.sections() == null ? List.of() : day.sections();
+    }
+
+    private List<ProposedWeekMenuProductResponse> safeProducts(ProposedWeekMenuSectionResponse section) {
+        return section.products() == null ? List.of() : section.products();
+    }
+
+    private Map<Long, Product> loadCompositionProducts(Map<Long, Product> productsById) {
+        List<Long> ingredientIds = productsById.values().stream()
+                .map(Product::getDerivedProduct)
+                .filter(java.util.Objects::nonNull)
+                .filter(this::usesCompositionStock)
+                .flatMap(derivedProduct -> derivedProduct.getIngredients().stream())
+                .map(RecipeIngredient::getProductId)
+                .filter(java.util.Objects::nonNull)
+                .filter(productId -> !productsById.containsKey(productId))
+                .distinct()
+                .toList();
+        if (ingredientIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Product> loadedProducts = productRepository.findByIds(ingredientIds);
+        if (loadedProducts.size() != ingredientIds.size()) {
+            throw new ResourceNotFoundException("One or more ingredient products were not found");
+        }
+        Map<Long, Product> compositionProductsById = new LinkedHashMap<>();
+        loadedProducts.stream()
+                .map(this::attachDerivedProduct)
+                .forEach(product -> compositionProductsById.put(product.getId(), product));
+        return compositionProductsById;
+    }
+
+    private void accumulateCompositionRequirements(
+            Map<Long, BigDecimal> requirements,
+            Map<Long, Product> productsById,
+            Product linkedProduct,
+            BigDecimal requiredUnits
+    ) {
+        RecipeDerivedProduct derivedProduct = linkedProduct.getDerivedProduct();
+        if (derivedProduct == null || derivedProduct.getIngredients() == null || derivedProduct.getIngredients().isEmpty()) {
+            requirements.merge(linkedProduct.getId(), requiredUnits, BigDecimal::add);
+            return;
+        }
+
+        for (RecipeIngredient ingredient : derivedProduct.getIngredients()) {
+            Product ingredientProduct = productsById.get(ingredient.getProductId());
+            if (ingredientProduct == null) {
+                throw new ResourceNotFoundException("One or more ingredient products were not found");
+            }
+            BigDecimal ingredientRequiredUnits = scale(requiredUnits.multiply(normalizeIngredientUnits(ingredient)));
+            requirements.merge(ingredientProduct.getId(), ingredientRequiredUnits, BigDecimal::add);
+        }
+    }
+
+    private BigDecimal normalizeIngredientUnits(RecipeIngredient ingredient) {
+        return scale(ingredient.getQuantity());
+    }
+
+    private boolean usesCompositionStock(Product product) {
+        return usesCompositionStock(product == null ? null : product.getDerivedProduct());
+    }
+
+    private boolean usesCompositionStock(RecipeDerivedProduct derivedProduct) {
+        return derivedProduct != null
+                && derivedProduct.isStockFromComposition()
+                && derivedProduct.getIngredients() != null
+                && !derivedProduct.getIngredients().isEmpty();
+    }
+
+    private Product attachDerivedProduct(Product product) {
+        return product.toBuilder()
+                .derivedProduct(recipeRepository.findDerivedProductByProductId(product.getId()).orElse(null))
+                .build();
     }
 
     private CurrentWeekMenuResponse applyCurrentRules(CurrentWeekMenuResponse menu) {
@@ -800,7 +1020,7 @@ public class CurrentWeekMenuService {
         NutritionalValuesResponse totals = menu.nutritionalValues() == null
                 ? new NutritionalValuesResponse(ZERO, ZERO, ZERO, ZERO)
                 : menu.nutritionalValues();
-        return new CurrentWeekMenuResponse(
+        return normalizeShoppingList(new CurrentWeekMenuResponse(
                 menu.id(), menu.planningId(), menu.payerUserId(), menu.payerUsername(),
                 safePersonIds(menu),
                 menu.startDate(), menu.endDate(), days, totals,
@@ -811,11 +1031,11 @@ public class CurrentWeekMenuService {
                 safeStockMovements(menu),
                 menu.recipeProductions() == null ? List.of() : menu.recipeProductions(),
                 nutritionalRulesService.evaluate(totals, days.size())
-        );
+        ));
     }
 
     private CurrentWeekMenuResponse withPersonIds(CurrentWeekMenuResponse menu) {
-        return new CurrentWeekMenuResponse(
+        return normalizeShoppingList(new CurrentWeekMenuResponse(
                 menu.id(),
                 menu.planningId(),
                 menu.payerUserId(),
@@ -832,11 +1052,11 @@ public class CurrentWeekMenuService {
                 menu.stockMovements(),
                 menu.recipeProductions(),
                 menu.nutritionalRules()
-        );
+        ));
     }
 
     private CurrentWeekMenuResponse withPersonIdsFromHistory(CurrentWeekMenuResponse menu) {
-        return new CurrentWeekMenuResponse(
+        return normalizeShoppingList(new CurrentWeekMenuResponse(
                 menu.id(),
                 menu.planningId(),
                 menu.payerUserId(),
@@ -853,7 +1073,7 @@ public class CurrentWeekMenuService {
                 menu.stockMovements(),
                 menu.recipeProductions(),
                 menu.nutritionalRules()
-        );
+        ));
     }
 
     private List<Long> safePersonIds(CurrentWeekMenuResponse menu) {

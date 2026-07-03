@@ -1,8 +1,11 @@
 package com.eliascanalesnieto.foodhelper.application;
 
 import com.eliascanalesnieto.foodhelper.domain.Product;
+import com.eliascanalesnieto.foodhelper.domain.NutritionBasis;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
+import com.eliascanalesnieto.foodhelper.domain.QuantityType;
 import com.eliascanalesnieto.foodhelper.domain.Recipe;
+import com.eliascanalesnieto.foodhelper.domain.RecipeDerivedProduct;
 import com.eliascanalesnieto.foodhelper.domain.RecipeRepository;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
 import com.eliascanalesnieto.foodhelper.domain.StockEntry;
@@ -21,6 +24,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,8 +43,12 @@ public class StatsService {
 
     @Transactional(readOnly = true)
     public ProductStatsResponse getProductStats() {
-        List<Product> products = productRepository.findAll();
-        List<StockEntry> stockEntries = stockRepository.findStock(null, null);
+        List<Product> products = productRepository.findAll().stream()
+                .map(this::attachDerivedProduct)
+                .toList();
+        Map<Long, Product> productsById = products.stream()
+                .collect(Collectors.toMap(Product::getId, product -> product, (left, right) -> left, LinkedHashMap::new));
+        List<StockEntry> stockEntries = expandDerivedProductStock(stockRepository.findStock(null, null), productsById);
         Map<Long, ProductStockAccumulator> stockByProduct = initializeProductAccumulators(products);
 
         for (StockEntry stockEntry : stockEntries) {
@@ -115,7 +123,7 @@ public class StatsService {
             if (product == null || product.getNutritionalValues() == null || product.getNutritionalValues().getCalories() == null) {
                 continue;
             }
-            totalCalories = totalCalories.add(calculateValue(product.getNutritionalValues().getCalories(), ingredient.getGrams()));
+            totalCalories = totalCalories.add(calculateContribution(product, ingredient));
         }
         return totalCalories;
     }
@@ -196,6 +204,45 @@ public class StatsService {
         return accumulators;
     }
 
+    private Product attachDerivedProduct(Product product) {
+        return product.toBuilder()
+                .derivedProduct(recipeRepository.findDerivedProductByProductId(product.getId()).orElse(null))
+                .build();
+    }
+
+    private List<StockEntry> expandDerivedProductStock(List<StockEntry> stockEntries, Map<Long, Product> productsById) {
+        List<StockEntry> expandedStockEntries = new ArrayList<>();
+        for (StockEntry stockEntry : stockEntries) {
+            Product product = productsById.get(stockEntry.getProductId());
+            if (product == null
+                    || product.getDerivedProduct() == null
+                    || !product.getDerivedProduct().isStockFromComposition()
+                    || product.getDerivedProduct().getIngredients() == null
+                    || product.getDerivedProduct().getIngredients().isEmpty()) {
+                expandedStockEntries.add(stockEntry);
+                continue;
+            }
+            expandedStockEntries.addAll(expandDerivedProductStockEntry(stockEntry, product.getDerivedProduct()));
+        }
+        return expandedStockEntries;
+    }
+
+    private List<StockEntry> expandDerivedProductStockEntry(StockEntry stockEntry, RecipeDerivedProduct derivedProduct) {
+        List<StockEntry> expandedStockEntries = new ArrayList<>(derivedProduct.getIngredients().size());
+        for (RecipeIngredient ingredient : derivedProduct.getIngredients()) {
+            expandedStockEntries.add(StockEntry.builder()
+                    .id(stockEntry.getId())
+                    .productId(ingredient.getProductId())
+                    .productName(ingredient.getProductName())
+                    .quantity(stockEntry.getQuantity().multiply(ingredient.getQuantity()).setScale(2, RoundingMode.HALF_UP))
+                    .price(stockEntry.getPrice())
+                    .expirationDate(stockEntry.getExpirationDate())
+                    .entryDate(stockEntry.getEntryDate())
+                    .build());
+        }
+        return expandedStockEntries;
+    }
+
     private Comparator<StockEntry> expiringEntryComparator() {
         return Comparator
                 .comparing(StockEntry::getExpirationDate)
@@ -212,6 +259,13 @@ public class StatsService {
 
     private BigDecimal calculateValue(BigDecimal perHundredGramsValue, BigDecimal grams) {
         return perHundredGramsValue.multiply(grams).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateContribution(Product product, RecipeIngredient ingredient) {
+        if (ingredient.getQuantityType() == QuantityType.UNITS || product.getNutritionBasis() == NutritionBasis.PER_UNIT) {
+            return product.getNutritionalValues().getCalories().multiply(ingredient.getQuantity());
+        }
+        return calculateValue(product.getNutritionalValues().getCalories(), ingredient.getQuantity());
     }
 
     private static final class ProductStockAccumulator {

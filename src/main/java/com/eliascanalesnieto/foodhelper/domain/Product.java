@@ -12,8 +12,10 @@ public class Product {
     String description;
     java.math.BigDecimal gramsPerUnit;
     java.math.BigDecimal defaultPrice;
+    NutritionBasis nutritionBasis;
     NutritionalValues nutritionalValues;
     Media photo;
+    RecipeDerivedProduct derivedProduct;
     @Builder.Default
     List<Supermarket> supermarkets = List.of();
 }

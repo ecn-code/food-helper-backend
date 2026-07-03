@@ -6,11 +6,14 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.eliascanalesnieto.foodhelper.application.CurrentWeekMenuService;
+import com.eliascanalesnieto.foodhelper.application.NutritionalRulesService;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
+import com.eliascanalesnieto.foodhelper.domain.RecipeRepository;
 import com.eliascanalesnieto.foodhelper.domain.StockRepository;
 import com.eliascanalesnieto.foodhelper.domain.Supermarket;
 import com.eliascanalesnieto.foodhelper.domain.SupermarketRepository;
+import com.eliascanalesnieto.foodhelper.domain.UserMenuHistoryRepository;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuShoppingListItemResponse;
 import java.math.BigDecimal;
@@ -28,9 +31,15 @@ class CurrentWeekMenuShoppingListServiceTest {
     @Mock
     private ProductRepository productRepository;
     @Mock
+    private RecipeRepository recipeRepository;
+    @Mock
     private SupermarketRepository supermarketRepository;
     @Mock
     private StockRepository stockRepository;
+    @Mock
+    private NutritionalRulesService nutritionalRulesService;
+    @Mock
+    private UserMenuHistoryRepository userMenuHistoryRepository;
     @InjectMocks
     private CurrentWeekMenuService service;
 

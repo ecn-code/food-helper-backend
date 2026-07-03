@@ -15,10 +15,8 @@ public record ProposedWeekMenuRecipeProductionResponse(
         Long productId,
         @Schema(description = "Product name created from the recipe", example = "Chicken curry")
         String productName,
-        @Schema(description = "Produced grams that will be transferred to stock", example = "400.00")
-        BigDecimal producedGrams,
-        @Schema(description = "Produced units derived from the linked product grams per unit", example = "4.00")
-        BigDecimal producedUnits,
+        @Schema(description = "Produced units that will be transferred to stock", example = "4.00")
+        BigDecimal units,
         @Schema(description = "Explicit display order within the day", example = "10")
         Integer sortOrder
 ) {

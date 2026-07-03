@@ -9,7 +9,7 @@ import org.springframework.data.relational.core.mapping.Table;
 public record RecipeProductOriginEntity(
         @Id @Column("recipe_id") Long recipeId,
         @Column("product_id") Long productId,
-        @Column("produced_grams") BigDecimal producedGrams,
-        @Column("grams_per_unit") BigDecimal gramsPerUnit
+        @Column("units_produced") BigDecimal unitsProduced,
+        @Column("stock_from_composition") boolean stockFromComposition
 ) {
 }

@@ -82,7 +82,9 @@ CREATE TABLE IF NOT EXISTS recipe_products (
 CREATE TABLE IF NOT EXISTS recipe_product_origins (
     recipe_id BIGINT PRIMARY KEY,
     product_id BIGINT NOT NULL UNIQUE,
+    derived_product_name VARCHAR(150) NOT NULL,
     units_produced NUMERIC(10,2) NOT NULL,
+    stock_from_composition BOOLEAN NOT NULL DEFAULT TRUE,
     CONSTRAINT fk_recipe_product_origins_recipe
         FOREIGN KEY (recipe_id)
         REFERENCES recipes(id)

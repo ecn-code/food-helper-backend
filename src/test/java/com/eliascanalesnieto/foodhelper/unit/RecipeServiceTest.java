@@ -3,6 +3,7 @@ package com.eliascanalesnieto.foodhelper.unit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -10,8 +11,10 @@ import static org.mockito.Mockito.when;
 import com.eliascanalesnieto.foodhelper.application.MediaService;
 import com.eliascanalesnieto.foodhelper.application.RecipeService;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
+import com.eliascanalesnieto.foodhelper.domain.NutritionBasis;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
+import com.eliascanalesnieto.foodhelper.domain.QuantityType;
 import com.eliascanalesnieto.foodhelper.domain.Recipe;
 import com.eliascanalesnieto.foodhelper.domain.RecipeDerivedProduct;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
@@ -57,6 +60,7 @@ class RecipeServiceTest {
                 "Chicken rice",
                 "Chicken with rice",
                 "Cook and mix.",
+                null,
                 List.of(
                         ingredient(1L, "150"),
                         ingredient(2L, "200")
@@ -92,29 +96,39 @@ class RecipeServiceTest {
         when(recipeRepository.findDerivedProductByRecipeId(7L))
                 .thenReturn(Optional.of(RecipeDerivedProduct.builder()
                         .productId(15L)
-                        .producedGrams(new BigDecimal("400"))
-                        .gramsPerUnit(new BigDecimal("100"))
+                        .name("Chicken mix")
+                        .unitsProduced(new BigDecimal("4"))
+                        .stockFromComposition(true)
+                        .ingredients(List.of(ingredient(1L, "50")))
                         .build()))
                 .thenReturn(Optional.of(RecipeDerivedProduct.builder()
                         .productId(15L)
-                        .producedGrams(new BigDecimal("400"))
-                        .gramsPerUnit(new BigDecimal("100"))
+                        .name("Chicken mix")
+                        .unitsProduced(new BigDecimal("4"))
+                        .stockFromComposition(true)
+                        .ingredients(List.of(ingredient(1L, "50")))
                         .build()));
+        when(productRepository.findById(15L)).thenReturn(product(15L, "Chicken mix", "Chicken", "165", "0", "31", "3.6"));
 
         Recipe updated = service.update(
                 7L,
-                "Chicken prep",
+                "Chicken prep revised",
                 "Updated description",
                 "Updated instructions",
+                null,
+                null,
                 List.of(ingredient(1L, "250")),
                 null
         );
 
         ArgumentCaptor<Product> productCaptor = ArgumentCaptor.forClass(Product.class);
         verify(productRepository).update(eq(15L), productCaptor.capture());
-        assertThat(productCaptor.getValue().getNutritionalValues().getCalories()).isEqualByComparingTo("412.50");
+        assertThat(productCaptor.getValue().getName()).isEqualTo("Chicken mix");
+        assertThat(productCaptor.getValue().getNutritionBasis()).isEqualTo(NutritionBasis.PER_UNIT);
+        assertThat(productCaptor.getValue().getNutritionalValues().getCalories()).isEqualByComparingTo("103.13");
         assertThat(updated.getDerivedProduct()).isNotNull();
         assertThat(updated.getDerivedProduct().getUnitsProduced()).isEqualByComparingTo("4.00");
+        assertThat(updated.getDerivedProduct().isStockFromComposition()).isTrue();
     }
 
     @Test
@@ -122,19 +136,58 @@ class RecipeServiceTest {
         when(recipeRepository.findDerivedProductByRecipeId(3L))
                 .thenReturn(Optional.of(RecipeDerivedProduct.builder()
                         .productId(8L)
-                        .producedGrams(new BigDecimal("300"))
-                        .gramsPerUnit(new BigDecimal("100"))
+                        .unitsProduced(new BigDecimal("3"))
+                        .stockFromComposition(true)
+                        .ingredients(List.of(ingredient(1L, "100")))
                         .build()));
 
-        assertThatThrownBy(() -> service.createDerivedProduct(3L, new BigDecimal("300"), new BigDecimal("100")))
+        assertThatThrownBy(() -> service.createDerivedProduct(3L, "Soup base", new BigDecimal("3"), true))
                 .isInstanceOf(DuplicateResourceException.class)
                 .hasMessage("Recipe already has a derived product");
+    }
+
+    @Test
+    void shouldCreateDerivedProductWithSelfStockModeWhenRequested() {
+        when(recipeRepository.findDerivedProductByRecipeId(3L)).thenReturn(Optional.empty());
+        when(productRepository.findByName("Soup base")).thenReturn(Optional.empty());
+        when(recipeRepository.findById(3L)).thenReturn(Recipe.builder()
+                .id(3L)
+                .name("Soup")
+                .description("Soup description")
+                .instructions("Cook")
+                .ingredients(List.of(ingredient(1L, "200")))
+                .nutritionalValues(NutritionalValues.builder()
+                        .productId(3L)
+                        .calories(new BigDecimal("100"))
+                        .carbohydrates(BigDecimal.ZERO)
+                        .proteins(BigDecimal.ZERO)
+                        .fats(BigDecimal.ZERO)
+                        .build())
+                .build());
+        when(productRepository.findByIds(List.of(1L))).thenReturn(List.of(product(1L, "Chicken", "Chicken breast", "165", "0", "31", "3.6")));
+        when(productRepository.create(any(Product.class))).thenAnswer(invocation -> {
+            Product product = invocation.getArgument(0);
+            return product.toBuilder().id(9L).build();
+        });
+        when(recipeRepository.saveDerivedProduct(eq(3L), eq(9L), eq("Soup base"), any(BigDecimal.class), eq(false), anyList()))
+                .thenAnswer(invocation -> RecipeDerivedProduct.builder()
+                        .productId(9L)
+                        .name("Soup base")
+                        .unitsProduced(invocation.getArgument(3))
+                        .stockFromComposition(false)
+                        .ingredients(invocation.getArgument(5))
+                        .build());
+
+        RecipeDerivedProduct created = service.createDerivedProduct(3L, "Soup base", new BigDecimal("3"), false);
+
+        assertThat(created.isStockFromComposition()).isFalse();
     }
 
     private RecipeIngredient ingredient(Long productId, String grams) {
         return RecipeIngredient.builder()
                 .productId(productId)
-                .grams(new BigDecimal(grams))
+                .quantity(new BigDecimal(grams))
+                .quantityType(QuantityType.GRAMS)
                 .build();
     }
 
@@ -144,6 +197,7 @@ class RecipeServiceTest {
                 .name(name)
                 .description(description)
                 .gramsPerUnit(new BigDecimal("100"))
+                .nutritionBasis(NutritionBasis.PER_100_GRAMS)
                 .nutritionalValues(NutritionalValues.builder()
                         .productId(id)
                         .calories(new BigDecimal(calories))
