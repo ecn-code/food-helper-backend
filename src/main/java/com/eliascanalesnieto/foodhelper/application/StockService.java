@@ -2,8 +2,15 @@ package com.eliascanalesnieto.foodhelper.application;
 
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
 import com.eliascanalesnieto.foodhelper.domain.StockEntry;
+import com.eliascanalesnieto.foodhelper.domain.StockMovement;
+import com.eliascanalesnieto.foodhelper.domain.StockMovementRepository;
+import com.eliascanalesnieto.foodhelper.domain.StockMovementTotals;
+import com.eliascanalesnieto.foodhelper.domain.StockMovementType;
 import com.eliascanalesnieto.foodhelper.domain.StockRepository;
+import com.eliascanalesnieto.foodhelper.presentation.StockReconciliationResponse;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -15,6 +22,8 @@ import org.springframework.stereotype.Service;
 public class StockService {
     private final StockRepository stockRepository;
     private final ProductRepository productRepository;
+    private final StockMovementRepository stockMovementRepository;
+    private final Clock clock;
 
     public StockEntry create(Long productId, BigDecimal quantity, BigDecimal price, LocalDate expirationDate, LocalDate entryDate) {
         validatePositiveQuantity(quantity);
@@ -28,7 +37,7 @@ public class StockService {
                 .price(scale(price))
                 .expirationDate(expirationDate)
                 .entryDate(entryDate)
-                .build());
+                .build(), StockMovementType.ENTRY, entryDate);
     }
 
     public StockEntry update(Long stockEntryId, BigDecimal quantity, BigDecimal price, LocalDate expirationDate, LocalDate entryDate) {
@@ -42,17 +51,17 @@ public class StockService {
                 .price(scale(price))
                 .expirationDate(expirationDate)
                 .entryDate(entryDate)
-                .build());
+                .build(), StockMovementType.ADJUSTMENT, LocalDate.now(clock));
     }
 
     public StockEntry addQuantity(Long stockEntryId, BigDecimal quantity) {
         validatePositiveQuantity(quantity);
-        return stockRepository.addQuantity(stockEntryId, quantity);
+        return stockRepository.addQuantity(stockEntryId, quantity, StockMovementType.ADJUSTMENT, LocalDate.now(clock));
     }
 
     public void removeQuantity(Long stockEntryId, BigDecimal quantity) {
         validatePositiveQuantity(quantity);
-        stockRepository.removeQuantity(stockEntryId, quantity);
+        stockRepository.removeQuantity(stockEntryId, quantity, StockMovementType.ADJUSTMENT, LocalDate.now(clock));
     }
 
     public List<StockEntry> findStock(LocalDate expiresBefore, Collection<Long> productIds) {
@@ -62,6 +71,44 @@ public class StockService {
     public List<StockEntry> findStockByProduct(Long productId, LocalDate expiresBefore) {
         productRepository.findById(productId);
         return stockRepository.findStock(expiresBefore, List.of(productId));
+    }
+
+    public PageResult<StockMovement> findMovements(
+            PaginationRequest pagination,
+            LocalDate fromDate,
+            LocalDate toDate,
+            Collection<Long> productIds
+    ) {
+        validateDateRange(fromDate, toDate);
+        List<StockMovement> items = stockMovementRepository.findPage(
+                pagination.offset(),
+                pagination.size(),
+                fromDate,
+                toDate,
+                productIds
+        );
+        return new PageResult<>(items, pagination.page(), pagination.size(), stockMovementRepository.count(fromDate, toDate, productIds));
+    }
+
+    public StockReconciliationResponse reconcileProduct(Long productId) {
+        var product = productRepository.findById(productId);
+        StockMovementTotals totals = stockMovementRepository.summarizeByProduct(productId);
+        BigDecimal liveQuantity = stockRepository.findStock(null, List.of(productId)).stream()
+                .map(StockEntry::getQuantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal calculatedQuantity = totals.calculatedQuantity();
+        BigDecimal difference = liveQuantity.subtract(calculatedQuantity).setScale(2, RoundingMode.HALF_UP);
+        return new StockReconciliationResponse(
+                productId,
+                product.getName(),
+                calculatedQuantity,
+                liveQuantity,
+                difference,
+                totals.totalIn(),
+                totals.totalOut(),
+                totals.movementCount()
+        );
     }
 
     private void validatePositiveQuantity(BigDecimal quantity) {
@@ -81,5 +128,11 @@ public class StockService {
 
     private BigDecimal scale(BigDecimal value) {
         return value.setScale(2, java.math.RoundingMode.HALF_UP);
+    }
+
+    private void validateDateRange(LocalDate fromDate, LocalDate toDate) {
+        if (fromDate != null && toDate != null && fromDate.isAfter(toDate)) {
+            throw new IllegalArgumentException("Movement start date must not be after movement end date");
+        }
     }
 }

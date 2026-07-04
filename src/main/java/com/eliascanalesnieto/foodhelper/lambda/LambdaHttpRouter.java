@@ -12,6 +12,7 @@ import com.eliascanalesnieto.foodhelper.application.PaginationRequest;
 import com.eliascanalesnieto.foodhelper.application.ProductService;
 import com.eliascanalesnieto.foodhelper.application.CurrentWeekMenuService;
 import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
+import com.eliascanalesnieto.foodhelper.application.PlanningCouponService;
 import com.eliascanalesnieto.foodhelper.application.RecipeService;
 import com.eliascanalesnieto.foodhelper.application.StatsService;
 import com.eliascanalesnieto.foodhelper.application.StockService;
@@ -44,6 +45,7 @@ import com.eliascanalesnieto.foodhelper.presentation.RegisterRequest;
 import com.eliascanalesnieto.foodhelper.presentation.SaveNutritionalRulesRequest;
 import com.eliascanalesnieto.foodhelper.presentation.SupermarketRequest;
 import com.eliascanalesnieto.foodhelper.presentation.SupermarketResponse;
+import com.eliascanalesnieto.foodhelper.presentation.StockMovementPageResponse;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateCurrentWeekMenuPayerRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateCurrentWeekMenuStockRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateStockEntryRequest;
@@ -80,6 +82,7 @@ public class LambdaHttpRouter {
     private final SupermarketService supermarketService;
     private final ProposedWeekMenuService proposedWeekMenuService;
     private final CurrentWeekMenuService currentWeekMenuService;
+    private final PlanningCouponService planningCouponService;
     private final UserMoneyService userMoneyService;
     private final UserWeightService userWeightService;
     private final NutritionalRulesService nutritionalRulesService;
@@ -210,6 +213,12 @@ public class LambdaHttpRouter {
                     return json(200, proposedWeekMenuMapper.toResponse(proposedWeekMenuService.upsertDay(id, proposedWeekMenuMapper.toDomain(body))));
                 }
             }
+            if (path.endsWith("/coupons")) {
+                Long id = parseId(path.substring(0, path.lastIndexOf('/')));
+                if ("GET".equals(method)) {
+                    return json(200, planningCouponService.findCoupons(id, parseRequiredLong(queryParam(request, "payerUserId"), "payerUserId")));
+                }
+            }
             if (path.endsWith("/menu")) {
                 Long id = parseId(path.substring(0, path.lastIndexOf('/')));
                 if ("POST".equals(method)) {
@@ -217,7 +226,8 @@ public class LambdaHttpRouter {
                     return json(201, currentWeekMenuService.establishFromProposed(
                             id,
                             body.payerUserId(),
-                            body.stockAllocations()
+                            body.stockAllocations(),
+                            body.couponCodes()
                     ));
                 }
             }
@@ -236,6 +246,15 @@ public class LambdaHttpRouter {
                     parseOptionalDate(queryParam(request, "expiresBefore")),
                     parseProductIds(queryParam(request, "productIds"))
             ).stream().map(mapper::toResponse).toList());
+        }
+
+        if ("GET".equals(method) && "/api/v1/stock/movements".equals(path)) {
+            return json(200, toStockMovementPage(stockService.findMovements(
+                    parsePagination(request),
+                    parseOptionalDate(queryParam(request, "fromDate")),
+                    parseOptionalDate(queryParam(request, "toDate")),
+                    parseProductIds(queryParam(request, "productIds"))
+            )));
         }
 
         if ("GET".equals(method) && "/api/v1/products/stats".equals(path)) {
@@ -266,8 +285,14 @@ public class LambdaHttpRouter {
         }
 
         if (path != null && path.startsWith("/api/v1/products/")) {
+            if (path.endsWith("/stock/reconciliation")) {
+                Long productId = Long.parseLong(path.split("/")[4]);
+                if ("GET".equals(method)) {
+                    return json(200, stockService.reconcileProduct(productId));
+                }
+            }
             if (path.endsWith("/stock")) {
-                Long productId = parseId(path.substring(0, path.lastIndexOf('/')));
+                Long productId = Long.parseLong(path.split("/")[4]);
                 if ("POST".equals(method)) {
                     CreateStockEntryRequest body = parseStockCreate(request.getBody());
                     return json(201, mapper.toResponse(stockService.create(
@@ -715,6 +740,14 @@ public class LambdaHttpRouter {
         }
     }
 
+    private Long parseRequiredLong(String value, String name) {
+        Long parsed = parseOptionalLong(value, name);
+        if (parsed == null) {
+            throw new IllegalArgumentException(name + " is required");
+        }
+        return parsed;
+    }
+
     private BigDecimal parseOptionalBigDecimal(String value, String name) {
         if (!StringUtils.hasText(value)) {
             return null;
@@ -780,6 +813,16 @@ public class LambdaHttpRouter {
 
     private RecipePageResponse toRecipePage(PageResult<com.eliascanalesnieto.foodhelper.domain.Recipe> page) {
         return new RecipePageResponse(
+                page.items().stream().map(mapper::toResponse).toList(),
+                page.page(),
+                page.size(),
+                page.totalElements(),
+                page.totalPages()
+        );
+    }
+
+    private StockMovementPageResponse toStockMovementPage(PageResult<com.eliascanalesnieto.foodhelper.domain.StockMovement> page) {
+        return new StockMovementPageResponse(
                 page.items().stream().map(mapper::toResponse).toList(),
                 page.page(),
                 page.size(),

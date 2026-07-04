@@ -127,6 +127,27 @@ CREATE TABLE IF NOT EXISTS stock_entries (
 CREATE INDEX IF NOT EXISTS idx_stock_entries_product_id ON stock_entries(product_id);
 CREATE INDEX IF NOT EXISTS idx_stock_entries_expiration_date ON stock_entries(expiration_date);
 
+CREATE TABLE IF NOT EXISTS stock_movements (
+    id BIGSERIAL PRIMARY KEY,
+    product_id BIGINT NOT NULL,
+    stock_entry_id BIGINT,
+    movement_type VARCHAR(30) NOT NULL,
+    signed_quantity NUMERIC(12,2) NOT NULL CHECK (signed_quantity <> 0),
+    effective_date DATE NOT NULL,
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    product_name VARCHAR(150) NOT NULL,
+    price NUMERIC(12,2),
+    expiration_date DATE,
+    entry_date DATE,
+    CONSTRAINT fk_stock_movements_product
+        FOREIGN KEY (product_id)
+        REFERENCES products(id)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_stock_movements_product_id ON stock_movements(product_id);
+CREATE INDEX IF NOT EXISTS idx_stock_movements_effective_date ON stock_movements(effective_date DESC, recorded_at DESC, id DESC);
+
 CREATE TABLE IF NOT EXISTS proposed_week_menus (
     id BIGSERIAL PRIMARY KEY,
     start_date DATE NOT NULL,
@@ -304,6 +325,32 @@ CREATE INDEX IF NOT EXISTS idx_user_money_movements_user_created
 
 CREATE INDEX IF NOT EXISTS idx_user_money_movements_box_created
     ON user_money_movements(money_box_id, created_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS planning_coupon_redemptions (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    coupon_code VARCHAR(80) NOT NULL,
+    planning_id BIGINT NOT NULL,
+    current_week_menu_id BIGINT NOT NULL,
+    reward_amount NUMERIC(10,2) NOT NULL,
+    used_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT fk_planning_coupon_redemptions_user
+        FOREIGN KEY (user_id)
+        REFERENCES app_users(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_planning_coupon_redemptions_planning
+        FOREIGN KEY (planning_id)
+        REFERENCES proposed_week_menus(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_planning_coupon_redemptions_menu
+        FOREIGN KEY (current_week_menu_id)
+        REFERENCES current_week_menus(id)
+        ON DELETE CASCADE,
+    CONSTRAINT uq_planning_coupon_redemptions_menu_coupon UNIQUE (current_week_menu_id, coupon_code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_planning_coupon_redemptions_user_coupon_used
+    ON planning_coupon_redemptions(user_id, coupon_code, used_at DESC, id DESC);
 
 CREATE TABLE IF NOT EXISTS user_weight_entries (
     id BIGSERIAL PRIMARY KEY,

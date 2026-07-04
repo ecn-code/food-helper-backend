@@ -66,7 +66,7 @@ public class OpenApiConfig {
     @Bean
     GroupedOpenApi productsApi() {
         return groupedApi("products", "Products", "/api/v1/products", "/api/v1/products/**")
-                .pathsToExclude("/api/v1/products/*/stock")
+                .pathsToExclude("/api/v1/products/*/stock", "/api/v1/products/*/stock/**")
                 .build();
     }
 
@@ -82,7 +82,7 @@ public class OpenApiConfig {
 
     @Bean
     GroupedOpenApi stockApi() {
-        return groupedApi("stock", "Stock", "/api/v1/stock", "/api/v1/stock/**", "/api/v1/products/*/stock").build();
+        return groupedApi("stock", "Stock", "/api/v1/stock", "/api/v1/stock/**", "/api/v1/products/*/stock", "/api/v1/products/*/stock/**").build();
     }
 
     @Bean

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.eliascanalesnieto.foodhelper.application.CurrentWeekMenuService;
 import com.eliascanalesnieto.foodhelper.application.CurrentWeekMenuStatsService;
 import com.eliascanalesnieto.foodhelper.application.NutritionalRulesService;
+import com.eliascanalesnieto.foodhelper.application.PlanningCouponService;
 import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
 import com.eliascanalesnieto.foodhelper.domain.AppUser;
 import com.eliascanalesnieto.foodhelper.domain.AppUserRepository;
@@ -21,6 +22,7 @@ import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
 import com.eliascanalesnieto.foodhelper.domain.MenuStockMovementRepository;
 import com.eliascanalesnieto.foodhelper.domain.RecipeRepository;
 import com.eliascanalesnieto.foodhelper.domain.StockRepository;
+import com.eliascanalesnieto.foodhelper.domain.StockMovementType;
 import com.eliascanalesnieto.foodhelper.domain.SupermarketRepository;
 import com.eliascanalesnieto.foodhelper.domain.UserMenuHistoryRepository;
 import com.eliascanalesnieto.foodhelper.domain.UserMoneyRepository;
@@ -60,6 +62,7 @@ class CurrentWeekMenuHistoryServiceTest {
     @Mock UserMoneyRepository moneyRepository;
     @Mock MenuStockMovementRepository menuStockMovementRepository;
     @Mock UserMenuHistoryRepository historyRepository;
+    @Mock PlanningCouponService planningCouponService;
     @Mock CurrentWeekMenuApiMapper mapper;
     @Mock NutritionalRulesService nutritionalRulesService;
     @Mock Clock clock;
@@ -161,11 +164,17 @@ class CurrentWeekMenuHistoryServiceTest {
         );
         when(menuRepository.findById(10L)).thenReturn(menu);
         when(statsRepository.findByCurrentWeekMenuId(10L)).thenThrow(new ResourceNotFoundException("not closed"));
+        when(clock.instant()).thenReturn(Instant.parse("2026-06-08T10:00:00Z"));
+        when(clock.getZone()).thenReturn(ZoneOffset.UTC);
 
         service.undo(10L);
 
         ArgumentCaptor<CurrentWeekMenuUsedStock> restored = ArgumentCaptor.forClass(CurrentWeekMenuUsedStock.class);
-        verify(stockRepository).restore(restored.capture());
+        verify(stockRepository).restore(
+                (CurrentWeekMenuUsedStock) restored.capture(),
+                org.mockito.ArgumentMatchers.eq(StockMovementType.ADJUSTMENT),
+                org.mockito.ArgumentMatchers.eq(LocalDate.of(2026, 6, 8))
+        );
         assertThat(restored.getValue().getStockEntryId()).isEqualTo(7L);
         assertThat(restored.getValue().getUsedUnits()).isEqualByComparingTo("1.25");
         assertThat(restored.getValue().getPrice()).isEqualByComparingTo("2.00");
@@ -310,7 +319,12 @@ class CurrentWeekMenuHistoryServiceTest {
         when(menuRepository.findById(10L)).thenReturn(menu);
         when(statsRepository.findByCurrentWeekMenuId(10L)).thenThrow(new ResourceNotFoundException("not closed"));
         when(productRepository.findById(55L)).thenReturn(com.eliascanalesnieto.foodhelper.domain.Product.builder().id(55L).name("Derived Product").build());
-        when(stockRepository.create(org.mockito.ArgumentMatchers.eq(55L), org.mockito.ArgumentMatchers.any()))
+        when(stockRepository.create(
+                org.mockito.ArgumentMatchers.eq(55L),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(StockMovementType.class),
+                org.mockito.ArgumentMatchers.any(LocalDate.class)
+        ))
                 .thenReturn(com.eliascanalesnieto.foodhelper.domain.StockEntry.builder().id(123L).productId(55L).quantity(new BigDecimal("4.00")).price(BigDecimal.ZERO).build());
         when(clock.instant()).thenReturn(Instant.parse("2026-06-03T10:00:00Z"));
         when(clock.getZone()).thenReturn(ZoneOffset.UTC);
@@ -372,7 +386,12 @@ class CurrentWeekMenuHistoryServiceTest {
         when(statsService.build(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(stats);
         when(statsRepository.save(stats)).thenReturn(stats);
         when(productRepository.findById(55L)).thenReturn(com.eliascanalesnieto.foodhelper.domain.Product.builder().id(55L).name("Derived Product").build());
-        when(stockRepository.create(org.mockito.ArgumentMatchers.eq(55L), org.mockito.ArgumentMatchers.any()))
+        when(stockRepository.create(
+                org.mockito.ArgumentMatchers.eq(55L),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(StockMovementType.class),
+                org.mockito.ArgumentMatchers.any(LocalDate.class)
+        ))
                 .thenReturn(com.eliascanalesnieto.foodhelper.domain.StockEntry.builder().id(123L).productId(55L).quantity(new BigDecimal("4.00")).price(BigDecimal.ZERO).build());
 
         assertThat(service.close(10L, List.of(1L))).isSameAs(stats);

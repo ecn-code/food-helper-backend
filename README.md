@@ -24,6 +24,7 @@ Function definition:
 - Flyway migrations:
   - `src/main/resources/db/migration/V1__create_products.sql`
   - `src/main/resources/db/migration/V2__create_recipes.sql`
+  - `src/main/resources/db/migration/V28__create_stock_movements.sql`
 - PostgreSQL/Neon via `SPRING_DATASOURCE_*` environment variables
 
 ## Authentication
@@ -48,6 +49,7 @@ The OpenAPI contract is the source of truth for endpoints, parameters, authentic
 Every new endpoint, and every change to request or response data in an existing endpoint, must be documented in Swagger/OpenAPI within the same change.
 
 Planning creation requests accept a `users` count so stock requirements can be scaled for multi-person weeks.
+Stock now exposes a historical ledger at `/api/v1/stock/movements` and a per-product reconciliation view at `/api/v1/products/{productId}/stock/reconciliation`.
 
 ## Tests
 - Unit tests for service and mapper

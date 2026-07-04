@@ -1,6 +1,7 @@
 package com.eliascanalesnieto.foodhelper.presentation;
 
 import com.eliascanalesnieto.foodhelper.application.StockService;
+import com.eliascanalesnieto.foodhelper.application.PaginationRequest;
 import com.eliascanalesnieto.foodhelper.presentation.error.ApiError;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -27,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@Tag(name = "Stock", description = "Manage stock entries and inspect inventory ordered by expiration")
+@Tag(name = "Stock", description = "Manage live stock entries, inspect inventory ordered by expiration, and review historical stock movements")
 public class StockController {
     private final StockService service;
     private final ProductApiMapper mapper;
@@ -172,5 +173,60 @@ public class StockController {
         return service.findStockByProduct(productId, expiresBefore).stream()
                 .map(mapper::toResponse)
                 .toList();
+    }
+
+    @GetMapping("/api/v1/stock/movements")
+    @Operation(
+            summary = "List stock movements",
+            description = "Returns the historical stock ledger ordered by effective date and recorded timestamp descending, with optional filters by date range and product identifiers."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Historical stock movements returned",
+                    content = @Content(schema = @Schema(implementation = StockMovementPageResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid query parameters",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public StockMovementPageResponse findMovements(
+            @Parameter(description = "Inclusive start date for the history filter", example = "2026-06-01")
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate fromDate,
+            @Parameter(description = "Inclusive end date for the history filter", example = "2026-06-30")
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate toDate,
+            @Parameter(description = "Optional product identifiers to filter stock movements", example = "1,2")
+            @RequestParam(required = false)
+            List<Long> productIds,
+            @Parameter(description = "Zero-based page number", example = "0")
+            @RequestParam(defaultValue = "0")
+            int page,
+            @Parameter(description = "Number of items per page, between 1 and 100", example = "20")
+            @RequestParam(defaultValue = "20")
+            int size
+    ) {
+        var result = service.findMovements(PaginationRequest.of(page, size), fromDate, toDate, productIds);
+        return new StockMovementPageResponse(
+                result.items().stream().map(mapper::toResponse).toList(),
+                result.page(),
+                result.size(),
+                result.totalElements(),
+                result.totalPages()
+        );
+    }
+
+    @GetMapping("/api/v1/products/{productId}/stock/reconciliation")
+    @Operation(
+            summary = "Reconcile stock for product",
+            description = "Compares the historical quantity calculated from the stock ledger with the live stock quantity stored in current stock entries."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Stock reconciliation returned",
+                    content = @Content(schema = @Schema(implementation = StockReconciliationResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Product not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public StockReconciliationResponse reconcile(@PathVariable Long productId) {
+        return service.reconcileProduct(productId);
     }
 }

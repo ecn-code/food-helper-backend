@@ -54,6 +54,9 @@ import com.eliascanalesnieto.foodhelper.presentation.RecipeDerivedProductRespons
 import com.eliascanalesnieto.foodhelper.presentation.RegisterRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateStockEntryRequest;
 import com.eliascanalesnieto.foodhelper.presentation.StockEntryResponse;
+import com.eliascanalesnieto.foodhelper.presentation.StockMovementPageResponse;
+import com.eliascanalesnieto.foodhelper.presentation.StockMovementResponse;
+import com.eliascanalesnieto.foodhelper.presentation.StockReconciliationResponse;
 import com.eliascanalesnieto.foodhelper.presentation.SupermarketRequest;
 import com.eliascanalesnieto.foodhelper.presentation.SupermarketResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProductStatsSummaryResponse;
@@ -61,6 +64,8 @@ import com.eliascanalesnieto.foodhelper.presentation.UpdateStockEntryRequest;
 import com.eliascanalesnieto.foodhelper.presentation.EstablishProposedWeekMenuRequest;
 import com.eliascanalesnieto.foodhelper.presentation.MenuStockAllocationRequest;
 import com.eliascanalesnieto.foodhelper.presentation.PlanningSummaryResponse;
+import com.eliascanalesnieto.foodhelper.presentation.PlanningCouponResponse;
+import com.eliascanalesnieto.foodhelper.presentation.PlanningCouponUnavailabilityReason;
 import com.eliascanalesnieto.foodhelper.presentation.UpsertProposedWeekMenuDayRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateProductRequest;
@@ -80,6 +85,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.time.LocalDate;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -535,9 +541,14 @@ class ProductRestIntegrationTest {
         assertThat(response.getBody()).contains("/api/v1/media/{id}");
         assertThat(response.getBody()).contains("/api/v1/stock");
         assertThat(response.getBody()).contains("/api/v1/stock/{stockEntryId}");
+        assertThat(response.getBody()).contains("/api/v1/stock/movements");
         assertThat(response.getBody()).contains("/api/v1/products/{productId}/stock");
+        assertThat(response.getBody()).contains("/api/v1/products/{productId}/stock/reconciliation");
         assertThat(response.getBody()).contains("/api/v1/stock/{stockEntryId}/add");
         assertThat(response.getBody()).contains("/api/v1/stock/{stockEntryId}/remove");
+        assertThat(response.getBody()).contains("StockMovementPageResponse");
+        assertThat(response.getBody()).contains("StockMovementResponse");
+        assertThat(response.getBody()).contains("StockReconciliationResponse");
         assertThat(response.getBody()).contains("defaultPrice");
         assertThat(response.getBody()).contains("\"price\"");
         assertThat(response.getBody()).contains("/api/v1/planning");
@@ -547,6 +558,9 @@ class ProductRestIntegrationTest {
         assertThat(response.getBody()).contains("/api/v1/planning/{id}/menu");
         assertThat(response.getBody()).contains("Number of users covered by the planning");
         assertThat(response.getBody()).contains("/api/v1/planning/day-parts");
+        assertThat(response.getBody()).contains("/api/v1/planning/{id}/coupons");
+        assertThat(response.getBody()).contains("PlanningCouponResponse");
+        assertThat(response.getBody()).contains("PlanningCouponUnavailabilityReason");
         assertThat(response.getBody()).contains("PlanningRecipeProductionRequest");
         assertThat(response.getBody()).contains("PlanningRecipeProductionResponse");
         assertThat(response.getBody()).contains("unique within each section");
@@ -615,7 +629,7 @@ class ProductRestIntegrationTest {
         assertOpenApiGroup("products", "/api/v1/products", "/api/v1/products/stats", "/api/v1/products/{id}");
         assertOpenApiGroup("supermarkets", "/api/v1/supermarkets", "/api/v1/supermarkets/{id}");
         assertOpenApiGroup("recipes", "/api/v1/recipes", "/api/v1/recipes/stats", "/api/v1/recipes/{id}", "/api/v1/recipes/{id}/derived-product");
-        assertOpenApiGroup("stock", "/api/v1/stock", "/api/v1/stock/{stockEntryId}", "/api/v1/stock/{stockEntryId}/add", "/api/v1/stock/{stockEntryId}/remove", "/api/v1/products/{productId}/stock");
+        assertOpenApiGroup("stock", "/api/v1/stock", "/api/v1/stock/{stockEntryId}", "/api/v1/stock/{stockEntryId}/add", "/api/v1/stock/{stockEntryId}/remove", "/api/v1/stock/movements", "/api/v1/products/{productId}/stock", "/api/v1/products/{productId}/stock/reconciliation");
         assertOpenApiGroup(
                 "users",
                 "/api/v1/users",
@@ -632,7 +646,7 @@ class ProductRestIntegrationTest {
                 "/api/v1/users/{userId}/weights/{weightId}"
         );
         assertOpenApiGroup("money-boxes", "/api/v1/money-boxes", "/api/v1/money-boxes/{moneyBoxId}", "/api/v1/money-boxes/{moneyBoxId}/movements", "/api/v1/money-boxes/{moneyBoxId}/movements/{movementId}");
-        assertOpenApiGroup("planning", "/api/v1/planning", "/api/v1/planning/{id}", "/api/v1/planning/{id}/days", "/api/v1/planning/{id}/menu", "/api/v1/planning/day-parts");
+        assertOpenApiGroup("planning", "/api/v1/planning", "/api/v1/planning/{id}", "/api/v1/planning/{id}/days", "/api/v1/planning/{id}/menu", "/api/v1/planning/{id}/coupons", "/api/v1/planning/day-parts");
         assertOpenApiGroup(
                 "menus",
                 "/api/v1/menus",
@@ -2279,6 +2293,7 @@ class ProductRestIntegrationTest {
     void stockEndpointsShouldCreateAdjustAndFilterStock() {
         String productsUrl = "http://localhost:" + port + "/api/v1/products";
         String stockUrl = "http://localhost:" + port + "/api/v1/stock";
+        LocalDate today = LocalDate.now();
         Long appleId = createProduct(productsUrl, "Stock Apple", "Fresh apple", "52", "14", "0.3", "0.2");
         Long bananaId = createProduct(productsUrl, "Stock Banana", "Fresh banana", "89", "23", "1.1", "0.3");
 
@@ -2361,6 +2376,32 @@ class ProductRestIntegrationTest {
                 String.class
         );
         assertThat(removeAll.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<StockMovementPageResponse> appleMovements = getAuthorized(
+                stockUrl + "/movements?fromDate=2026-06-10&toDate=" + today + "&productIds=" + appleId + "&page=0&size=20",
+                StockMovementPageResponse.class
+        );
+        assertThat(appleMovements.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(appleMovements.getBody()).isNotNull();
+        assertThat(appleMovements.getBody().totalElements()).isEqualTo(4);
+        assertThat(appleMovements.getBody().items()).hasSize(4);
+        assertThat(appleMovements.getBody().items().getFirst().movementType()).isEqualTo("ADJUSTMENT");
+        assertThat(appleMovements.getBody().items().getFirst().signedQuantity()).isEqualByComparingTo("-5.00");
+        assertThat(appleMovements.getBody().items().getLast().movementType()).isEqualTo("ENTRY");
+        assertThat(appleMovements.getBody().items().getLast().signedQuantity()).isEqualByComparingTo("5.50");
+
+        ResponseEntity<StockReconciliationResponse> appleReconciliation = getAuthorized(
+                productsUrl + "/" + appleId + "/stock/reconciliation",
+                StockReconciliationResponse.class
+        );
+        assertThat(appleReconciliation.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(appleReconciliation.getBody()).isNotNull();
+        assertThat(appleReconciliation.getBody().calculatedQuantity()).isEqualByComparingTo("0.00");
+        assertThat(appleReconciliation.getBody().liveQuantity()).isEqualByComparingTo("0.00");
+        assertThat(appleReconciliation.getBody().difference()).isEqualByComparingTo("0.00");
+        assertThat(appleReconciliation.getBody().totalIn()).isEqualByComparingTo("7.00");
+        assertThat(appleReconciliation.getBody().totalOut()).isEqualByComparingTo("7.00");
+        assertThat(appleReconciliation.getBody().movementCount()).isEqualTo(4);
 
         ResponseEntity<StockEntryResponse[]> appleStockAfterDelete = getAuthorized(
                 productsUrl + "/" + appleId + "/stock",
@@ -3143,6 +3184,81 @@ class ProductRestIntegrationTest {
     }
 
     @Test
+    void couponAvailabilityShouldExposeLastUseAndNextAvailabilityAfterRedeeming() {
+        String baseUrl = "http://localhost:" + port + "/api/v1";
+        String suffix = Long.toString(System.nanoTime());
+        Long productId = createProduct(
+                baseUrl + "/products", "Coupon product " + suffix,
+                "Product used to verify coupon availability", "100", "10", "5", "2"
+        );
+        Long dayPartId = createDayPart(
+                baseUrl + "/planning/day-parts", "Coupon meal " + suffix,
+                "Meal used to verify coupon availability", 1300
+        );
+
+        ResponseEntity<ProposedWeekMenuResponse> planning = postAuthorized(
+                baseUrl + "/planning",
+                new CreateProposedWeekMenuRequest(LocalDate.of(2031, 2, 1), LocalDate.of(2031, 2, 2)),
+                ProposedWeekMenuResponse.class
+        );
+        assertThat(planning.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        restTemplate.exchange(
+                baseUrl + "/planning/" + planning.getBody().id() + "/days",
+                HttpMethod.PUT,
+                authorizedEntity(new UpsertProposedWeekMenuDayRequest(
+                        LocalDate.of(2031, 2, 1),
+                        List.of(new ProposedWeekMenuSectionRequest(
+                                dayPartId,
+                                List.of(new ProposedWeekMenuProductRequest(productId, new BigDecimal("1.00"), null, 10))
+                        ))
+                )),
+                ProposedWeekMenuResponse.class
+        );
+
+        ResponseEntity<PlanningCouponResponse[]> beforeUse = getAuthorized(
+                baseUrl + "/planning/" + planning.getBody().id() + "/coupons?payerUserId=" + authenticatedUserId(),
+                PlanningCouponResponse[].class
+        );
+        assertThat(beforeUse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(beforeUse.getBody()).singleElement().satisfies(coupon -> {
+            assertThat(coupon.code()).isEqualTo("NO_REPEATED_PRODUCTS");
+            assertThat(coupon.available()).isTrue();
+            assertThat(coupon.lastUsedAt()).isNull();
+            assertThat(coupon.nextAvailableAt()).isNull();
+            assertThat(coupon.unavailableReasons()).isEmpty();
+        });
+
+        BigDecimal balanceBefore = getAuthorized(
+                baseUrl + "/users/" + authenticatedUserId() + "/money-box",
+                UserMoneyBoxResponse.class
+        ).getBody().balance();
+
+        ResponseEntity<CurrentWeekMenuResponse> established = postAuthorized(
+                baseUrl + "/planning/" + planning.getBody().id() + "/menu",
+                new EstablishProposedWeekMenuRequest(authenticatedUserId(), null, List.of("NO_REPEATED_PRODUCTS")),
+                CurrentWeekMenuResponse.class
+        );
+        assertThat(established.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        assertThat(getAuthorized(
+                baseUrl + "/users/" + authenticatedUserId() + "/money-box",
+                UserMoneyBoxResponse.class
+        ).getBody().balance()).isEqualByComparingTo(balanceBefore.add(new BigDecimal("20.00")));
+
+        ResponseEntity<PlanningCouponResponse[]> afterUse = getAuthorized(
+                baseUrl + "/planning/" + planning.getBody().id() + "/coupons?payerUserId=" + authenticatedUserId(),
+                PlanningCouponResponse[].class
+        );
+        assertThat(afterUse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(afterUse.getBody()).singleElement().satisfies(coupon -> {
+            assertThat(coupon.available()).isFalse();
+            assertThat(coupon.lastUsedAt()).isNotNull();
+            assertThat(coupon.nextAvailableAt()).isEqualTo(coupon.lastUsedAt().plus(30, ChronoUnit.DAYS));
+            assertThat(coupon.unavailableReasons()).contains(PlanningCouponUnavailabilityReason.USED_WITHIN_PERIOD);
+        });
+    }
+
+    @Test
     void weekStockShouldReduceTheShoppingListAndTransferBackToProductStockWhenClosing() {
         String productsUrl = "http://localhost:" + port + "/api/v1/products";
         String dayPartsUrl = "http://localhost:" + port + "/api/v1/planning/day-parts";
@@ -3173,6 +3289,7 @@ class ProductRestIntegrationTest {
                 ProposedWeekMenuResponse.class
         );
         assertThat(plannedMenu.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(plannedMenu.getBody()).isNotNull();
 
         ResponseEntity<CurrentWeekMenuResponse> established = postAuthorized(
                 proposedMenusUrl + "/" + planning.getBody().id() + "/menu",
@@ -3280,6 +3397,9 @@ class ProductRestIntegrationTest {
                 ProposedWeekMenuResponse.class
         );
         assertThat(plannedMenu.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(plannedMenu.getBody()).isNotNull();
+        assertThat(plannedMenu.getBody().days().getFirst().sections().getFirst().products().getFirst().nutritionalValues().calories())
+                .isEqualByComparingTo("4.00");
 
         ResponseEntity<CurrentWeekMenuResponse> established = postAuthorized(
                 proposedMenusUrl + "/" + planning.getBody().id() + "/menu",

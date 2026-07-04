@@ -107,6 +107,75 @@ class ProductLambdaRouterIntegrationTest {
     }
 
     @Test
+    void shouldExposeAndRedeemPlanningCouponsThroughLambda() {
+        AuthSession auth = registerAndReadAuth();
+        String token = auth.token();
+        String suffix = Long.toString(System.nanoTime());
+
+        APIGatewayProxyResponseEvent product = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath("/api/v1/products")
+                .withHeaders(authHeaders(token))
+                .withBody("{\"name\":\"Coupon Lambda Product " + suffix + "\",\"description\":\"Coupon\",\"gramsPerUnit\":100,\"calories\":10,\"carbohydrates\":2,\"proteins\":3,\"fats\":1}"));
+        assertThat(product.getStatusCode()).isEqualTo(201);
+        long productId = readLong(product.getBody(), "id");
+
+        long dayPartId = dayPartRepository.create(ProposedWeekMenuDayPart.builder()
+                .name("Coupon Lambda Lunch " + suffix)
+                .description("Lunch")
+                .sortOrder(20)
+                .build()).getId();
+
+        APIGatewayProxyResponseEvent planning = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath("/api/v1/planning")
+                .withHeaders(authHeaders(token))
+                .withBody("{\"startDate\":\"2031-02-01\",\"endDate\":\"2031-02-02\"}"));
+        assertThat(planning.getStatusCode()).isEqualTo(201);
+        long planningId = readLong(planning.getBody(), "id");
+
+        APIGatewayProxyResponseEvent plannedDay = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("PUT")
+                .withPath("/api/v1/planning/" + planningId + "/days")
+                .withHeaders(authHeaders(token))
+                .withBody("{\"date\":\"2031-02-01\",\"sections\":[{\"dayPartId\":" + dayPartId + ",\"products\":[{\"productId\":" + productId + ",\"units\":1,\"sortOrder\":10}]}]}"));
+        assertThat(plannedDay.getStatusCode()).isEqualTo(200);
+
+        APIGatewayProxyResponseEvent couponsBefore = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/planning/" + planningId + "/coupons")
+                .withHeaders(authHeaders(token))
+                .withQueryStringParameters(Map.of("payerUserId", Long.toString(auth.userId()))));
+        assertThat(couponsBefore.getStatusCode()).isEqualTo(200);
+        assertThat(readNode(couponsBefore.getBody()).get(0).get("available").asBoolean()).isTrue();
+
+        APIGatewayProxyResponseEvent establish = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath("/api/v1/planning/" + planningId + "/menu")
+                .withHeaders(authHeaders(token))
+                .withBody("{\"payerUserId\":" + auth.userId() + ",\"couponCodes\":[\"NO_REPEATED_PRODUCTS\"]}"));
+        assertThat(establish.getStatusCode()).isEqualTo(201);
+
+        APIGatewayProxyResponseEvent moneyBox = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/users/" + auth.userId() + "/money-box")
+                .withHeaders(authHeaders(token)));
+        assertThat(moneyBox.getStatusCode()).isEqualTo(200);
+        assertThat(readDecimal(moneyBox.getBody(), "balance")).isEqualByComparingTo("20.00");
+
+        APIGatewayProxyResponseEvent couponsAfter = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/planning/" + planningId + "/coupons")
+                .withHeaders(authHeaders(token))
+                .withQueryStringParameters(Map.of("payerUserId", Long.toString(auth.userId()))));
+        JsonNode coupon = readNode(couponsAfter.getBody()).get(0);
+        assertThat(coupon.get("available").asBoolean()).isFalse();
+        assertThat(coupon.get("lastUsedAt").asText()).isNotBlank();
+        assertThat(coupon.get("nextAvailableAt").asText()).isNotBlank();
+        assertThat(coupon.get("unavailableReasons").get(0).asText()).isEqualTo("USED_WITHIN_PERIOD");
+    }
+
+    @Test
     void shouldHandleDailyAndWeeklyNutritionalRulesThroughLambda() {
         AuthSession auth = registerAndReadAuth();
         String token = auth.token();
@@ -437,6 +506,33 @@ class ProductLambdaRouterIntegrationTest {
 
         APIGatewayProxyResponseEvent removeStockResponse = productHttpHandler.apply(removeStock);
         assertThat(removeStockResponse.getStatusCode()).isEqualTo(200);
+
+        APIGatewayProxyResponseEvent stockMovementsResponse = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/stock/movements")
+                .withHeaders(authHeaders(token))
+                .withQueryStringParameters(Map.of(
+                        "fromDate", "2026-06-10",
+                        "toDate", LocalDate.now().toString(),
+                        "productIds", Long.toString(productId),
+                        "page", "0",
+                        "size", "20"
+                )));
+        assertThat(stockMovementsResponse.getStatusCode()).isEqualTo(200);
+        JsonNode stockMovements = readNode(stockMovementsResponse.getBody());
+        assertThat(stockMovements.get("totalElements").asInt()).isEqualTo(4);
+        assertThat(stockMovements.get("items").get(0).get("movementType").asText()).isEqualTo("ADJUSTMENT");
+        assertThat(readDecimal(stockMovementsResponse.getBody(), "items.0.signedQuantity")).isEqualByComparingTo("-7.00");
+
+        APIGatewayProxyResponseEvent reconciliationResponse = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/products/" + productId + "/stock/reconciliation")
+                .withHeaders(authHeaders(token)));
+        assertThat(reconciliationResponse.getStatusCode()).isEqualTo(200);
+        JsonNode reconciliation = readNode(reconciliationResponse.getBody());
+        assertThat(reconciliation.get("calculatedQuantity").asText()).isEqualTo("2.25");
+        assertThat(reconciliation.get("liveQuantity").asText()).isEqualTo("2.25");
+        assertThat(reconciliation.get("difference").asText()).isEqualTo("0.0");
     }
 
     @Test

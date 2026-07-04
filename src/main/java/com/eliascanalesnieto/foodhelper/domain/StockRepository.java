@@ -6,17 +6,41 @@ import java.util.Collection;
 import java.util.List;
 
 public interface StockRepository {
-    StockEntry create(Long productId, StockEntry stockEntry);
+    default StockEntry create(Long productId, StockEntry stockEntry) {
+        return create(productId, stockEntry, StockMovementType.ENTRY, stockEntry.getEntryDate());
+    }
 
-    StockEntry update(Long stockEntryId, StockEntry stockEntry);
+    StockEntry create(Long productId, StockEntry stockEntry, StockMovementType movementType, LocalDate effectiveDate);
 
-    StockEntry addQuantity(Long stockEntryId, BigDecimal quantity);
+    default StockEntry update(Long stockEntryId, StockEntry stockEntry) {
+        return update(stockEntryId, stockEntry, StockMovementType.ADJUSTMENT, LocalDate.now());
+    }
 
-    void removeQuantity(Long stockEntryId, BigDecimal quantity);
+    StockEntry update(Long stockEntryId, StockEntry stockEntry, StockMovementType movementType, LocalDate effectiveDate);
 
-    void delete(Long stockEntryId);
+    default StockEntry addQuantity(Long stockEntryId, BigDecimal quantity) {
+        return addQuantity(stockEntryId, quantity, StockMovementType.ADJUSTMENT, LocalDate.now());
+    }
 
-    void restore(CurrentWeekMenuUsedStock usedStock);
+    StockEntry addQuantity(Long stockEntryId, BigDecimal quantity, StockMovementType movementType, LocalDate effectiveDate);
+
+    default void removeQuantity(Long stockEntryId, BigDecimal quantity) {
+        removeQuantity(stockEntryId, quantity, StockMovementType.ADJUSTMENT, LocalDate.now());
+    }
+
+    void removeQuantity(Long stockEntryId, BigDecimal quantity, StockMovementType movementType, LocalDate effectiveDate);
+
+    default void delete(Long stockEntryId) {
+        delete(stockEntryId, StockMovementType.ADJUSTMENT, LocalDate.now());
+    }
+
+    void delete(Long stockEntryId, StockMovementType movementType, LocalDate effectiveDate);
+
+    default void restore(CurrentWeekMenuUsedStock usedStock) {
+        restore(usedStock, StockMovementType.ADJUSTMENT, LocalDate.now());
+    }
+
+    void restore(CurrentWeekMenuUsedStock usedStock, StockMovementType movementType, LocalDate effectiveDate);
 
     List<StockEntry> findStock(LocalDate expiresBefore, Collection<Long> productIds);
 }

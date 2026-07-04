@@ -27,6 +27,7 @@ import com.eliascanalesnieto.foodhelper.domain.MenuStockMovement;
 import com.eliascanalesnieto.foodhelper.domain.MenuStockMovementRepository;
 import com.eliascanalesnieto.foodhelper.domain.UserMoneyRepository;
 import com.eliascanalesnieto.foodhelper.domain.UserMenuHistoryRepository;
+import com.eliascanalesnieto.foodhelper.domain.StockMovementType;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuApiMapper;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuRecipeProductionResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuRangeStatsResponse;
@@ -90,13 +91,14 @@ public class CurrentWeekMenuService {
     private final UserMoneyRepository userMoneyRepository;
     private final MenuStockMovementRepository menuStockMovementRepository;
     private final UserMenuHistoryRepository userMenuHistoryRepository;
+    private final PlanningCouponService planningCouponService;
     private final CurrentWeekMenuApiMapper mapper;
     private final NutritionalRulesService nutritionalRulesService;
     private final Clock clock;
 
     @Transactional
     public CurrentWeekMenuResponse establishFromProposed(Long proposedWeekMenuId, Long payerUserId) {
-        return establishFromProposed(proposedWeekMenuId, payerUserId, null);
+        return establishFromProposed(proposedWeekMenuId, payerUserId, null, null);
     }
 
     @Transactional
@@ -104,6 +106,16 @@ public class CurrentWeekMenuService {
             Long proposedWeekMenuId,
             Long payerUserId,
             List<MenuStockAllocationRequest> stockAllocations
+    ) {
+        return establishFromProposed(proposedWeekMenuId, payerUserId, stockAllocations, null);
+    }
+
+    @Transactional
+    public CurrentWeekMenuResponse establishFromProposed(
+            Long proposedWeekMenuId,
+            Long payerUserId,
+            List<MenuStockAllocationRequest> stockAllocations,
+            List<String> couponCodes
     ) {
         try {
             return withPersonIdsFromHistory(applyCurrentRules(currentWeekMenuRepository.findByProposedWeekMenuId(proposedWeekMenuId)));
@@ -114,7 +126,7 @@ public class CurrentWeekMenuService {
         AppUser payer = appUserRepository.findById(payerUserId);
         ProposedWeekMenu proposedMenu = proposedWeekMenuService.findById(proposedWeekMenuId);
         ensurePayerHasNoOverlappingMenu(payer.getId(), proposedMenu.getStartDate(), proposedMenu.getEndDate());
-        AllocationResult allocation = allocateStock(proposedMenu, stockAllocations);
+        AllocationResult allocation = allocateStock(proposedMenu, stockAllocations, proposedMenu.getStartDate());
         List<CurrentWeekMenuRecipeProduction> recipeProductions = toCurrentRecipeProductions(proposedMenu.getDays());
         CurrentWeekMenu currentWeekMenu = CurrentWeekMenu.builder()
                 .proposedWeekMenuId(proposedWeekMenuId)
@@ -132,6 +144,7 @@ public class CurrentWeekMenuService {
                 .recipeProductions(recipeProductions)
                 .build();
         CurrentWeekMenuResponse created = withPersonIds(currentWeekMenuRepository.create(mapper.toResponse(currentWeekMenu)));
+        planningCouponService.redeemCoupons(proposedMenu, payer.getId(), created.id(), couponCodes);
         userMoneyRepository.addMovement(
                 payer.getId(),
                 allocationCost(allocation.usedStock()).negate(),
@@ -171,14 +184,19 @@ public class CurrentWeekMenuService {
     public void undo(Long id) {
         CurrentWeekMenuResponse menu = currentWeekMenuRepository.findById(id);
         ensureMenuIsOpen(id);
-        menu.usedStock().forEach(usedStock -> stockRepository.restore(toDomain(usedStock)));
+        menu.usedStock().forEach(usedStock -> stockRepository.restore(
+                toDomain(usedStock),
+                StockMovementType.ADJUSTMENT,
+                LocalDate.now(clock)
+        ));
         menuStockMovementRepository.deleteByCurrentWeekMenuId(id);
         safeRecipeProductions(menu).stream()
                 .filter(CurrentWeekMenuRecipeProductionResponse::transferred)
                 .map(CurrentWeekMenuRecipeProductionResponse::stockEntryId)
                 .filter(java.util.Objects::nonNull)
-                .forEach(stockRepository::delete);
+                .forEach(stockEntryId -> stockRepository.delete(stockEntryId, StockMovementType.ADJUSTMENT, LocalDate.now(clock)));
         userMoneyRepository.deleteMovementsByCurrentWeekMenuId(id);
+        planningCouponService.deleteRedemptionsByCurrentWeekMenuId(id);
         currentWeekMenuRepository.delete(id);
     }
 
@@ -386,8 +404,8 @@ public class CurrentWeekMenuService {
                     .quantity(item.quantity())
                     .price(ZERO)
                     .expirationDate(null)
-                    .entryDate(LocalDate.now(clock))
-                    .build());
+                    .entryDate(menu.endDate())
+                    .build(), StockMovementType.ENTRY, menu.endDate());
         }
     }
 
@@ -400,12 +418,13 @@ public class CurrentWeekMenuService {
             throw new IllegalArgumentException("Recipe production has already been transferred");
         }
         Product product = productRepository.findById(production.productId());
+        LocalDate effectiveDate = findMenuDayDate(menu, production.id());
         StockEntry createdStock = stockRepository.create(product.getId(), StockEntry.builder()
                 .quantity(production.units())
                 .price(BigDecimal.ZERO.setScale(SCALE, RoundingMode.HALF_UP))
                 .expirationDate(null)
-                .entryDate(findMenuDayDate(menu, production.id()))
-                .build());
+                .entryDate(effectiveDate)
+                .build(), StockMovementType.ENTRY, effectiveDate);
         List<CurrentWeekMenuRecipeProductionResponse> updatedProductions = safeRecipeProductions(menu).stream()
                 .map(current -> current.id().equals(production.id())
                         ? new CurrentWeekMenuRecipeProductionResponse(
@@ -592,7 +611,8 @@ public class CurrentWeekMenuService {
 
     private AllocationResult allocateStock(
             ProposedWeekMenu menu,
-            List<MenuStockAllocationRequest> requestedAllocations
+            List<MenuStockAllocationRequest> requestedAllocations,
+            LocalDate effectiveDate
     ) {
         Map<Long, Product> productsById = loadProducts(menu.getDays());
         Map<Long, Product> compositionProductsById = loadCompositionProducts(productsById);
@@ -605,7 +625,8 @@ public class CurrentWeekMenuService {
                     productsForStock,
                     requiredUnitsByProduct,
                     availableStock,
-                    requestedAllocations
+                    requestedAllocations,
+                    effectiveDate
             );
         }
         Map<Long, List<StockEntry>> stockByProduct = availableStock.stream()
@@ -631,7 +652,7 @@ public class CurrentWeekMenuService {
                 if (unitsToConsume.signum() <= 0) {
                     continue;
                 }
-                stockRepository.removeQuantity(stockEntry.getId(), unitsToConsume);
+                stockRepository.removeQuantity(stockEntry.getId(), unitsToConsume, StockMovementType.ADJUSTMENT, effectiveDate);
                 usedStock.add(CurrentWeekMenuUsedStock.builder()
                         .stockEntryId(stockEntry.getId())
                         .productId(productId)
@@ -660,7 +681,8 @@ public class CurrentWeekMenuService {
             Map<Long, Product> productsById,
             Map<Long, BigDecimal> requiredUnitsByProduct,
             List<StockEntry> availableStock,
-            List<MenuStockAllocationRequest> requestedAllocations
+            List<MenuStockAllocationRequest> requestedAllocations,
+            LocalDate effectiveDate
     ) {
         Map<Long, StockEntry> stockById = availableStock.stream()
                 .collect(Collectors.toMap(StockEntry::getId, stock -> stock));
@@ -692,7 +714,7 @@ public class CurrentWeekMenuService {
             if (allocated.compareTo(scale(requiredUnitsByProduct.get(stockEntry.getProductId()))) > 0) {
                 throw new IllegalArgumentException("Allocated quantity exceeds the quantity required by the menu");
             }
-            stockRepository.removeQuantity(stockEntry.getId(), usedUnits);
+            stockRepository.removeQuantity(stockEntry.getId(), usedUnits, StockMovementType.ADJUSTMENT, effectiveDate);
             Product product = productsById.get(stockEntry.getProductId());
             usedStock.add(CurrentWeekMenuUsedStock.builder()
                     .stockEntryId(stockEntry.getId())

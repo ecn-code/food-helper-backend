@@ -8,6 +8,7 @@ import com.eliascanalesnieto.foodhelper.domain.Recipe;
 import com.eliascanalesnieto.foodhelper.domain.RecipeDerivedProduct;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
 import com.eliascanalesnieto.foodhelper.domain.StockEntry;
+import com.eliascanalesnieto.foodhelper.domain.StockMovement;
 import com.eliascanalesnieto.foodhelper.domain.Supermarket;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.mapstruct.Mapper;
@@ -34,6 +35,22 @@ public abstract class ProductApiMapper {
     public abstract RecipeDerivedProductResponse toResponse(RecipeDerivedProduct derivedProduct);
 
     public abstract StockEntryResponse toResponse(StockEntry stockEntry);
+
+    public StockMovementResponse toResponse(StockMovement movement) {
+        return new StockMovementResponse(
+                movement.getId(),
+                movement.getProductId(),
+                movement.getProductName(),
+                movement.getStockEntryId(),
+                movement.getMovementType().name(),
+                movement.getSignedQuantity(),
+                movement.getEffectiveDate(),
+                movement.getRecordedAt(),
+                movement.getPrice(),
+                movement.getExpirationDate(),
+                movement.getEntryDate()
+        );
+    }
 
     protected String toSignedPhotoUrl(Media media) {
         if (media == null) {

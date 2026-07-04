@@ -1,6 +1,7 @@
 package com.eliascanalesnieto.foodhelper.application;
 
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
+import com.eliascanalesnieto.foodhelper.domain.NutritionBasis;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
@@ -190,7 +191,7 @@ public class ProposedWeekMenuService {
                 .productName(product.getProductName() == null ? linkedProduct.getName() : product.getProductName())
                 .units(scale(units))
                 .grams(scale(grams))
-                .nutritionalValues(calculateContribution(linkedProduct.getNutritionalValues(), scale(grams)))
+                .nutritionalValues(calculateContribution(linkedProduct, scale(units), scale(grams)))
                 .build();
     }
 
@@ -255,13 +256,15 @@ public class ProposedWeekMenuService {
                     .nutritionalValues(scale(menuProduct.getNutritionalValues()))
                     .build();
         }
+        BigDecimal units = menuProduct.getUnits() == null ? DEFAULT_UNITS : menuProduct.getUnits();
+        BigDecimal grams = menuProduct.getGrams() == null
+                ? product.getGramsPerUnit().multiply(units)
+                : menuProduct.getGrams();
         return menuProduct.toBuilder()
                 .productName(menuProduct.getProductName() == null ? product.getName() : menuProduct.getProductName())
-                .units(scale(menuProduct.getUnits()))
-                .grams(scale(menuProduct.getGrams()))
-                .nutritionalValues(menuProduct.getNutritionalValues() == null
-                        ? calculateContribution(product.getNutritionalValues(), menuProduct.getGrams())
-                        : scale(menuProduct.getNutritionalValues()))
+                .units(scale(units))
+                .grams(scale(grams))
+                .nutritionalValues(calculateContribution(product, scale(units), scale(grams)))
                 .build();
     }
 
@@ -522,6 +525,18 @@ public class ProposedWeekMenuService {
                 .proteins(scale(calculateValue(nutritionalValues.getProteins(), grams)))
                 .fats(scale(calculateValue(nutritionalValues.getFats(), grams)))
                 .build();
+    }
+
+    private NutritionalValues calculateContribution(Product product, BigDecimal units, BigDecimal grams) {
+        if (product.getNutritionBasis() == NutritionBasis.PER_UNIT) {
+            return NutritionalValues.builder()
+                    .calories(scale(product.getNutritionalValues().getCalories().multiply(units)))
+                    .carbohydrates(scale(product.getNutritionalValues().getCarbohydrates().multiply(units)))
+                    .proteins(scale(product.getNutritionalValues().getProteins().multiply(units)))
+                    .fats(scale(product.getNutritionalValues().getFats().multiply(units)))
+                    .build();
+        }
+        return calculateContribution(product.getNutritionalValues(), grams);
     }
 
     private NutritionalValues scale(NutritionalValues nutritionalValues) {

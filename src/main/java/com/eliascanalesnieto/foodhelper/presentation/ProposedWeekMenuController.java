@@ -2,8 +2,10 @@ package com.eliascanalesnieto.foodhelper.presentation;
 
 import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
 import com.eliascanalesnieto.foodhelper.application.CurrentWeekMenuService;
+import com.eliascanalesnieto.foodhelper.application.PlanningCouponService;
 import com.eliascanalesnieto.foodhelper.presentation.error.ApiError;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -30,6 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProposedWeekMenuController {
     private final ProposedWeekMenuService service;
     private final CurrentWeekMenuService currentWeekMenuService;
+    private final PlanningCouponService planningCouponService;
     private final ProposedWeekMenuApiMapper mapper;
 
     @GetMapping
@@ -61,6 +64,24 @@ public class ProposedWeekMenuController {
     })
     public ProposedWeekMenuResponse create(@Valid @RequestBody CreateProposedWeekMenuRequest request) {
         return mapper.toResponse(service.create(request.startDate(), request.endDate(), request.users()));
+    }
+
+    @GetMapping("/{id}/coupons")
+    @Operation(
+            summary = "List available planning coupons",
+            description = "Returns every configured coupon with its current availability for the given payer user. Unavailable coupons include the last time they were used, the next time they can be redeemed again when a cooldown applies, and the reasons that currently block them."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Planning coupons returned",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = PlanningCouponResponse.class)))),
+            @ApiResponse(responseCode = "404", description = "Planning not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public List<PlanningCouponResponse> findCoupons(
+            @PathVariable Long id,
+            @org.springframework.web.bind.annotation.RequestParam Long payerUserId
+    ) {
+        return planningCouponService.findCoupons(id, payerUserId);
     }
 
     @GetMapping("/{id}")
@@ -135,7 +156,8 @@ public class ProposedWeekMenuController {
         return currentWeekMenuService.establishFromProposed(
                 id,
                 request.payerUserId(),
-                request.stockAllocations()
+                request.stockAllocations(),
+                request.couponCodes()
         );
     }
 }

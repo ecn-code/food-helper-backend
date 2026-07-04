@@ -12,9 +12,15 @@ public record EstablishProposedWeekMenuRequest(
         Long payerUserId,
         @Valid
         @Schema(description = "Optional user-confirmed stock allocation. When omitted or empty, stock is allocated automatically by earliest expiration date.")
-        List<MenuStockAllocationRequest> stockAllocations
+        List<MenuStockAllocationRequest> stockAllocations,
+        @Schema(description = "Optional stable coupon codes to redeem while the menu is being established.", example = "[\"NO_REPEATED_PRODUCTS\"]")
+        List<String> couponCodes
 ) {
     public EstablishProposedWeekMenuRequest(Long payerUserId) {
-        this(payerUserId, null);
+        this(payerUserId, null, null);
+    }
+
+    public EstablishProposedWeekMenuRequest(Long payerUserId, List<MenuStockAllocationRequest> stockAllocations) {
+        this(payerUserId, stockAllocations, null);
     }
 }

@@ -10,6 +10,7 @@ import com.eliascanalesnieto.foodhelper.application.StockService;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
 import com.eliascanalesnieto.foodhelper.domain.StockEntry;
+import com.eliascanalesnieto.foodhelper.domain.StockMovementType;
 import com.eliascanalesnieto.foodhelper.domain.StockRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -36,12 +37,22 @@ class StockServiceTest {
     void shouldCreateStockEntryForExistingProduct() {
         when(productRepository.findById(1L)).thenReturn(Product.builder().id(1L).name("Apple").description("Fresh apple").build());
         ArgumentCaptor<StockEntry> stockEntryCaptor = forClass(StockEntry.class);
-        when(stockRepository.create(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.any(StockEntry.class)))
+        when(stockRepository.create(
+                org.mockito.ArgumentMatchers.eq(1L),
+                org.mockito.ArgumentMatchers.any(StockEntry.class),
+                org.mockito.ArgumentMatchers.any(StockMovementType.class),
+                org.mockito.ArgumentMatchers.any(LocalDate.class)
+        ))
                 .thenAnswer(invocation -> invocation.getArgument(1));
 
         service.create(1L, new BigDecimal("3.5"), new BigDecimal("4.99"), LocalDate.of(2026, 6, 20), LocalDate.of(2026, 6, 10));
 
-        verify(stockRepository).create(org.mockito.ArgumentMatchers.eq(1L), stockEntryCaptor.capture());
+        verify(stockRepository).create(
+                org.mockito.ArgumentMatchers.eq(1L),
+                stockEntryCaptor.capture(),
+                org.mockito.ArgumentMatchers.any(StockMovementType.class),
+                org.mockito.ArgumentMatchers.any(LocalDate.class)
+        );
         assertThat(stockEntryCaptor.getValue().getPrice()).isEqualByComparingTo("4.99");
     }
 
