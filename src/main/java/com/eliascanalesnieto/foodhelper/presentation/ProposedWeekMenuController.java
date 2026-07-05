@@ -68,8 +68,8 @@ public class ProposedWeekMenuController {
 
     @GetMapping("/{id}/coupons")
     @Operation(
-            summary = "List available planning coupons",
-            description = "Returns every configured coupon with its current availability for the given payer user. Unavailable coupons include the last time they were used, the next time they can be redeemed again when a cooldown applies, and the reasons that currently block them."
+            summary = "List planning coupon catalog",
+            description = "Returns every configured coupon with its rule description and cooldown status for the payer user. This listing does not inspect the planning contents; it only reflects whether the coupon is still inside its reuse window."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Planning coupons returned",
@@ -82,6 +82,26 @@ public class ProposedWeekMenuController {
             @org.springframework.web.bind.annotation.RequestParam Long payerUserId
     ) {
         return planningCouponService.findCoupons(id, payerUserId);
+    }
+
+    @PostMapping("/{id}/coupons/validate")
+    @Operation(
+            summary = "Validate selected planning coupons",
+            description = "Recomputes coupon eligibility from the current planning and returns only the requested coupons that are truly available. No state is changed and nothing is persisted."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Selectable planning coupons returned",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = PlanningCouponResponse.class)))),
+            @ApiResponse(responseCode = "400", description = "Invalid request or coupon not allowed",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "404", description = "Planning or payer user not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public List<PlanningCouponResponse> validateCoupons(
+            @PathVariable Long id,
+            @Valid @RequestBody ValidateProposedWeekMenuCouponsRequest request
+    ) {
+        return planningCouponService.validateCoupons(id, request.payerUserId(), request.couponCodes());
     }
 
     @GetMapping("/{id}")
@@ -139,7 +159,7 @@ public class ProposedWeekMenuController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
             summary = "Create menu from planning",
-            description = "Consumes the user-confirmed stock allocation, or automatically uses the earliest expiration date when no allocation is supplied. It creates a menu snapshot, stores missing products as a shopping list, subtracts the applied stock cost from the selected payer user's money box, and carries recipe productions into the menu snapshot."
+            description = "Consumes the user-confirmed stock allocation, or automatically uses the earliest expiration date when no allocation is supplied. It creates a menu snapshot, stores missing products as a shopping list, subtracts the applied stock cost from the selected payer user's money box, revalidates the requested planning coupons inside the same transaction, and carries recipe productions into the menu snapshot."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Menu created",

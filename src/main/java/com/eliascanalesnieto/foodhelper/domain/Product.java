@@ -1,6 +1,7 @@
 package com.eliascanalesnieto.foodhelper.domain;
 
 import java.util.List;
+import java.time.Instant;
 import lombok.Builder;
 import lombok.Value;
 
@@ -12,6 +13,7 @@ public class Product {
     String description;
     java.math.BigDecimal gramsPerUnit;
     java.math.BigDecimal defaultPrice;
+    Instant createdAt;
     NutritionBasis nutritionBasis;
     NutritionalValues nutritionalValues;
     Media photo;

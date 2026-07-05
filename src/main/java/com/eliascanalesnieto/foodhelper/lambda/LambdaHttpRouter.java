@@ -46,6 +46,7 @@ import com.eliascanalesnieto.foodhelper.presentation.SaveNutritionalRulesRequest
 import com.eliascanalesnieto.foodhelper.presentation.SupermarketRequest;
 import com.eliascanalesnieto.foodhelper.presentation.SupermarketResponse;
 import com.eliascanalesnieto.foodhelper.presentation.StockMovementPageResponse;
+import com.eliascanalesnieto.foodhelper.presentation.ValidateProposedWeekMenuCouponsRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateCurrentWeekMenuPayerRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateCurrentWeekMenuStockRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateStockEntryRequest;
@@ -217,6 +218,13 @@ public class LambdaHttpRouter {
                 Long id = parseId(path.substring(0, path.lastIndexOf('/')));
                 if ("GET".equals(method)) {
                     return json(200, planningCouponService.findCoupons(id, parseRequiredLong(queryParam(request, "payerUserId"), "payerUserId")));
+                }
+            }
+            if (path.endsWith("/coupons/validate")) {
+                Long id = parseId(path.substring(0, path.indexOf("/coupons/validate")));
+                if ("POST".equals(method)) {
+                    ValidateProposedWeekMenuCouponsRequest body = parseValidateProposedWeekMenuCoupons(request.getBody());
+                    return json(200, planningCouponService.validateCoupons(id, body.payerUserId(), body.couponCodes()));
                 }
             }
             if (path.endsWith("/menu")) {
@@ -656,6 +664,10 @@ public class LambdaHttpRouter {
 
     private EstablishProposedWeekMenuRequest parseEstablishProposedWeekMenu(String body) {
         return readBody(body, EstablishProposedWeekMenuRequest.class);
+    }
+
+    private ValidateProposedWeekMenuCouponsRequest parseValidateProposedWeekMenuCoupons(String body) {
+        return readBody(body, ValidateProposedWeekMenuCouponsRequest.class);
     }
 
     private CreateUserMoneyMovementRequest parseCreateUserMoneyMovement(String body) {

@@ -1,5 +1,6 @@
 package com.eliascanalesnieto.foodhelper.infra;
 
+import java.time.Instant;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
@@ -13,6 +14,7 @@ public record ProductEntity(
         @Column("grams_per_unit") BigDecimal gramsPerUnit,
         @Column("nutrition_basis") String nutritionBasis,
         @Column("default_price") BigDecimal defaultPrice,
-        @Column("media_id") Long mediaId
+        @Column("media_id") Long mediaId,
+        @Column("created_at") Instant createdAt
 ) {
 }

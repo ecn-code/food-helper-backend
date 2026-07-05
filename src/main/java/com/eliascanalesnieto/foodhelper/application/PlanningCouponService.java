@@ -32,20 +32,20 @@ public class PlanningCouponService {
 
     @Transactional(readOnly = true)
     public List<PlanningCouponResponse> findCoupons(Long proposedWeekMenuId, Long payerUserId) {
-        ProposedWeekMenu proposedMenu = proposedWeekMenuService.findById(proposedWeekMenuId);
-        return findCoupons(proposedMenu, payerUserId);
+        proposedWeekMenuService.findById(proposedWeekMenuId);
+        return evaluateTemporalCoupons(payerUserId);
     }
 
     @Transactional(readOnly = true)
     public List<PlanningCouponResponse> findCoupons(ProposedWeekMenu proposedMenu, Long payerUserId) {
         appUserRepository.findById(payerUserId);
-        Instant now = Instant.now(clock);
-        Map<String, PlanningCouponStrategy> strategiesByCode = strategiesByCode();
-        Map<String, PlanningCouponRedemption> latestRedemptions = loadLatestRedemptions(payerUserId, strategiesByCode.keySet());
-        return strategies.stream()
-                .sorted(java.util.Comparator.comparing(PlanningCouponStrategy::code))
-                .map(strategy -> strategy.evaluate(proposedMenu, latestRedemptions.get(strategy.code()), now))
-                .toList();
+        return evaluateTemporalCoupons(payerUserId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PlanningCouponResponse> validateCoupons(Long proposedWeekMenuId, Long payerUserId, List<String> requestedCouponCodes) {
+        ProposedWeekMenu proposedMenu = proposedWeekMenuService.findById(proposedWeekMenuId);
+        return validateRequestedCoupons(proposedMenu, payerUserId, requestedCouponCodes);
     }
 
     @Transactional
@@ -55,31 +55,42 @@ public class PlanningCouponService {
             Long currentWeekMenuId,
             List<String> requestedCouponCodes
     ) {
-        appUserRepository.findById(payerUserId);
-        List<String> normalizedCouponCodes = normalizeCodes(requestedCouponCodes);
-        if (normalizedCouponCodes.isEmpty()) {
+        List<PlanningCouponResponse> eligibleCoupons = validateRequestedCoupons(proposedMenu, payerUserId, requestedCouponCodes);
+        if (eligibleCoupons.isEmpty()) {
             return;
         }
 
         Instant now = Instant.now(clock);
-        Map<String, PlanningCouponStrategy> strategiesByCode = strategiesByCode();
-        Map<String, PlanningCouponRedemption> latestRedemptions = loadLatestRedemptions(payerUserId, strategiesByCode.keySet());
-        Map<String, PlanningCouponResponse> evaluationsByCode = new LinkedHashMap<>();
+        for (PlanningCouponResponse evaluation : eligibleCoupons) {
+            redeemCoupon(payerUserId, proposedMenu.getId(), currentWeekMenuId, evaluation, now);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<PlanningCouponResponse> validateRequestedCoupons(
+            ProposedWeekMenu proposedMenu,
+            Long payerUserId,
+            List<String> requestedCouponCodes
+    ) {
+        appUserRepository.findById(payerUserId);
+        List<String> normalizedCouponCodes = normalizeCodes(requestedCouponCodes);
+        if (normalizedCouponCodes.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, PlanningCouponResponse> couponsByCode = couponsByCode(evaluateCoupons(proposedMenu, payerUserId));
+        List<PlanningCouponResponse> eligibleCoupons = new ArrayList<>();
         for (String couponCode : normalizedCouponCodes) {
-            PlanningCouponStrategy strategy = strategiesByCode.get(couponCode);
-            if (strategy == null) {
+            PlanningCouponResponse evaluation = couponsByCode.get(couponCode);
+            if (evaluation == null) {
                 throw new IllegalArgumentException("Unknown coupon code: " + couponCode);
             }
-            PlanningCouponResponse evaluation = strategy.evaluate(proposedMenu, latestRedemptions.get(couponCode), now);
             if (!evaluation.available()) {
                 throw new IllegalArgumentException("Coupon " + couponCode + " is not available");
             }
-            evaluationsByCode.put(couponCode, evaluation);
+            eligibleCoupons.add(evaluation);
         }
-
-        for (PlanningCouponResponse evaluation : evaluationsByCode.values()) {
-            redeemCoupon(payerUserId, proposedMenu.getId(), currentWeekMenuId, evaluation, now);
-        }
+        return eligibleCoupons;
     }
 
     @Transactional
@@ -116,6 +127,36 @@ public class PlanningCouponService {
             strategiesByCode.put(strategy.code().toUpperCase(Locale.ROOT), strategy);
         }
         return strategiesByCode;
+    }
+
+    private List<PlanningCouponResponse> evaluateTemporalCoupons(Long payerUserId) {
+        appUserRepository.findById(payerUserId);
+        Instant now = Instant.now(clock);
+        Map<String, PlanningCouponStrategy> strategiesByCode = strategiesByCode();
+        Map<String, PlanningCouponRedemption> latestRedemptions = loadLatestRedemptions(payerUserId, strategiesByCode.keySet());
+        return strategies.stream()
+                .sorted(java.util.Comparator.comparing(PlanningCouponStrategy::code))
+                .map(strategy -> strategy.evaluateTemporal(latestRedemptions.get(strategy.code()), now))
+                .toList();
+    }
+
+    private List<PlanningCouponResponse> evaluateCoupons(ProposedWeekMenu proposedMenu, Long payerUserId) {
+        appUserRepository.findById(payerUserId);
+        Instant now = Instant.now(clock);
+        Map<String, PlanningCouponStrategy> strategiesByCode = strategiesByCode();
+        Map<String, PlanningCouponRedemption> latestRedemptions = loadLatestRedemptions(payerUserId, strategiesByCode.keySet());
+        return strategies.stream()
+                .sorted(java.util.Comparator.comparing(PlanningCouponStrategy::code))
+                .map(strategy -> strategy.evaluate(proposedMenu, payerUserId, latestRedemptions.get(strategy.code()), now))
+                .toList();
+    }
+
+    private Map<String, PlanningCouponResponse> couponsByCode(List<PlanningCouponResponse> coupons) {
+        Map<String, PlanningCouponResponse> couponsByCode = new LinkedHashMap<>();
+        for (PlanningCouponResponse coupon : coupons) {
+            couponsByCode.put(coupon.code(), coupon);
+        }
+        return couponsByCode;
     }
 
     private Map<String, PlanningCouponRedemption> loadLatestRedemptions(Long userId, Set<String> couponCodes) {

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.eliascanalesnieto.foodhelper.presentation.PhotoUploadRequest;
 import com.eliascanalesnieto.foodhelper.infra.NutritionalValuesCrudRepository;
 import com.eliascanalesnieto.foodhelper.infra.NutritionalValuesEntity;
+import java.util.Arrays;
 import com.eliascanalesnieto.foodhelper.presentation.AuthResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CreateProductRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateMoneyBoxRequest;
@@ -3220,9 +3221,13 @@ class ProductRestIntegrationTest {
                 PlanningCouponResponse[].class
         );
         assertThat(beforeUse.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(beforeUse.getBody()).singleElement().satisfies(coupon -> {
+        assertThat(findCoupon(beforeUse.getBody(), "NO_REPEATED_PRODUCTS")).satisfies(coupon -> {
             assertThat(coupon.code()).isEqualTo("NO_REPEATED_PRODUCTS");
+            assertThat(coupon.conditionDescription()).isNotBlank();
+            assertThat(coupon.conditionMet()).isTrue();
             assertThat(coupon.available()).isTrue();
+            assertThat(coupon.usedRecently()).isFalse();
+            assertThat(coupon.informativeAvailabilityState()).isEqualTo(com.eliascanalesnieto.foodhelper.presentation.PlanningCouponAvailabilityState.AVAILABLE);
             assertThat(coupon.lastUsedAt()).isNull();
             assertThat(coupon.nextAvailableAt()).isNull();
             assertThat(coupon.unavailableReasons()).isEmpty();
@@ -3243,19 +3248,29 @@ class ProductRestIntegrationTest {
         assertThat(getAuthorized(
                 baseUrl + "/users/" + authenticatedUserId() + "/money-box",
                 UserMoneyBoxResponse.class
-        ).getBody().balance()).isEqualByComparingTo(balanceBefore.add(new BigDecimal("20.00")));
+        ).getBody().balance()).isEqualByComparingTo(balanceBefore.add(new BigDecimal("15.00")));
 
         ResponseEntity<PlanningCouponResponse[]> afterUse = getAuthorized(
                 baseUrl + "/planning/" + planning.getBody().id() + "/coupons?payerUserId=" + authenticatedUserId(),
                 PlanningCouponResponse[].class
         );
         assertThat(afterUse.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(afterUse.getBody()).singleElement().satisfies(coupon -> {
+        assertThat(findCoupon(afterUse.getBody(), "NO_REPEATED_PRODUCTS")).satisfies(coupon -> {
+            assertThat(coupon.conditionMet()).isTrue();
             assertThat(coupon.available()).isFalse();
+            assertThat(coupon.usedRecently()).isTrue();
+            assertThat(coupon.informativeAvailabilityState()).isEqualTo(com.eliascanalesnieto.foodhelper.presentation.PlanningCouponAvailabilityState.USED_RECENTLY);
             assertThat(coupon.lastUsedAt()).isNotNull();
             assertThat(coupon.nextAvailableAt()).isEqualTo(coupon.lastUsedAt().plus(30, ChronoUnit.DAYS));
             assertThat(coupon.unavailableReasons()).contains(PlanningCouponUnavailabilityReason.USED_WITHIN_PERIOD);
         });
+    }
+
+    private PlanningCouponResponse findCoupon(PlanningCouponResponse[] coupons, String code) {
+        return Arrays.stream(coupons)
+                .filter(coupon -> coupon.code().equals(code))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Coupon not found: " + code));
     }
 
     @Test

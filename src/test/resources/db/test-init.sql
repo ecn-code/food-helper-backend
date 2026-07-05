@@ -5,7 +5,8 @@ CREATE TABLE IF NOT EXISTS products (
     grams_per_unit NUMERIC(10,2) NOT NULL DEFAULT 100.00,
     nutrition_basis VARCHAR(30) NOT NULL DEFAULT 'PER_100_GRAMS',
     default_price NUMERIC(10,2),
-    media_id BIGINT
+    media_id BIGINT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS media (

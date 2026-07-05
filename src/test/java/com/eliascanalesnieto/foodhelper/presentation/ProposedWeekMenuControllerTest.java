@@ -5,6 +5,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.eliascanalesnieto.foodhelper.application.CurrentWeekMenuService;
@@ -41,5 +42,20 @@ class ProposedWeekMenuControllerTest {
                 .andExpect(status().isOk());
 
         verify(planningCouponService).findCoupons(42L, 7L);
+    }
+
+    @Test
+    void validateCouponsShouldForwardToTheCouponService() throws Exception {
+        when(planningCouponService.validateCoupons(42L, 7L, List.of("NO_REPEATED_PRODUCTS")))
+                .thenReturn(List.of());
+
+        mockMvc.perform(post("/api/v1/planning/42/coupons/validate")
+                        .contentType("application/json")
+                        .content("""
+                                {"payerUserId":7,"couponCodes":["NO_REPEATED_PRODUCTS"]}
+                                """))
+                .andExpect(status().isOk());
+
+        verify(planningCouponService).validateCoupons(42L, 7L, List.of("NO_REPEATED_PRODUCTS"));
     }
 }

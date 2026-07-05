@@ -1564,7 +1564,7 @@ paths:
       tags:
         - Planning
       summary: Create menu from planning
-      description: Consumes the user-confirmed stock allocation, or automatically uses the earliest expiration date when no allocation is supplied. It creates a menu snapshot, stores missing products as a shopping list, subtracts the applied stock cost from the selected payer user's money box, and can redeem one or more planning coupons that add money back to the payer's money box.
+      description: Consumes the user-confirmed stock allocation, or automatically uses the earliest expiration date when no allocation is supplied. It creates a menu snapshot, stores missing products as a shopping list, subtracts the applied stock cost from the selected payer user's money box, revalidates the requested planning coupons on the server, and can redeem one or more planning coupons that add money back to the payer's money box.
       operationId: createMenuFromPlanning
       parameters:
         - name: id
@@ -1611,8 +1611,8 @@ paths:
     get:
       tags:
         - Planning
-      summary: List available planning coupons
-      description: Returns every configured coupon with its current availability for the given payer user. Unavailable coupons include the last time they were used, the next time they can be redeemed again when a cooldown applies, and the reasons that currently block them.
+      summary: List planning coupon catalog
+      description: Returns every configured coupon with its rule description and cooldown status for the payer user. This listing does not inspect the planning contents; it only reflects whether the coupon is still inside its reuse window.
       operationId: listPlanningCoupons
       parameters:
         - name: id
@@ -1636,6 +1636,47 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/PlanningCouponResponse'
+        '404':
+          description: Planning or payer user not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/planning/{id}/coupons/validate:
+    post:
+      tags:
+        - Planning
+      summary: Validate selected planning coupons
+      description: Recomputes coupon eligibility from the current planning and returns only the requested coupons that are truly available. No state is changed and nothing is persisted.
+      operationId: validatePlanningCoupons
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidatePlanningCouponsRequest'
+      responses:
+        '200':
+          description: Selectable planning coupons returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlanningCouponResponse'
+        '400':
+          description: Invalid request or coupon not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '404':
           description: Planning or payer user not found
           content:
@@ -3449,7 +3490,7 @@ components:
           description: Number of users covered by the planning
           example: 4
     CreateMenuRequest:
-      description: Request used to establish a planning, assign its cost, optionally confirm the exact stock allocation, and redeem planning coupons.
+      description: Request used to establish a planning, assign its cost, optionally confirm the exact stock allocation, and redeem planning coupons after a final server-side revalidation.
       type: object
       required:
         - payerUserId
@@ -3635,7 +3676,7 @@ components:
           example: 18
     PlanningCouponResponse:
       type: object
-      required: [code, name, rewardAmount, periodDays, available]
+      required: [code, name, conditionDescription, conditionMet, rewardAmount, periodDays, available, usedRecently, informativeAvailabilityState]
       properties:
         code:
           type: string
@@ -3645,11 +3686,19 @@ components:
           type: string
           description: Coupon display name
           example: No repeated products
+        conditionDescription:
+          type: string
+          description: Human-readable rule that the coupon requires
+          example: The menu cannot repeat the same product on the same day or in the same day part across different days
+        conditionMet:
+          type: boolean
+          description: Whether the current evaluation context satisfies the coupon rule. Listing mode only checks cooldown, while validation and redemption also check the planning.
+          example: true
         rewardAmount:
           type: number
           format: double
           description: Money added to the user's money box when redeemed
-          example: 20.00
+          example: 15.00
         periodDays:
           type: integer
           format: int32
@@ -3659,6 +3708,12 @@ components:
           type: boolean
           description: Whether the coupon can be redeemed now
           example: true
+        usedRecently:
+          type: boolean
+          description: Whether the coupon was used recently and is still inside the cooldown window
+          example: false
+        informativeAvailabilityState:
+          $ref: '#/components/schemas/PlanningCouponAvailabilityState'
         lastUsedAt:
           type: string
           format: date-time
@@ -3677,6 +3732,27 @@ components:
           description: Reasons why the coupon cannot be redeemed now
           items:
             $ref: '#/components/schemas/PlanningCouponUnavailabilityReason'
+    PlanningCouponAvailabilityState:
+      type: string
+      enum: [AVAILABLE, CONDITION_NOT_MET, USED_RECENTLY, CONDITION_NOT_MET_AND_USED_RECENTLY]
+    ValidatePlanningCouponsRequest:
+      description: Request used to validate selected coupons against an existing planning.
+      type: object
+      required:
+        - payerUserId
+      properties:
+        payerUserId:
+          type: integer
+          format: int64
+          description: User identifier that wants to validate the coupons
+          example: 1
+        couponCodes:
+          type: array
+          nullable: true
+          description: Stable coupon codes to validate against the planning
+          items:
+            type: string
+          example: [NO_REPEATED_PRODUCTS]
     PlanningCouponUnavailabilityReason:
       type: string
       enum: [CONDITION_NOT_MET, USED_WITHIN_PERIOD]

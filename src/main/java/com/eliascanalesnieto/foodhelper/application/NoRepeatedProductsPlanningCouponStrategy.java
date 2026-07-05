@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class NoRepeatedProductsPlanningCouponStrategy implements PlanningCouponStrategy {
-    private static final BigDecimal REWARD_AMOUNT = new BigDecimal("20.00");
+    private static final BigDecimal REWARD_AMOUNT = new BigDecimal("15.00");
     private static final int PERIOD_DAYS = 30;
 
     @Override
@@ -26,6 +26,11 @@ public class NoRepeatedProductsPlanningCouponStrategy implements PlanningCouponS
     @Override
     public String name() {
         return "No repeated products";
+    }
+
+    @Override
+    public String conditionDescription() {
+        return "The menu cannot repeat the same product on the same day or in the same day part across different days";
     }
 
     @Override

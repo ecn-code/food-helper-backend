@@ -11,6 +11,7 @@ import com.eliascanalesnieto.foodhelper.presentation.error.DuplicateResourceExce
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -34,6 +35,7 @@ public class JdbcProductRepository implements ProductRepository {
                    p.grams_per_unit,
                    p.nutrition_basis,
                    p.default_price,
+                   p.created_at,
                    m.id AS media_id,
                    m.file_name,
                    m.content_type,
@@ -58,6 +60,7 @@ public class JdbcProductRepository implements ProductRepository {
     @Transactional
     public Product create(Product product) {
         try {
+            Instant createdAt = product.getCreatedAt() == null ? Instant.now() : product.getCreatedAt();
             ProductEntity savedProduct = productRepository.save(new ProductEntity(
                     null,
                     product.getName(),
@@ -65,7 +68,8 @@ public class JdbcProductRepository implements ProductRepository {
                     product.getGramsPerUnit(),
                     product.getNutritionBasis() == null ? NutritionBasis.PER_100_GRAMS.name() : product.getNutritionBasis().name(),
                     product.getDefaultPrice(),
-                    mediaId(product)
+                    mediaId(product),
+                    createdAt
             ));
             NutritionalValuesEntity savedValues = upsertNutritionalValues(savedProduct.id(), product.getNutritionalValues());
             replaceSupermarkets(savedProduct.id(), product.getSupermarkets());
@@ -82,6 +86,7 @@ public class JdbcProductRepository implements ProductRepository {
             throw new ResourceNotFoundException("Product not found");
         }
         try {
+            Instant createdAt = product.getCreatedAt() == null ? findById(id).getCreatedAt() : product.getCreatedAt();
             ProductEntity savedProduct = productRepository.save(new ProductEntity(
                     id,
                     product.getName(),
@@ -89,7 +94,8 @@ public class JdbcProductRepository implements ProductRepository {
                     product.getGramsPerUnit(),
                     product.getNutritionBasis() == null ? NutritionBasis.PER_100_GRAMS.name() : product.getNutritionBasis().name(),
                     product.getDefaultPrice(),
-                    mediaId(product)
+                    mediaId(product),
+                    createdAt
             ));
             NutritionalValuesEntity savedValues = upsertNutritionalValues(id, product.getNutritionalValues());
             replaceSupermarkets(id, product.getSupermarkets());
@@ -221,6 +227,7 @@ public class JdbcProductRepository implements ProductRepository {
                 .name(product.name())
                 .description(product.description())
                 .gramsPerUnit(product.gramsPerUnit())
+                .createdAt(product.createdAt())
                 .nutritionBasis(product.nutritionBasis() == null ? NutritionBasis.PER_100_GRAMS : NutritionBasis.valueOf(product.nutritionBasis()))
                 .defaultPrice(product.defaultPrice())
                 .photo(product.mediaId() == null ? null : Media.builder()
@@ -263,6 +270,7 @@ public class JdbcProductRepository implements ProductRepository {
                 .name(rs.getString("name"))
                 .description(rs.getString("description"))
                 .gramsPerUnit(rs.getBigDecimal("grams_per_unit"))
+                .createdAt(rs.getTimestamp("created_at").toInstant())
                 .nutritionBasis(NutritionBasis.valueOf(rs.getString("nutrition_basis")))
                 .defaultPrice(rs.getBigDecimal("default_price"))
                 .photo(mapMedia(rs))
