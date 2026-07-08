@@ -68,8 +68,8 @@ public class ProposedWeekMenuController {
 
     @GetMapping("/{id}/coupons")
     @Operation(
-            summary = "List planning coupon catalog",
-            description = "Returns every configured coupon with its rule description and cooldown status for the payer user. This listing does not inspect the planning contents; it only reflects whether the coupon is still inside its reuse window."
+            summary = "List planning-eligible coupons",
+            description = "Returns the configured coupons whose rules are satisfied by the requested planning, together with their cooldown status for the payer user."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Planning coupons returned",

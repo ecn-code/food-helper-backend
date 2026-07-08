@@ -12,6 +12,8 @@ public interface StockRepository {
 
     StockEntry create(Long productId, StockEntry stockEntry, StockMovementType movementType, LocalDate effectiveDate);
 
+    StockEntry findById(Long stockEntryId);
+
     default StockEntry update(Long stockEntryId, StockEntry stockEntry) {
         return update(stockEntryId, stockEntry, StockMovementType.ADJUSTMENT, LocalDate.now());
     }

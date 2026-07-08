@@ -147,7 +147,7 @@ public class CurrentWeekMenuController {
     @GetMapping("/{id}/week-stock")
     @Operation(
             summary = "List week stock",
-            description = "Returns the temporary stock tracked for the established week, separate from the global product stock."
+            description = "Returns the temporary stock tracked for the established week as individual lines, including quantity and unit price, separate from the global product stock."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Week stock returned",
@@ -199,10 +199,30 @@ public class CurrentWeekMenuController {
         return service.addStockMovement(id, request);
     }
 
+    @PostMapping("/{id}/week-stock/transfer")
+    @Operation(
+            summary = "Transfer stock entry to week stock",
+            description = "Consumes quantity from an existing global stock entry, appends it as an individual temporary stock line with the source unit price, and recalculates the shopping list without charging a money box."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Stock entry transferred to week stock",
+                    content = @Content(schema = @Schema(implementation = CurrentWeekMenuResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Transfer payload is invalid or the menu cannot be modified",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "404", description = "Menu, stock entry, or product not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public CurrentWeekMenuResponse transferStockToWeekStock(
+            @PathVariable Long id,
+            @Valid @RequestBody CreateMenuStockTransferRequest request
+    ) {
+        return service.transferStockToWeekStock(id, request);
+    }
+
     @PutMapping("/{id}/week-stock")
     @Operation(
             summary = "Replace week stock",
-            description = "Replaces the temporary stock tracked for the established week and updates the shopping list accordingly."
+            description = "Replaces the temporary stock tracked for the established week with individual lines, storing both quantity and unit price for each line, and updates the shopping list accordingly."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Week stock updated",

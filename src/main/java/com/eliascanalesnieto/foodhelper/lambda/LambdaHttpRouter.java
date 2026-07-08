@@ -147,6 +147,12 @@ public class LambdaHttpRouter {
             return json(401, Map.of("message", "Missing or invalid Bearer token"));
         }
 
+        if ("GET".equals(method) && "/api/v1/coupons".equals(path)) {
+            Long payerUserId = parseRequiredLong(queryParam(request, "payerUserId"), "payerUserId");
+            boolean onlyAvailable = Boolean.parseBoolean(queryParam(request, "onlyAvailable"));
+            return json(200, planningCouponService.findGlobalCoupons(payerUserId, onlyAvailable));
+        }
+
         if ("POST".equals(method) && "/api/v1/products".equals(path)) {
             CreateProductRequest body = parseCreate(request.getBody());
             Product created = service.create(

@@ -5,6 +5,7 @@ import com.eliascanalesnieto.foodhelper.domain.PlanningCouponRedemption;
 import com.eliascanalesnieto.foodhelper.domain.PlanningCouponRedemptionRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenu;
 import com.eliascanalesnieto.foodhelper.domain.UserMoneyRepository;
+import com.eliascanalesnieto.foodhelper.presentation.CouponResponse;
 import com.eliascanalesnieto.foodhelper.presentation.PlanningCouponResponse;
 import java.time.Clock;
 import java.time.Instant;
@@ -31,15 +32,23 @@ public class PlanningCouponService {
     private final Clock clock;
 
     @Transactional(readOnly = true)
+    public List<CouponResponse> findGlobalCoupons(Long payerUserId, boolean onlyAvailable) {
+        return evaluateTemporalCoupons(payerUserId).stream()
+                .map(this::toCouponResponse)
+                .filter(coupon -> !onlyAvailable || coupon.available())
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<PlanningCouponResponse> findCoupons(Long proposedWeekMenuId, Long payerUserId) {
-        proposedWeekMenuService.findById(proposedWeekMenuId);
-        return evaluateTemporalCoupons(payerUserId);
+        ProposedWeekMenu proposedMenu = proposedWeekMenuService.findById(proposedWeekMenuId);
+        return evaluatePlanningCoupons(proposedMenu, payerUserId);
     }
 
     @Transactional(readOnly = true)
     public List<PlanningCouponResponse> findCoupons(ProposedWeekMenu proposedMenu, Long payerUserId) {
         appUserRepository.findById(payerUserId);
-        return evaluateTemporalCoupons(payerUserId);
+        return evaluatePlanningCoupons(proposedMenu, payerUserId);
     }
 
     @Transactional(readOnly = true)
@@ -140,6 +149,16 @@ public class PlanningCouponService {
                 .toList();
     }
 
+    private CouponResponse toCouponResponse(PlanningCouponResponse response) {
+        return new CouponResponse(
+                response.code(),
+                response.name(),
+                response.conditionDescription(),
+                response.available(),
+                response.unavailableReasons()
+        );
+    }
+
     private List<PlanningCouponResponse> evaluateCoupons(ProposedWeekMenu proposedMenu, Long payerUserId) {
         appUserRepository.findById(payerUserId);
         Instant now = Instant.now(clock);
@@ -148,6 +167,12 @@ public class PlanningCouponService {
         return strategies.stream()
                 .sorted(java.util.Comparator.comparing(PlanningCouponStrategy::code))
                 .map(strategy -> strategy.evaluate(proposedMenu, payerUserId, latestRedemptions.get(strategy.code()), now))
+                .toList();
+    }
+
+    private List<PlanningCouponResponse> evaluatePlanningCoupons(ProposedWeekMenu proposedMenu, Long payerUserId) {
+        return evaluateCoupons(proposedMenu, payerUserId).stream()
+                .filter(PlanningCouponResponse::conditionMet)
                 .toList();
     }
 

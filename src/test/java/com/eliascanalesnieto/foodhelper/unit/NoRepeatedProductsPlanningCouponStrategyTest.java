@@ -16,19 +16,45 @@ class NoRepeatedProductsPlanningCouponStrategyTest {
     private final NoRepeatedProductsPlanningCouponStrategy strategy = new NoRepeatedProductsPlanningCouponStrategy();
 
     @Test
-    void shouldAllowDistinctProductsAcrossDifferentDaysAndDayParts() {
+    void shouldAllowDistinctProductsAcrossDifferentDaysAndDayPartsWhenEveryDayHasThreeProducts() {
         ProposedWeekMenu menu = menu(
-                day("2026-06-01", section(1L, product(10L), product(11L))),
-                day("2026-06-02", section(2L, product(10L)), section(3L, product(12L)))
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 2),
+                day("2026-06-01", section(1L, product(10L), product(11L), product(12L))),
+                day("2026-06-02", section(2L, product(13L), product(14L), product(15L)))
         );
 
         assertThat(strategy.matches(menu)).isTrue();
     }
 
     @Test
+    void shouldRejectDayWithLessThanThreeProducts() {
+        ProposedWeekMenu menu = menu(
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 1),
+                day("2026-06-01", section(1L, product(10L), product(11L)))
+        );
+
+        assertThat(strategy.matches(menu)).isFalse();
+    }
+
+    @Test
+    void shouldRejectMenuWhenAPlannedDayIsMissing() {
+        ProposedWeekMenu menu = menu(
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 2),
+                day("2026-06-01", section(1L, product(10L), product(11L), product(12L)))
+        );
+
+        assertThat(strategy.matches(menu)).isFalse();
+    }
+
+    @Test
     void shouldRejectRepeatedProductOnTheSameDay() {
         ProposedWeekMenu menu = menu(
-                day("2026-06-01", section(1L, product(10L)), section(2L, product(10L)))
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 1),
+                day("2026-06-01", section(1L, product(10L), product(11L), product(10L)))
         );
 
         assertThat(strategy.matches(menu)).isFalse();
@@ -37,15 +63,19 @@ class NoRepeatedProductsPlanningCouponStrategyTest {
     @Test
     void shouldRejectRepeatedProductOnTheSameDayPartAcrossDifferentDays() {
         ProposedWeekMenu menu = menu(
-                day("2026-06-01", section(1L, product(10L))),
-                day("2026-06-02", section(1L, product(10L)))
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 2),
+                day("2026-06-01", section(1L, product(10L), product(11L), product(12L))),
+                day("2026-06-02", section(1L, product(10L), product(13L), product(14L)))
         );
 
         assertThat(strategy.matches(menu)).isFalse();
     }
 
-    private ProposedWeekMenu menu(ProposedWeekMenuDay... days) {
+    private ProposedWeekMenu menu(LocalDate startDate, LocalDate endDate, ProposedWeekMenuDay... days) {
         return ProposedWeekMenu.builder()
+                .startDate(startDate)
+                .endDate(endDate)
                 .days(List.of(days))
                 .build();
     }

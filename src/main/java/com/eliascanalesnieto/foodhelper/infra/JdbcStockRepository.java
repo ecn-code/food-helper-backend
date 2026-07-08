@@ -45,6 +45,11 @@ public class JdbcStockRepository implements StockRepository {
     }
 
     @Override
+    public StockEntry findById(Long stockEntryId) {
+        return findStockEntry(stockEntryId);
+    }
+
+    @Override
     @Transactional
     public StockEntry update(Long stockEntryId, StockEntry stockEntry, StockMovementType movementType, LocalDate effectiveDate) {
         StockEntryEntity existingEntry = stockCrudRepository.findById(stockEntryId)

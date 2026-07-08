@@ -1611,8 +1611,8 @@ paths:
     get:
       tags:
         - Planning
-      summary: List planning coupon catalog
-      description: Returns every configured coupon with its rule description and cooldown status for the payer user. This listing does not inspect the planning contents; it only reflects whether the coupon is still inside its reuse window.
+      summary: List planning-eligible coupons
+      description: Returns the configured coupons whose rules are satisfied by the requested planning, together with their cooldown status for the payer user.
       operationId: listPlanningCoupons
       parameters:
         - name: id
@@ -1638,6 +1638,41 @@ paths:
                   $ref: '#/components/schemas/PlanningCouponResponse'
         '404':
           description: Planning or payer user not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /api/v1/coupons:
+    get:
+      tags:
+        - Coupons
+      summary: List global coupon catalog
+      description: Returns every configured coupon for the requested payer user. Use onlyAvailable=true to keep only coupons that can be redeemed right now.
+      operationId: listCoupons
+      parameters:
+        - name: payerUserId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: onlyAvailable
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Coupons returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CouponResponse'
+        '404':
+          description: Payer user not found
           content:
             application/json:
               schema:
@@ -1863,7 +1898,7 @@ paths:
       tags:
         - Menus
       summary: List week stock
-      description: Returns the temporary stock tracked for the established week, separate from the global product stock.
+      description: Returns the temporary stock tracked for the established week as individual lines, including quantity and unit price, separate from the global product stock.
       operationId: listMenuWeekStock
       parameters:
         - name: id
@@ -1887,11 +1922,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+    post:
+      tags:
+        - Menus
+      summary: Transfer stock entry to week stock
+      description: Consumes quantity from an existing global stock entry, appends it as an individual temporary stock line with the source unit price, and recalculates the shopping list without charging a money box.
+      operationId: transferStockToWeekStock
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMenuStockTransferRequest'
+            example:
+              stockEntryId: 7
+              quantity: 1.5
+      responses:
+        '200':
+          description: Stock entry transferred to week stock
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuResponse'
+        '400':
+          description: Transfer payload is invalid or the menu cannot be modified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Menu, stock entry, or product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
     put:
       tags:
         - Menus
       summary: Replace week stock
-      description: Replaces the temporary stock tracked for the established week and updates the shopping list accordingly.
+      description: Replaces the temporary stock tracked for the established week with individual lines, storing both quantity and unit price for each line, and updates the shopping list accordingly.
       operationId: replaceMenuWeekStock
       parameters:
         - name: id
@@ -1910,6 +1986,10 @@ paths:
               weekStock:
                 - productId: 1
                   quantity: 1.5
+                  price: 2.49
+                - productId: 1
+                  quantity: 0.5
+                  price: 1.99
       responses:
         '200':
           description: Week stock updated
@@ -3689,7 +3769,7 @@ components:
         conditionDescription:
           type: string
           description: Human-readable rule that the coupon requires
-          example: The menu cannot repeat the same product on the same day or in the same day part across different days
+          example: The menu must fill every planned day with at least 3 products and cannot repeat the same product on the same day or in the same day part across different days
         conditionMet:
           type: boolean
           description: Whether the current evaluation context satisfies the coupon rule. Listing mode only checks cooldown, while validation and redemption also check the planning.
@@ -3729,6 +3809,31 @@ components:
         unavailableReasons:
           type: array
           nullable: true
+          description: Reasons why the coupon cannot be redeemed now
+          items:
+            $ref: '#/components/schemas/PlanningCouponUnavailabilityReason'
+    CouponResponse:
+      type: object
+      required: [code, name, conditionDescription, available]
+      properties:
+        code:
+          type: string
+          description: Stable coupon code
+          example: NO_REPEATED_PRODUCTS
+        name:
+          type: string
+          description: Coupon display name
+          example: No repeated products
+        conditionDescription:
+          type: string
+          description: Human-readable rule that the coupon requires
+          example: The menu must fill every planned day with at least 3 products and cannot repeat the same product on the same day or in the same day part across different days
+        available:
+          type: boolean
+          description: Whether the coupon can be redeemed now
+          example: true
+        unavailableReasons:
+          type: array
           description: Reasons why the coupon cannot be redeemed now
           items:
             $ref: '#/components/schemas/PlanningCouponUnavailabilityReason'
@@ -4400,6 +4505,10 @@ components:
           type: number
           description: Quantity currently available in the week stock
           example: 1.5
+        price:
+          type: number
+          description: Unit price stored for the menu stock item
+          example: 2.49
     MenuShoppingListItemResponse:
       type: object
       properties:
@@ -4423,14 +4532,31 @@ components:
       properties:
         weekStock:
           type: array
-          description: Temporary stock items to save for the established week
+          description: Temporary stock lines with quantity and unit price to save for the established week. The same product may appear more than once.
           items:
             $ref: '#/components/schemas/WeekStockItemRequest'
+    CreateMenuStockTransferRequest:
+      type: object
+      required:
+        - stockEntryId
+        - quantity
+      properties:
+        stockEntryId:
+          type: integer
+          format: int64
+          description: Stock entry identifier to consume
+          example: 7
+        quantity:
+          type: number
+          exclusiveMinimum: 0
+          description: Quantity to move from the stock entry into the menu stock
+          example: 1.5
     WeekStockItemRequest:
       type: object
       required:
         - productId
         - quantity
+        - price
       properties:
         productId:
           type: integer
@@ -4442,6 +4568,11 @@ components:
           exclusiveMinimum: 0
           description: Quantity currently available in the week stock
           example: 1.5
+        price:
+          type: number
+          minimum: 0
+          description: Unit price stored for the menu stock item
+          example: 2.49
     NutritionalValuesResponse:
       type: object
       properties:

@@ -116,18 +116,27 @@ class ProductLambdaRouterIntegrationTest {
         String token = auth.token();
         String suffix = Long.toString(System.nanoTime());
 
-        APIGatewayProxyResponseEvent product = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
-                .withHttpMethod("POST")
-                .withPath("/api/v1/products")
-                .withHeaders(authHeaders(token))
-                .withBody("{\"name\":\"Coupon Lambda Product " + suffix + "\",\"description\":\"Coupon\",\"gramsPerUnit\":100,\"calories\":10,\"carbohydrates\":2,\"proteins\":3,\"fats\":1}"));
-        assertThat(product.getStatusCode()).isEqualTo(201);
-        long productId = readLong(product.getBody(), "id");
+        long firstProductId = createProduct(token, "Coupon Lambda Product " + suffix, "Coupon", 10, 2, 3, 1);
+        long secondProductId = createProduct(token, "Coupon Lambda Product 2 " + suffix, "Coupon", 11, 3, 4, 2);
+        long thirdProductId = createProduct(token, "Coupon Lambda Product 3 " + suffix, "Coupon", 12, 4, 5, 3);
+        long fourthProductId = createProduct(token, "Coupon Lambda Product 4 " + suffix, "Coupon", 13, 5, 6, 4);
+        long fifthProductId = createProduct(token, "Coupon Lambda Product 5 " + suffix, "Coupon", 14, 6, 7, 5);
+        long sixthProductId = createProduct(token, "Coupon Lambda Product 6 " + suffix, "Coupon", 15, 7, 8, 6);
 
         long dayPartId = dayPartRepository.create(ProposedWeekMenuDayPart.builder()
                 .name("Coupon Lambda Lunch " + suffix)
                 .description("Lunch")
                 .sortOrder(20)
+                .build()).getId();
+        long secondDayPartId = dayPartRepository.create(ProposedWeekMenuDayPart.builder()
+                .name("Coupon Lambda Dinner " + suffix)
+                .description("Dinner")
+                .sortOrder(30)
+                .build()).getId();
+        long thirdDayPartId = dayPartRepository.create(ProposedWeekMenuDayPart.builder()
+                .name("Coupon Lambda Snack " + suffix)
+                .description("Snack")
+                .sortOrder(40)
                 .build()).getId();
 
         APIGatewayProxyResponseEvent planning = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
@@ -142,8 +151,20 @@ class ProductLambdaRouterIntegrationTest {
                 .withHttpMethod("PUT")
                 .withPath("/api/v1/planning/" + planningId + "/days")
                 .withHeaders(authHeaders(token))
-                .withBody("{\"date\":\"2031-02-01\",\"sections\":[{\"dayPartId\":" + dayPartId + ",\"products\":[{\"productId\":" + productId + ",\"units\":1,\"sortOrder\":10}]}]}"));
+                .withBody(dayJson("2031-02-01",
+                        sectionJson(dayPartId, firstProductId, 10),
+                        sectionJson(secondDayPartId, secondProductId, 20),
+                        sectionJson(thirdDayPartId, thirdProductId, 30))));
         assertThat(plannedDay.getStatusCode()).isEqualTo(200);
+        APIGatewayProxyResponseEvent secondPlannedDay = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("PUT")
+                .withPath("/api/v1/planning/" + planningId + "/days")
+                .withHeaders(authHeaders(token))
+                .withBody(dayJson("2031-02-02",
+                        sectionJson(dayPartId, fourthProductId, 10),
+                        sectionJson(secondDayPartId, fifthProductId, 20),
+                        sectionJson(thirdDayPartId, sixthProductId, 30))));
+        assertThat(secondPlannedDay.getStatusCode()).isEqualTo(200);
 
         APIGatewayProxyResponseEvent couponsBefore = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")
@@ -177,6 +198,93 @@ class ProductLambdaRouterIntegrationTest {
         assertThat(coupon.get("lastUsedAt").asText()).isNotBlank();
         assertThat(coupon.get("nextAvailableAt").asText()).isNotBlank();
         assertThat(coupon.get("unavailableReasons").get(0).asText()).isEqualTo("USED_WITHIN_PERIOD");
+
+        APIGatewayProxyResponseEvent globalCoupons = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/coupons")
+                .withHeaders(authHeaders(token))
+                .withQueryStringParameters(Map.of("payerUserId", Long.toString(auth.userId()))));
+        assertThat(globalCoupons.getStatusCode()).isEqualTo(200);
+        assertThat(findCoupon(readNode(globalCoupons.getBody()), "NO_REPEATED_PRODUCTS").get("available").asBoolean()).isFalse();
+    }
+
+    @Test
+    void shouldExposeGlobalCouponsThroughLambda() {
+        AuthSession auth = registerAndReadAuth();
+        AuthSession otherUser = registerAndReadAuth();
+        String token = auth.token();
+        String suffix = Long.toString(System.nanoTime());
+
+        long firstProductId = createProduct(token, "Global Coupon Product " + suffix, "Coupon", 10, 2, 3, 1);
+        long secondProductId = createProduct(token, "Global Coupon Product 2 " + suffix, "Coupon", 11, 3, 4, 2);
+        long thirdProductId = createProduct(token, "Global Coupon Product 3 " + suffix, "Coupon", 12, 4, 5, 3);
+
+        long dayPartId = dayPartRepository.create(ProposedWeekMenuDayPart.builder()
+                .name("Global Coupon Lunch " + suffix)
+                .description("Lunch")
+                .sortOrder(20)
+                .build()).getId();
+        long secondDayPartId = dayPartRepository.create(ProposedWeekMenuDayPart.builder()
+                .name("Global Coupon Dinner " + suffix)
+                .description("Dinner")
+                .sortOrder(30)
+                .build()).getId();
+        long thirdDayPartId = dayPartRepository.create(ProposedWeekMenuDayPart.builder()
+                .name("Global Coupon Snack " + suffix)
+                .description("Snack")
+                .sortOrder(40)
+                .build()).getId();
+
+        APIGatewayProxyResponseEvent planning = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath("/api/v1/planning")
+                .withHeaders(authHeaders(token))
+                .withBody("{\"startDate\":\"2031-04-01\",\"endDate\":\"2031-04-01\"}"));
+        assertThat(planning.getStatusCode()).isEqualTo(201);
+        long planningId = readLong(planning.getBody(), "id");
+
+        APIGatewayProxyResponseEvent plannedDay = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("PUT")
+                .withPath("/api/v1/planning/" + planningId + "/days")
+                .withHeaders(authHeaders(token))
+                .withBody(dayJson("2031-04-01",
+                        sectionJson(dayPartId, firstProductId, 10),
+                        sectionJson(secondDayPartId, secondProductId, 20),
+                        sectionJson(thirdDayPartId, thirdProductId, 30))));
+        assertThat(plannedDay.getStatusCode()).isEqualTo(200);
+
+        APIGatewayProxyResponseEvent couponsBefore = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/coupons")
+                .withHeaders(authHeaders(token))
+                .withQueryStringParameters(Map.of("payerUserId", Long.toString(auth.userId()))));
+        assertThat(couponsBefore.getStatusCode()).isEqualTo(200);
+        JsonNode beforeList = readNode(couponsBefore.getBody());
+        assertThat(findCoupon(beforeList, "NO_REPEATED_PRODUCTS").get("available").asBoolean()).isTrue();
+
+        APIGatewayProxyResponseEvent establish = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath("/api/v1/planning/" + planningId + "/menu")
+                .withHeaders(authHeaders(token))
+                .withBody("{\"payerUserId\":" + auth.userId() + ",\"couponCodes\":[\"NO_REPEATED_PRODUCTS\"]}"));
+        assertThat(establish.getStatusCode()).isEqualTo(201);
+
+        APIGatewayProxyResponseEvent couponsAfter = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/coupons")
+                .withHeaders(authHeaders(token))
+                .withQueryStringParameters(Map.of("payerUserId", Long.toString(auth.userId()))));
+        JsonNode afterList = readNode(couponsAfter.getBody());
+        assertThat(findCoupon(afterList, "NO_REPEATED_PRODUCTS").get("available").asBoolean()).isFalse();
+        assertThat(findCoupon(afterList, "NO_REPEATED_PRODUCTS").get("unavailableReasons").get(0).asText()).isEqualTo("USED_WITHIN_PERIOD");
+
+        APIGatewayProxyResponseEvent otherCoupons = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/coupons")
+                .withHeaders(authHeaders(token))
+                .withQueryStringParameters(Map.of("payerUserId", Long.toString(otherUser.userId()))));
+        assertThat(otherCoupons.getStatusCode()).isEqualTo(200);
+        assertThat(findCoupon(readNode(otherCoupons.getBody()), "NO_REPEATED_PRODUCTS").get("available").asBoolean()).isTrue();
     }
 
     @Test
@@ -190,6 +298,11 @@ class ProductLambdaRouterIntegrationTest {
         Long planningId = null;
         Long dayPartId = null;
         Long secondDayPartId = null;
+        Long thirdDayPartId = null;
+        Long extraProductId = null;
+        Long secondDayProductId = null;
+        Long thirdDayProductId = null;
+        Long fourthDayProductId = null;
         try {
             APIGatewayProxyResponseEvent ingredient = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                     .withHttpMethod("POST")
@@ -225,6 +338,16 @@ class ProductLambdaRouterIntegrationTest {
                     .description("Dinner")
                     .sortOrder(30)
                     .build()).getId();
+            thirdDayPartId = dayPartRepository.create(ProposedWeekMenuDayPart.builder()
+                    .name("Innovation Snack " + suffix)
+                    .description("Snack")
+                    .sortOrder(40)
+                    .build()).getId();
+
+            extraProductId = createProduct(token, "Innovation Extra " + suffix, "Extra", 18, 3, 4, 1);
+            secondDayProductId = createProduct(token, "Innovation Day 2 Product 1 " + suffix, "Second day", 19, 4, 5, 2);
+            thirdDayProductId = createProduct(token, "Innovation Day 2 Product 2 " + suffix, "Second day", 20, 5, 6, 3);
+            fourthDayProductId = createProduct(token, "Innovation Day 2 Product 3 " + suffix, "Second day", 21, 6, 7, 4);
 
             APIGatewayProxyResponseEvent planning = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                     .withHttpMethod("POST")
@@ -238,8 +361,20 @@ class ProductLambdaRouterIntegrationTest {
                     .withHttpMethod("PUT")
                     .withPath("/api/v1/planning/" + planningId + "/days")
                     .withHeaders(authHeaders(token))
-                    .withBody("{\"date\":\"2031-03-01\",\"sections\":[{\"dayPartId\":" + dayPartId + ",\"products\":[{\"productId\":" + ingredientId + ",\"units\":1,\"sortOrder\":10}]},{\"dayPartId\":" + secondDayPartId + ",\"products\":[{\"productId\":" + derivedProductId + ",\"units\":1,\"sortOrder\":20}]}]}"));
+                    .withBody(dayJson("2031-03-01",
+                            sectionJson(dayPartId, ingredientId, 10),
+                            sectionJson(secondDayPartId, derivedProductId, 20),
+                            sectionJson(thirdDayPartId, extraProductId, 30))));
             assertThat(plannedDay.getStatusCode()).isEqualTo(200);
+            APIGatewayProxyResponseEvent secondPlannedDay = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                    .withHttpMethod("PUT")
+                    .withPath("/api/v1/planning/" + planningId + "/days")
+                    .withHeaders(authHeaders(token))
+                    .withBody(dayJson("2031-03-02",
+                            sectionJson(dayPartId, secondDayProductId, 10),
+                            sectionJson(secondDayPartId, thirdDayProductId, 20),
+                            sectionJson(thirdDayPartId, fourthDayProductId, 30))));
+            assertThat(secondPlannedDay.getStatusCode()).isEqualTo(200);
 
             APIGatewayProxyResponseEvent coupons = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                     .withHttpMethod("GET")
@@ -249,22 +384,32 @@ class ProductLambdaRouterIntegrationTest {
             assertThat(coupons.getStatusCode()).isEqualTo(200);
 
             JsonNode couponList = readNode(coupons.getBody());
-            assertThat(couponList.size()).isEqualTo(7);
+            assertThat(couponList.size()).isEqualTo(6);
             assertThat(findCoupon(couponList, "NO_REPEATED_PRODUCTS").get("available").asBoolean()).isTrue();
             assertThat(findCoupon(couponList, "INOVACION").get("available").asBoolean()).isTrue();
             assertThat(findCoupon(couponList, "VINTAGE").get("available").asBoolean()).isTrue();
             assertThat(findCoupon(couponList, "OUTSIDE").get("available").asBoolean()).isTrue();
             assertThat(findCoupon(couponList, "CAPRICHO").get("available").asBoolean()).isTrue();
             assertThat(findCoupon(couponList, "LUXURY").get("available").asBoolean()).isTrue();
-            assertThat(findCoupon(couponList, "SUSHI").get("available").asBoolean()).isTrue();
             assertThat(new java.math.BigDecimal(findCoupon(couponList, "INOVACION").get("rewardAmount").asText())).isEqualByComparingTo("15.00");
             assertThat(new java.math.BigDecimal(findCoupon(couponList, "VINTAGE").get("rewardAmount").asText())).isEqualByComparingTo("5.00");
             assertThat(new java.math.BigDecimal(findCoupon(couponList, "OUTSIDE").get("rewardAmount").asText())).isEqualByComparingTo("20.00");
             assertThat(new java.math.BigDecimal(findCoupon(couponList, "CAPRICHO").get("rewardAmount").asText())).isEqualByComparingTo("10.00");
             assertThat(new java.math.BigDecimal(findCoupon(couponList, "LUXURY").get("rewardAmount").asText())).isEqualByComparingTo("50.00");
-            assertThat(new java.math.BigDecimal(findCoupon(couponList, "SUSHI").get("rewardAmount").asText())).isEqualByComparingTo("20.00");
         } finally {
-            cleanupPlannedCouponTestData(planningId, dayPartId, secondDayPartId, ingredientId, derivedProductId, recipeId);
+            cleanupPlannedCouponTestData(
+                    planningId,
+                    dayPartId,
+                    secondDayPartId,
+                    thirdDayPartId,
+                    ingredientId,
+                    derivedProductId,
+                    recipeId,
+                    extraProductId,
+                    secondDayProductId,
+                    thirdDayProductId,
+                    fourthDayProductId
+            );
         }
     }
 
@@ -293,7 +438,16 @@ class ProductLambdaRouterIntegrationTest {
         assertThat(readDecimal(loaded.getBody(), "weekly.proteins.maximum")).isEqualByComparingTo("20");
     }
 
-    private void cleanupPlannedCouponTestData(Long planningId, Long dayPartId, Long secondDayPartId, Long ingredientId, Long derivedProductId, Long recipeId) {
+    private void cleanupPlannedCouponTestData(
+            Long planningId,
+            Long dayPartId,
+            Long secondDayPartId,
+            Long thirdDayPartId,
+            Long ingredientId,
+            Long derivedProductId,
+            Long recipeId,
+            Long... extraProductIds
+    ) {
         if (planningId != null) {
             jdbcTemplate.update("""
                     DELETE FROM proposed_week_menu_products
@@ -324,7 +478,15 @@ class ProductLambdaRouterIntegrationTest {
         if (secondDayPartId != null) {
             jdbcTemplate.update("DELETE FROM proposed_week_menu_day_parts WHERE id = ?", secondDayPartId);
         }
+        if (thirdDayPartId != null) {
+            jdbcTemplate.update("DELETE FROM proposed_week_menu_day_parts WHERE id = ?", thirdDayPartId);
+        }
         cleanupRecipeTestData(ingredientId, derivedProductId, recipeId);
+        for (Long productId : extraProductIds) {
+            if (productId != null) {
+                jdbcTemplate.update("DELETE FROM products WHERE id = ?", productId);
+            }
+        }
     }
 
     private void cleanupRecipeTestData(Long ingredientId, Long derivedProductId, Long... recipeIds) {
@@ -1269,6 +1431,24 @@ class ProductLambdaRouterIntegrationTest {
         } catch (Exception ex) {
             throw new AssertionError("Unable to parse response: " + json, ex);
         }
+    }
+
+    private long createProduct(String token, String name, String description, int calories, int carbohydrates, int proteins, int fats) {
+        APIGatewayProxyResponseEvent product = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath("/api/v1/products")
+                .withHeaders(authHeaders(token))
+                .withBody("{\"name\":\"" + name + "\",\"description\":\"" + description + "\",\"gramsPerUnit\":100,\"calories\":" + calories + ",\"carbohydrates\":" + carbohydrates + ",\"proteins\":" + proteins + ",\"fats\":" + fats + "}"));
+        assertThat(product.getStatusCode()).isEqualTo(201);
+        return readLong(product.getBody(), "id");
+    }
+
+    private String dayJson(String date, String... sections) {
+        return "{\"date\":\"" + date + "\",\"sections\":[" + String.join(",", sections) + "]}";
+    }
+
+    private String sectionJson(long dayPartId, long productId, int sortOrder) {
+        return "{\"dayPartId\":" + dayPartId + ",\"products\":[{\"productId\":" + productId + ",\"units\":1,\"sortOrder\":" + sortOrder + "}]}";
     }
 
     private Map<String, String> authHeaders(String token) {

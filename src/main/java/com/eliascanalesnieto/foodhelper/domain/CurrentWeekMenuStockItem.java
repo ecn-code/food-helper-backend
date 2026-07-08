@@ -12,4 +12,5 @@ public class CurrentWeekMenuStockItem {
     Long productId;
     String productName;
     BigDecimal quantity;
+    BigDecimal price;
 }

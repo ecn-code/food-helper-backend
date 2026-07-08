@@ -144,7 +144,8 @@ public class CurrentWeekMenuApiMapper {
         return new CurrentWeekMenuStockItemResponse(
                 weekStockItem.getProductId(),
                 weekStockItem.getProductName(),
-                weekStockItem.getQuantity()
+                weekStockItem.getQuantity(),
+                weekStockItem.getPrice()
         );
     }
 

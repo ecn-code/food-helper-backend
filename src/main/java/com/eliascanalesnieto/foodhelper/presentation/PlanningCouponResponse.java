@@ -12,7 +12,7 @@ public record PlanningCouponResponse(
         String code,
         @Schema(description = "Coupon display name", example = "No repeated products")
         String name,
-        @Schema(description = "Human-readable rule that the coupon requires", example = "The menu cannot repeat the same product on the same day or in the same day part across days")
+        @Schema(description = "Human-readable rule that the coupon requires", example = "The menu must fill every planned day with at least 3 products and cannot repeat the same product on the same day or in the same day part across different days")
         String conditionDescription,
         @Schema(description = "Whether the current evaluation context satisfies the coupon rule. Listing mode only checks cooldown, while validation and redemption also check the planning.", example = "true")
         boolean conditionMet,

@@ -29,7 +29,7 @@ public record CurrentWeekMenuResponse(
         ProposedWeekMenuStockSummaryResponse stockSummary,
         @Schema(description = "Stock entries consumed to satisfy the menu")
         List<CurrentWeekMenuUsedStockResponse> usedStock,
-        @Schema(description = "Temporary stock tracked for the established week")
+        @Schema(description = "Temporary stock lines tracked for the established week with quantity and unit price")
         List<CurrentWeekMenuStockItemResponse> weekStock,
         @Schema(description = "Products still missing after consuming stock")
         List<CurrentWeekMenuShoppingListItemResponse> shoppingList,

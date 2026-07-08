@@ -6,7 +6,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
-@Schema(name = "UpdateCurrentWeekMenuStockRequest", description = "Payload for replacing the temporary stock of the established week")
+@Schema(name = "UpdateCurrentWeekMenuStockRequest", description = "Payload for replacing the temporary stock of the established week with quantity and unit price")
 public record UpdateCurrentWeekMenuStockRequest(
         @ArraySchema(schema = @Schema(implementation = CurrentWeekMenuStockItemRequest.class))
         @NotNull @Valid List<CurrentWeekMenuStockItemRequest> weekStock

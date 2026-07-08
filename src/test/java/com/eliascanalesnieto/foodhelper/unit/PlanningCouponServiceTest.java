@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.eliascanalesnieto.foodhelper.application.NoRepeatedProductsPlanningCouponStrategy;
+import com.eliascanalesnieto.foodhelper.application.SushiPlanningCouponStrategy;
 import com.eliascanalesnieto.foodhelper.application.PlanningCouponService;
 import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
 import com.eliascanalesnieto.foodhelper.domain.AppUser;
@@ -117,20 +118,33 @@ class PlanningCouponServiceTest {
     }
 
     @Test
-    void shouldListCouponByCooldownOnlyEvenIfThePlanningBreaksTheRule() {
+    void shouldNotListCouponWhenThePlanningBreaksTheRule() {
         ProposedWeekMenu menu = invalidMenu();
         when(clock.instant()).thenReturn(Instant.parse("2026-06-15T10:00:00Z"));
         when(redemptionRepository.findLatestByUserIdAndCouponCode(1L, "NO_REPEATED_PRODUCTS")).thenReturn(Optional.empty());
 
         List<PlanningCouponResponse> coupons = service.findCoupons(menu, 1L);
 
-        assertThat(coupons).singleElement().satisfies(coupon -> {
-            assertThat(coupon.conditionMet()).isTrue();
-            assertThat(coupon.available()).isTrue();
-            assertThat(coupon.usedRecently()).isFalse();
-            assertThat(coupon.informativeAvailabilityState()).isEqualTo(PlanningCouponAvailabilityState.AVAILABLE);
-            assertThat(coupon.unavailableReasons()).isEmpty();
-        });
+        assertThat(coupons).isEmpty();
+    }
+
+    @Test
+    void shouldNotListSushiCouponWhenThePlanningDoesNotIncludeProduct256() {
+        ProposedWeekMenu menu = invalidMenu();
+        PlanningCouponService sushiService = new PlanningCouponService(
+                proposedWeekMenuService,
+                redemptionRepository,
+                userMoneyRepository,
+                appUserRepository,
+                List.of(new SushiPlanningCouponStrategy()),
+                clock
+        );
+        when(clock.instant()).thenReturn(Instant.parse("2026-06-15T10:00:00Z"));
+        when(redemptionRepository.findLatestByUserIdAndCouponCode(1L, "SUSHI")).thenReturn(Optional.empty());
+
+        List<PlanningCouponResponse> coupons = sushiService.findCoupons(menu, 1L);
+
+        assertThat(coupons).isEmpty();
     }
 
     @Test
@@ -207,6 +221,18 @@ class PlanningCouponServiceTest {
                                                                 .units(BigDecimal.ONE)
                                                                 .grams(BigDecimal.ONE)
                                                                 .sortOrder(10)
+                                                                .build(),
+                                                        ProposedWeekMenuProduct.builder()
+                                                                .productId(11L)
+                                                                .units(BigDecimal.ONE)
+                                                                .grams(BigDecimal.ONE)
+                                                                .sortOrder(11)
+                                                                .build(),
+                                                        ProposedWeekMenuProduct.builder()
+                                                                .productId(12L)
+                                                                .units(BigDecimal.ONE)
+                                                                .grams(BigDecimal.ONE)
+                                                                .sortOrder(12)
                                                                 .build()
                                                 ))
                                                 .build()

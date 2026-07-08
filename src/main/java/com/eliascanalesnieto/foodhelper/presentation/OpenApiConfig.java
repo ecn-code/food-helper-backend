@@ -101,6 +101,11 @@ public class OpenApiConfig {
     }
 
     @Bean
+    GroupedOpenApi couponsApi() {
+        return groupedApi("coupons", "Coupons", "/api/v1/coupons", "/api/v1/coupons/**").build();
+    }
+
+    @Bean
     GroupedOpenApi planningApi() {
         return groupedApi(
                 "planning",
