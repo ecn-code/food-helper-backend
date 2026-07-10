@@ -8,10 +8,15 @@ import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProductSearchCriteria;
 import com.eliascanalesnieto.foodhelper.domain.RecipeRepository;
+import com.eliascanalesnieto.foodhelper.domain.RecipeDerivedProduct;
+import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
 import com.eliascanalesnieto.foodhelper.domain.SupermarketRepository;
+import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -93,6 +98,11 @@ public class ProductService {
         return new PageResult<>(items, pagination.page(), pagination.size(), repository.count(searchCriteria));
     }
 
+    @Transactional(readOnly = true)
+    public Product findById(Long id) {
+        return attachDerived(repository.findById(id));
+    }
+
     @Transactional
     public void delete(Long id) {
         Product existing = repository.findById(id);
@@ -104,7 +114,47 @@ public class ProductService {
 
     private Product attachDerived(Product product) {
         return product.toBuilder()
-                .derivedProduct(recipeRepository.findDerivedProductByProductId(product.getId()).orElse(null))
+                .derivedProduct(recipeRepository.findDerivedProductByProductId(product.getId())
+                        .map(this::completeDerivedProduct)
+                        .orElse(null))
+                .build();
+    }
+
+    private RecipeDerivedProduct completeDerivedProduct(RecipeDerivedProduct derivedProduct) {
+        Map<Long, Product> productsById = loadProducts(derivedProduct.getIngredients());
+        return RecipeDerivedProduct.builder()
+                .recipeId(derivedProduct.getRecipeId())
+                .productId(derivedProduct.getProductId())
+                .name(derivedProduct.getName())
+                .unitsProduced(derivedProduct.getUnitsProduced())
+                .stockFromComposition(derivedProduct.isStockFromComposition())
+                .ingredients(derivedProduct.getIngredients().stream()
+                        .map(ingredient -> enrichIngredient(ingredient, productsById.get(ingredient.getProductId())))
+                        .toList())
+                .build();
+    }
+
+    private Map<Long, Product> loadProducts(List<RecipeIngredient> ingredients) {
+        List<Long> ids = ingredients.stream()
+                .map(RecipeIngredient::getProductId)
+                .distinct()
+                .toList();
+        List<Product> products = repository.findByIds(ids);
+        if (products.size() != ids.size()) {
+            throw new ResourceNotFoundException("One or more products were not found");
+        }
+        Map<Long, Product> productsById = new LinkedHashMap<>();
+        products.forEach(product -> productsById.put(product.getId(), product));
+        return productsById;
+    }
+
+    private RecipeIngredient enrichIngredient(RecipeIngredient ingredient, Product product) {
+        return RecipeIngredient.builder()
+                .productId(product.getId())
+                .productName(product.getName())
+                .quantity(ingredient.getQuantity())
+                .quantityType(ingredient.getQuantityType())
+                .nutritionalValues(ingredient.getNutritionalValues())
                 .build();
     }
 

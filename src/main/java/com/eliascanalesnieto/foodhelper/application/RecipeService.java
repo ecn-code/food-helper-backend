@@ -284,6 +284,7 @@ public class RecipeService {
     private RecipeDerivedProduct completeDerivedProduct(RecipeDerivedProduct derivedProduct) {
         Map<Long, Product> productsById = loadProducts(derivedProduct.getIngredients());
         return RecipeDerivedProduct.builder()
+                .recipeId(derivedProduct.getRecipeId())
                 .productId(derivedProduct.getProductId())
                 .name(derivedProduct.getName())
                 .unitsProduced(scale(derivedProduct.getUnitsProduced()))
@@ -307,6 +308,7 @@ public class RecipeService {
                 .nutritionBasis(NutritionBasis.PER_UNIT)
                 .nutritionalValues(divideNutrients(recipe.getNutritionalValues(), units))
                 .derivedProduct(RecipeDerivedProduct.builder()
+                        .recipeId(recipe.getId())
                         .productId(derivedProduct.getProductId())
                         .name(derivedProduct.getName())
                         .unitsProduced(units)

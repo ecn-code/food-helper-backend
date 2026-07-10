@@ -346,6 +346,7 @@ public class JdbcRecipeRepository implements RecipeRepository {
 
     private RecipeDerivedProduct toDomain(RecipeProductOriginEntity origin, List<RecipeIngredient> ingredients) {
         return RecipeDerivedProduct.builder()
+                .recipeId(origin.recipeId())
                 .productId(origin.productId())
                 .name(productRepository.findById(origin.productId()).getName())
                 .unitsProduced(origin.unitsProduced())

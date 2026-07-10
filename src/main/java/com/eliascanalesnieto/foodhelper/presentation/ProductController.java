@@ -91,6 +91,21 @@ public class ProductController {
                 .toList(), result.page(), result.size(), result.totalElements(), result.totalPages());
     }
 
+    @GetMapping("/{id}")
+    @Operation(
+            summary = "Get product",
+            description = "Returns a single product by identifier, including derived product data when the product comes from a recipe."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Product returned",
+                    content = @Content(schema = @Schema(implementation = ProductResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Product not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public ProductResponse findById(@PathVariable Long id) {
+        return mapper.toResponse(service.findById(id));
+    }
+
     @GetMapping("/stats")
     @Operation(
             summary = "Product statistics",

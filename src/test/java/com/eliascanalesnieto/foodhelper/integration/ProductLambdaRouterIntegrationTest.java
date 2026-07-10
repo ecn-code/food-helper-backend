@@ -705,6 +705,18 @@ class ProductLambdaRouterIntegrationTest {
         assertThat(derivedProductResponse.getStatusCode()).isEqualTo(201);
         assertThat(derivedProductResponse.getBody()).contains("4.00");
         assertThat(derivedProductResponse.getBody()).contains("Lambda Curry Base " + suffix);
+        long derivedProductId = readLong(derivedProductResponse.getBody(), "productId");
+
+        APIGatewayProxyResponseEvent derivedProductView = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/products/" + derivedProductId)
+                .withHeaders(authHeaders(token)));
+        assertThat(derivedProductView.getStatusCode()).isEqualTo(200);
+        assertThat(readLong(derivedProductView.getBody(), "derivedProduct.recipeId")).isEqualTo(recipeId);
+        assertThat(readText(derivedProductView.getBody(), "derivedProduct.name")).isEqualTo("Lambda Curry Base " + suffix);
+        assertThat(readLong(derivedProductView.getBody(), "derivedProduct.ingredients.0.productId")).isEqualTo(ingredientId);
+        assertThat(readText(derivedProductView.getBody(), "derivedProduct.ingredients.0.productName")).isEqualTo("Chicken breast " + suffix);
+        assertThat(readDecimal(derivedProductView.getBody(), "derivedProduct.ingredients.0.quantity")).isEqualByComparingTo("50.00");
 
         APIGatewayProxyResponseEvent filteredRecipes = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")
@@ -1001,6 +1013,20 @@ class ProductLambdaRouterIntegrationTest {
         assertThat(establishedSummary.get("menuId").asLong()).isEqualTo(currentWeekMenuId);
         assertThat(establishedSummary.get("plannedDays").asInt()).isOne();
 
+        APIGatewayProxyResponseEvent establishedMenus = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/menus")
+                .withHeaders(authHeaders(token))
+                .withQueryStringParameters(Map.of("page", "0", "size", "5", "state", "ESTABLISHED")));
+        assertThat(establishedMenus.getStatusCode()).isEqualTo(200);
+        JsonNode establishedMenusPage = readNode(establishedMenus.getBody());
+        assertThat(establishedMenusPage.get("items")).isNotNull();
+        assertThat(establishedMenusPage.get("page").asInt()).isEqualTo(0);
+        assertThat(establishedMenusPage.get("size").asInt()).isEqualTo(5);
+        assertThat(establishedMenusPage.get("totalElements").asInt()).isGreaterThanOrEqualTo(1);
+        assertThat(establishedMenusPage.get("items").findValuesAsText("id"))
+                .contains(Long.toString(currentWeekMenuId));
+
         APIGatewayProxyResponseEvent completeList = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")
                 .withPath("/api/v1/menus/" + currentWeekMenuId + "/shopping-list")
@@ -1046,6 +1072,17 @@ class ProductLambdaRouterIntegrationTest {
                 .withPath("/api/v1/planning")
                 .withHeaders(authHeaders(token)));
         assertThat(findById(readNode(closedCatalog.getBody()), menuId).get("state").asText()).isEqualTo("CLOSED");
+
+        APIGatewayProxyResponseEvent closedMenus = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/menus")
+                .withHeaders(authHeaders(token))
+                .withQueryStringParameters(Map.of("page", "0", "size", "5", "state", "CLOSED")));
+        assertThat(closedMenus.getStatusCode()).isEqualTo(200);
+        JsonNode closedMenusPage = readNode(closedMenus.getBody());
+        assertThat(closedMenusPage.get("totalElements").asInt()).isGreaterThanOrEqualTo(1);
+        assertThat(closedMenusPage.get("items").findValuesAsText("id"))
+                .contains(Long.toString(currentWeekMenuId));
 
         APIGatewayProxyResponseEvent updateProduct = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("PUT")

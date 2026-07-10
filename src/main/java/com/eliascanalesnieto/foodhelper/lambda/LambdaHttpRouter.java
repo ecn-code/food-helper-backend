@@ -19,6 +19,7 @@ import com.eliascanalesnieto.foodhelper.application.StockService;
 import com.eliascanalesnieto.foodhelper.application.SupermarketService;
 import com.eliascanalesnieto.foodhelper.application.UserMoneyService;
 import com.eliascanalesnieto.foodhelper.application.UserWeightService;
+import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuState;
 import com.eliascanalesnieto.foodhelper.domain.Product;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
 import com.eliascanalesnieto.foodhelper.domain.ProductSearchCriteria;
@@ -38,6 +39,7 @@ import com.eliascanalesnieto.foodhelper.presentation.EstablishProposedWeekMenuRe
 import com.eliascanalesnieto.foodhelper.presentation.LoginRequest;
 import com.eliascanalesnieto.foodhelper.presentation.ProductApiMapper;
 import com.eliascanalesnieto.foodhelper.presentation.ProductPageResponse;
+import com.eliascanalesnieto.foodhelper.presentation.MenuPageResponse;
 import com.eliascanalesnieto.foodhelper.presentation.ProposedWeekMenuApiMapper;
 import com.eliascanalesnieto.foodhelper.presentation.RecipeIngredientAssignmentRequest;
 import com.eliascanalesnieto.foodhelper.presentation.RecipePageResponse;
@@ -324,6 +326,10 @@ public class LambdaHttpRouter {
                     ).stream().map(mapper::toResponse).toList());
                 }
             }
+            if ("GET".equals(method)) {
+                Long id = parseId(path);
+                return json(200, mapper.toResponse(service.findById(id)));
+            }
             Long id = parseId(path);
             if ("PUT".equals(method)) {
                 UpdateProductRequest body = parseUpdate(request.getBody());
@@ -377,7 +383,10 @@ public class LambdaHttpRouter {
         }
 
         if ("GET".equals(method) && "/api/v1/menus".equals(path)) {
-            return json(200, currentWeekMenuService.findAll());
+            return json(200, toMenuPage(
+                    parsePagination(request),
+                    parseOptionalMenuState(queryParam(request, "state"))
+            ));
         }
 
         if ("GET".equals(method) && "/api/v1/menus/stats".equals(path)) {
@@ -849,6 +858,18 @@ public class LambdaHttpRouter {
         );
     }
 
+    private MenuPageResponse toMenuPage(PaginationRequest pagination, CurrentWeekMenuState state) {
+        PageResult<com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuResponse> page =
+                currentWeekMenuService.findPage(pagination, state);
+        return new MenuPageResponse(
+                page.items(),
+                page.page(),
+                page.size(),
+                page.totalElements(),
+                page.totalPages()
+        );
+    }
+
     private APIGatewayProxyResponseEvent json(int status, Object body) {
         try {
             return new APIGatewayProxyResponseEvent()
@@ -916,6 +937,17 @@ public class LambdaHttpRouter {
             return LocalDate.parse(value);
         } catch (Exception ex) {
             throw new IllegalArgumentException("Invalid date");
+        }
+    }
+
+    private CurrentWeekMenuState parseOptionalMenuState(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return CurrentWeekMenuState.valueOf(value);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("Invalid state");
         }
     }
 

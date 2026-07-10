@@ -177,7 +177,8 @@ public class CurrentWeekMenuStatsService {
                 menu.shoppingList(),
                 safeStockMovements(menu),
                 safeRecipeProductions(menu),
-                menu.nutritionalRules()
+                menu.nutritionalRules(),
+                menu.state()
         );
     }
 

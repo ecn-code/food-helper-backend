@@ -6,6 +6,8 @@ import java.util.List;
 
 @Schema(name = "RecipeDerivedProductResponse", description = "Derived product information linked to a recipe")
 public record RecipeDerivedProductResponse(
+        @Schema(description = "Recipe identifier that created this derived product", example = "3")
+        Long recipeId,
         @Schema(description = "Derived product identifier", example = "7")
         Long productId,
         @Schema(description = "Derived product name", example = "Curry base")

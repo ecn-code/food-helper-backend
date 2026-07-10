@@ -8,6 +8,7 @@ import lombok.Value;
 @Value
 @Builder
 public class RecipeDerivedProduct {
+    Long recipeId;
     Long productId;
     String name;
     BigDecimal unitsProduced;

@@ -2,6 +2,7 @@ package com.eliascanalesnieto.foodhelper.presentation;
 
 import com.eliascanalesnieto.foodhelper.application.NutritionalRulesService;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenu;
+import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuState;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuRecipeProduction;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuShoppingListItem;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuStockItem;
@@ -34,7 +35,8 @@ public class CurrentWeekMenuApiMapper {
                 (menu.getShoppingList() == null ? java.util.List.<CurrentWeekMenuShoppingListItem>of() : menu.getShoppingList()).stream().map(this::toResponse).toList(),
                 (menu.getStockMovements() == null ? java.util.List.<MenuStockMovement>of() : menu.getStockMovements()).stream().map(this::toResponse).toList(),
                 (menu.getRecipeProductions() == null ? java.util.List.<CurrentWeekMenuRecipeProduction>of() : menu.getRecipeProductions()).stream().map(this::toResponse).toList(),
-                nutritionalRulesService.evaluate(menu.getNutritionalValues(), days.size())
+                nutritionalRulesService.evaluate(menu.getNutritionalValues(), days.size()),
+                CurrentWeekMenuState.ESTABLISHED
         );
     }
 

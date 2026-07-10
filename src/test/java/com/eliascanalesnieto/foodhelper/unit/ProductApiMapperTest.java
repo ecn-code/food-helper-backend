@@ -37,6 +37,14 @@ class ProductApiMapperTest {
                         .proteins(new java.math.BigDecimal("0.3"))
                         .fats(new java.math.BigDecimal("0.2"))
                         .build())
+                .derivedProduct(RecipeDerivedProduct.builder()
+                        .recipeId(8L)
+                        .productId(9L)
+                        .name("Apple compote")
+                        .unitsProduced(new BigDecimal("4"))
+                        .stockFromComposition(true)
+                        .ingredients(List.of())
+                        .build())
                 .build();
 
         ProductResponse response = mapper.toResponse(domain);
@@ -47,6 +55,9 @@ class ProductApiMapperTest {
         assertThat(response.gramsPerUnit()).isEqualByComparingTo("150");
         assertThat(response.defaultPrice()).isEqualByComparingTo("2.49");
         assertThat(response.nutritionalValues().calories()).isEqualByComparingTo("52");
+        assertThat(response.derivedProduct()).isNotNull();
+        assertThat(response.derivedProduct().recipeId()).isEqualTo(8L);
+        assertThat(response.derivedProduct().productId()).isEqualTo(9L);
     }
 
     @Test
@@ -75,6 +86,7 @@ class ProductApiMapperTest {
                                 .build())
                         .build()))
                 .derivedProduct(RecipeDerivedProduct.builder()
+                        .recipeId(3L)
                         .productId(9L)
                         .name("Curry base")
                         .unitsProduced(new BigDecimal("4"))
@@ -94,6 +106,7 @@ class ProductApiMapperTest {
         assertThat(response.products()).hasSize(1);
         assertThat(response.products().getFirst().productName()).isEqualTo("Chicken");
         assertThat(response.derivedProduct()).isNotNull();
+        assertThat(response.derivedProduct().recipeId()).isEqualTo(3L);
         assertThat(response.derivedProduct().name()).isEqualTo("Curry base");
         assertThat(response.derivedProduct().unitsProduced()).isEqualByComparingTo("4");
         assertThat(response.derivedProduct().stockFromComposition()).isTrue();

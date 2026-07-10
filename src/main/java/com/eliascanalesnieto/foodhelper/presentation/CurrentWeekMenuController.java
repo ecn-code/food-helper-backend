@@ -1,6 +1,9 @@
 package com.eliascanalesnieto.foodhelper.presentation;
 
 import com.eliascanalesnieto.foodhelper.application.CurrentWeekMenuService;
+import com.eliascanalesnieto.foodhelper.application.PageResult;
+import com.eliascanalesnieto.foodhelper.application.PaginationRequest;
+import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuState;
 import com.eliascanalesnieto.foodhelper.presentation.error.ApiError;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -27,25 +30,40 @@ import jakarta.validation.Valid;
 @RestController
 @RequestMapping("/api/v1/menus")
 @RequiredArgsConstructor
-@Tag(name = "Menus", description = "Inspect established week snapshots, consumed stock, week stock, recipe-to-stock transfers, missing products, and closure stats")
+@Tag(name = "Menus", description = "Inspect menu snapshots, lifecycle state, consumed stock, week stock, recipe-to-stock transfers, missing products, and closure stats")
 public class CurrentWeekMenuController {
     private final CurrentWeekMenuService service;
 
     @GetMapping
     @Operation(
             summary = "List menus",
-            description = "Returns all menus that have been created from planning, ordered by identifier."
+            description = "Returns a paginated list of menu snapshots with lifecycle state and action flags, ordered by start date descending and identifier as a stable tiebreaker."
     )
-    @ApiResponse(responseCode = "200", description = "Menus returned",
-            content = @Content(array = @ArraySchema(schema = @Schema(implementation = CurrentWeekMenuResponse.class))))
-    public List<CurrentWeekMenuResponse> findAll() {
-        return service.findAll();
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Menus returned",
+                    content = @Content(schema = @Schema(implementation = MenuPageResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid query parameters",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public MenuPageResponse findAll(
+            @io.swagger.v3.oas.annotations.Parameter(description = "Zero-based page number", example = "0")
+            @RequestParam(defaultValue = "0")
+            int page,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Number of items per page, between 1 and 100", example = "8")
+            @RequestParam(defaultValue = "20")
+            int size,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Optional menu state filter", schema = @Schema(allowableValues = {"CLOSED", "ESTABLISHED"}))
+            @RequestParam(required = false)
+            CurrentWeekMenuState state
+    ) {
+        PageResult<CurrentWeekMenuResponse> result = service.findPage(PaginationRequest.of(page, size), state);
+        return new MenuPageResponse(result.items(), result.page(), result.size(), result.totalElements(), result.totalPages());
     }
 
     @GetMapping("/{id}")
     @Operation(
             summary = "Get menu",
-            description = "Returns one menu snapshot with ordered days, nutritional totals, rule evaluation, stock summary, consumed stock, missing products, and assigned people when available."
+            description = "Returns one menu snapshot with lifecycle state, action flags, ordered days, nutritional totals, rule evaluation, stock summary, consumed stock, missing products, and assigned people when available."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Menu returned",
@@ -242,7 +260,7 @@ public class CurrentWeekMenuController {
     @PostMapping("/{id}/close")
     @Operation(
             summary = "Close menu",
-            description = "Closes a menu after its end date and saves an immutable history snapshot for every selected person. Repeating a successful close returns the originally saved statistics without duplicating snapshots."
+            description = "Closes a menu after its end date and saves an immutable history snapshot for every selected person. Repeating a successful close returns the originally saved statistics without duplicating snapshots. Positive week stock is transferred to the global stock unless transferWeekStock is set to false."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Menu closed",
@@ -256,7 +274,22 @@ public class CurrentWeekMenuController {
             @PathVariable Long id,
             @Valid @RequestBody CloseCurrentWeekMenuRequest request
     ) {
-        return service.close(id, request.personIds());
+        return service.close(id, request.personIds(), request.transferWeekStock());
+    }
+
+    @GetMapping("/{id}/close/summary")
+    @Operation(
+            summary = "Preview menu close",
+            description = "Returns the week stock lines that would be transferred to global stock, their total value, and the menu-linked money movements before closing the menu."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Close summary returned",
+                    content = @Content(schema = @Schema(implementation = CurrentWeekMenuCloseSummaryResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Menu not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public CurrentWeekMenuCloseSummaryResponse closeSummary(@PathVariable Long id) {
+        return service.previewClose(id);
     }
 
     @GetMapping("/{id}/stats")

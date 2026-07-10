@@ -1,8 +1,10 @@
 package com.eliascanalesnieto.foodhelper.infra;
 
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuRepository;
+import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuState;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuResponse;
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
+import java.util.ArrayList;
 import java.util.List;
 import java.sql.PreparedStatement;
 import lombok.RequiredArgsConstructor;
@@ -46,7 +48,8 @@ public class JdbcCurrentWeekMenuRepository implements CurrentWeekMenuRepository 
                 menu.shoppingList(),
                 menu.stockMovements(),
                 menu.recipeProductions(),
-                menu.nutritionalRules()
+                menu.nutritionalRules(),
+                CurrentWeekMenuState.ESTABLISHED
         ));
     }
 
@@ -63,30 +66,75 @@ public class JdbcCurrentWeekMenuRepository implements CurrentWeekMenuRepository 
     @Override
     public CurrentWeekMenuResponse findById(Long id) {
         return load("""
-                SELECT snapshot_json
-                FROM current_week_menus
-                WHERE id = ?
+                SELECT cwm.snapshot_json, cwms.current_week_menu_id IS NOT NULL AS closed
+                FROM current_week_menus cwm
+                LEFT JOIN current_week_menu_stats cwms ON cwms.current_week_menu_id = cwm.id
+                WHERE cwm.id = ?
                 """, id);
     }
 
     @Override
     public CurrentWeekMenuResponse findByProposedWeekMenuId(Long proposedWeekMenuId) {
         return load("""
-                SELECT snapshot_json
-                FROM current_week_menus
-                WHERE proposed_week_menu_id = ?
+                SELECT cwm.snapshot_json, cwms.current_week_menu_id IS NOT NULL AS closed
+                FROM current_week_menus cwm
+                LEFT JOIN current_week_menu_stats cwms ON cwms.current_week_menu_id = cwm.id
+                WHERE cwm.proposed_week_menu_id = ?
                 """, proposedWeekMenuId);
     }
 
     @Override
     public List<CurrentWeekMenuResponse> findAll() {
         return jdbcTemplate.query("""
-                        SELECT snapshot_json
-                        FROM current_week_menus
-                        ORDER BY id
+                        SELECT cwm.snapshot_json, cwms.current_week_menu_id IS NOT NULL AS closed
+                        FROM current_week_menus cwm
+                        LEFT JOIN current_week_menu_stats cwms ON cwms.current_week_menu_id = cwm.id
+                        ORDER BY cwm.id
                         """,
-                (rs, rowNum) -> objectMapper.readValue(rs.getString("snapshot_json"), CurrentWeekMenuResponse.class)
+                (rs, rowNum) -> withState(
+                        objectMapper.readValue(rs.getString("snapshot_json"), CurrentWeekMenuResponse.class),
+                        rs.getBoolean("closed") ? CurrentWeekMenuState.CLOSED : CurrentWeekMenuState.ESTABLISHED
+                )
         );
+    }
+
+    @Override
+    public List<CurrentWeekMenuResponse> findPage(int offset, int limit, CurrentWeekMenuState state) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT cwm.snapshot_json, cwms.current_week_menu_id IS NOT NULL AS closed
+                FROM current_week_menus cwm
+                LEFT JOIN current_week_menu_stats cwms ON cwms.current_week_menu_id = cwm.id
+                """);
+        List<Object> params = new ArrayList<>();
+        appendStateFilter(sql, state);
+        sql.append("""
+                
+                ORDER BY (cwm.snapshot_json::json ->> 'startDate')::date DESC, cwm.id DESC
+                LIMIT ?
+                OFFSET ?
+                """);
+        params.add(limit);
+        params.add(offset);
+        return jdbcTemplate.query(
+                sql.toString(),
+                params.toArray(),
+                (rs, rowNum) -> withState(
+                        objectMapper.readValue(rs.getString("snapshot_json"), CurrentWeekMenuResponse.class),
+                        rs.getBoolean("closed") ? CurrentWeekMenuState.CLOSED : CurrentWeekMenuState.ESTABLISHED
+                )
+        );
+    }
+
+    @Override
+    public long count(CurrentWeekMenuState state) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT COUNT(*)
+                FROM current_week_menus cwm
+                LEFT JOIN current_week_menu_stats cwms ON cwms.current_week_menu_id = cwm.id
+                """);
+        appendStateFilter(sql, state);
+        Long value = jdbcTemplate.queryForObject(sql.toString(), Long.class);
+        return value == null ? 0 : value;
     }
 
     @Override
@@ -97,10 +145,47 @@ public class JdbcCurrentWeekMenuRepository implements CurrentWeekMenuRepository 
     }
 
     private CurrentWeekMenuResponse load(String sql, Long value) {
-        String snapshot = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString("snapshot_json"), value)
+        return jdbcTemplate.query(sql, (rs, rowNum) -> withState(
+                        objectMapper.readValue(rs.getString("snapshot_json"), CurrentWeekMenuResponse.class),
+                        rs.getBoolean("closed") ? CurrentWeekMenuState.CLOSED : CurrentWeekMenuState.ESTABLISHED
+                ),
+                value)
                 .stream()
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Menu not found"));
-        return objectMapper.readValue(snapshot, CurrentWeekMenuResponse.class);
+    }
+
+    private CurrentWeekMenuResponse withState(CurrentWeekMenuResponse menu, CurrentWeekMenuState state) {
+        return new CurrentWeekMenuResponse(
+                menu.id(),
+                menu.planningId(),
+                menu.payerUserId(),
+                menu.payerUsername(),
+                menu.personIds(),
+                menu.startDate(),
+                menu.endDate(),
+                menu.days(),
+                menu.nutritionalValues(),
+                menu.stockSummary(),
+                menu.usedStock(),
+                menu.weekStock(),
+                menu.shoppingList(),
+                menu.stockMovements(),
+                menu.recipeProductions(),
+                menu.nutritionalRules(),
+                state
+        );
+    }
+
+    private void appendStateFilter(StringBuilder sql, CurrentWeekMenuState state) {
+        if (state == null) {
+            return;
+        }
+        sql.append(" WHERE ");
+        if (state == CurrentWeekMenuState.CLOSED) {
+            sql.append("cwms.current_week_menu_id IS NOT NULL");
+        } else {
+            sql.append("cwms.current_week_menu_id IS NULL");
+        }
     }
 }

@@ -25,4 +25,6 @@ public interface UserMoneyRepository {
     void deleteMoneyBoxMovement(Long moneyBoxId, Long movementId);
 
     void deleteMovementsByCurrentWeekMenuId(Long currentWeekMenuId);
+
+    List<UserMoneyMovement> findMovementsByCurrentWeekMenuId(Long currentWeekMenuId);
 }

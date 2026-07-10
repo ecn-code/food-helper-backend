@@ -8,6 +8,19 @@ import java.util.List;
 public record CloseCurrentWeekMenuRequest(
         @NotEmpty
         @Schema(description = "Identifiers of the people who followed the menu", example = "[1, 2]")
-        List<Long> personIds
+        List<Long> personIds,
+        @Schema(
+                description = "Whether positive week stock should be transferred to the global stock when the menu is closed. When false, the stock is discarded from the menu snapshot.",
+                example = "true",
+                defaultValue = "true"
+        )
+        Boolean transferWeekStock
 ) {
+    public CloseCurrentWeekMenuRequest(List<Long> personIds) {
+        this(personIds, true);
+    }
+
+    public CloseCurrentWeekMenuRequest {
+        transferWeekStock = transferWeekStock == null ? true : transferWeekStock;
+    }
 }

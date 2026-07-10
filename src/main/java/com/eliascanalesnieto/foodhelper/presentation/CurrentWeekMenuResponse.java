@@ -1,11 +1,12 @@
 package com.eliascanalesnieto.foodhelper.presentation;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuState;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDate;
 import java.util.List;
 
-@Schema(name = "MenuResponse", description = "API representation of a menu created from planning")
+@Schema(name = "MenuResponse", description = "API representation of a menu snapshot with lifecycle metadata")
 public record CurrentWeekMenuResponse(
         @Schema(description = "Menu identifier", example = "1")
         Long id,
@@ -38,11 +39,32 @@ public record CurrentWeekMenuResponse(
         @Schema(description = "Recipe productions scheduled for the menu with their stock transfer trace")
         List<CurrentWeekMenuRecipeProductionResponse> recipeProductions,
         @Schema(description = "Average daily nutrition evaluated against the saved daily and weekly rules")
-        NutritionalRulesEvaluationResponse nutritionalRules
+        NutritionalRulesEvaluationResponse nutritionalRules,
+        @Schema(description = "Lifecycle state of the menu snapshot", allowableValues = {"ESTABLISHED", "CLOSED"}, example = "ESTABLISHED")
+        CurrentWeekMenuState state,
+        @Schema(description = "Whether the menu is the currently active one", example = "true")
+        Boolean isActive,
+        @Schema(description = "Whether the menu can still be edited", example = "true")
+        Boolean canEdit,
+        @Schema(description = "Whether the menu can be deleted", example = "true")
+        Boolean canDelete,
+        @Schema(description = "Whether the menu can be closed", example = "true")
+        Boolean canClose,
+        @Schema(description = "Whether the menu can be undone", example = "true")
+        Boolean canUndo
 ) {
     public CurrentWeekMenuResponse {
         personIds = personIds == null ? List.of() : List.copyOf(personIds);
         weekStock = weekStock == null ? List.of() : List.copyOf(weekStock);
+        if (state == null) {
+            state = CurrentWeekMenuState.ESTABLISHED;
+        }
+        boolean active = state == CurrentWeekMenuState.ESTABLISHED;
+        isActive = active;
+        canEdit = active;
+        canDelete = active;
+        canClose = active;
+        canUndo = active;
     }
 
     public CurrentWeekMenuResponse(
@@ -78,7 +100,102 @@ public record CurrentWeekMenuResponse(
                 shoppingList,
                 stockMovements,
                 recipeProductions,
-                nutritionalRules
+                nutritionalRules,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+    }
+
+    public CurrentWeekMenuResponse(
+            Long id,
+            Long planningId,
+            Long payerUserId,
+            String payerUsername,
+            List<Long> personIds,
+            LocalDate startDate,
+            LocalDate endDate,
+            List<ProposedWeekMenuDayResponse> days,
+            NutritionalValuesResponse nutritionalValues,
+            ProposedWeekMenuStockSummaryResponse stockSummary,
+            List<CurrentWeekMenuUsedStockResponse> usedStock,
+            List<CurrentWeekMenuStockItemResponse> weekStock,
+            List<CurrentWeekMenuShoppingListItemResponse> shoppingList,
+            List<MenuStockMovementResponse> stockMovements,
+            List<CurrentWeekMenuRecipeProductionResponse> recipeProductions,
+            NutritionalRulesEvaluationResponse nutritionalRules
+    ) {
+        this(
+                id,
+                planningId,
+                payerUserId,
+                payerUsername,
+                personIds,
+                startDate,
+                endDate,
+                days,
+                nutritionalValues,
+                stockSummary,
+                usedStock,
+                weekStock,
+                shoppingList,
+                stockMovements,
+                recipeProductions,
+                nutritionalRules,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+    }
+
+    public CurrentWeekMenuResponse(
+            Long id,
+            Long planningId,
+            Long payerUserId,
+            String payerUsername,
+            List<Long> personIds,
+            LocalDate startDate,
+            LocalDate endDate,
+            List<ProposedWeekMenuDayResponse> days,
+            NutritionalValuesResponse nutritionalValues,
+            ProposedWeekMenuStockSummaryResponse stockSummary,
+            List<CurrentWeekMenuUsedStockResponse> usedStock,
+            List<CurrentWeekMenuStockItemResponse> weekStock,
+            List<CurrentWeekMenuShoppingListItemResponse> shoppingList,
+            List<MenuStockMovementResponse> stockMovements,
+            List<CurrentWeekMenuRecipeProductionResponse> recipeProductions,
+            NutritionalRulesEvaluationResponse nutritionalRules,
+            CurrentWeekMenuState state
+    ) {
+        this(
+                id,
+                planningId,
+                payerUserId,
+                payerUsername,
+                personIds,
+                startDate,
+                endDate,
+                days,
+                nutritionalValues,
+                stockSummary,
+                usedStock,
+                weekStock,
+                shoppingList,
+                stockMovements,
+                recipeProductions,
+                nutritionalRules,
+                state,
+                null,
+                null,
+                null,
+                null,
+                null
         );
     }
 }

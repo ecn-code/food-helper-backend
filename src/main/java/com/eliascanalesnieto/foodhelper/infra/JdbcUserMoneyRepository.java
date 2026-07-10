@@ -150,6 +150,19 @@ public class JdbcUserMoneyRepository implements UserMoneyRepository {
         );
     }
 
+    @Override
+    public List<UserMoneyMovement> findMovementsByCurrentWeekMenuId(Long currentWeekMenuId) {
+        return jdbcTemplate.query("""
+                        SELECT id, money_box_id, user_id, amount, description, current_week_menu_id, created_at
+                        FROM user_money_movements
+                        WHERE current_week_menu_id = ?
+                        ORDER BY created_at DESC, id DESC
+                        """,
+                movementRowMapper(),
+                currentWeekMenuId
+        );
+    }
+
     private UserMoneyMovement insertMovement(
             Long moneyBoxId,
             Long userId,

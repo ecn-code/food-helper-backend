@@ -405,6 +405,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProductStatsResponse'
   /api/v1/products/{id}:
+    get:
+      tags:
+        - Products
+      summary: Get product
+      description: Returns a single product by identifier, including derived product data when the product comes from a recipe.
+      operationId: getProduct
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Product returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
     put:
       tags:
         - Products
@@ -1723,23 +1749,45 @@ paths:
       tags:
         - Menus
       summary: List menus
-      description: Returns all menus that have been created from planning, ordered by identifier.
+      description: Returns a paginated list of menu snapshots with lifecycle state and action flags, ordered by start date descending and identifier as a stable tiebreaker.
       operationId: listMenus
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 0
+          description: Zero-based page number
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 20
+          description: Number of items per page, between 1 and 100
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [CLOSED, ESTABLISHED]
+          description: Optional menu state filter
       responses:
         '200':
           description: Menus returned
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/MenuResponse'
+                $ref: '#/components/schemas/MenuPageResponse'
   /api/v1/menus/{id}:
     get:
       tags:
         - Menus
       summary: Get menu
-      description: Returns one menu snapshot with ordered days, nutritional totals, rule evaluation, stock summary, consumed stock, missing products, and assigned people when available.
+      description: Returns one menu snapshot with lifecycle state, action flags, ordered days, nutritional totals, rule evaluation, stock summary, consumed stock, missing products, and assigned people when available.
       operationId: getMenu
       parameters:
         - name: id
@@ -3272,6 +3320,11 @@ components:
     RecipeDerivedProductResponse:
       type: object
       properties:
+        recipeId:
+          type: integer
+          format: int64
+          description: Recipe identifier that created this derived product
+          example: 3
         productId:
           type: integer
           format: int64
@@ -3966,6 +4019,59 @@ components:
             $ref: '#/components/schemas/MenuRecipeProductionResponse'
         nutritionalRules:
           $ref: '#/components/schemas/NutritionalRulesEvaluationResponse'
+        state:
+          type: string
+          enum: [ESTABLISHED, CLOSED]
+          description: Lifecycle state of the menu snapshot
+          example: ESTABLISHED
+        isActive:
+          type: boolean
+          description: Whether the menu is the currently active one
+          example: true
+        canEdit:
+          type: boolean
+          description: Whether the menu can still be edited
+          example: true
+        canDelete:
+          type: boolean
+          description: Whether the menu can be deleted
+          example: true
+        canClose:
+          type: boolean
+          description: Whether the menu can be closed
+          example: true
+        canUndo:
+          type: boolean
+          description: Whether the menu can be undone
+          example: true
+    MenuPageResponse:
+      type: object
+      description: Paginated list of menu snapshots
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuResponse'
+        page:
+          type: integer
+          format: int32
+          description: Zero-based page number
+          example: 0
+        size:
+          type: integer
+          format: int32
+          description: Requested page size
+          example: 20
+        totalElements:
+          type: integer
+          format: int64
+          description: Total number of menus
+          example: 42
+        totalPages:
+          type: integer
+          format: int32
+          description: Total number of pages
+          example: 3
     CloseMenuRequest:
       type: object
       required: [personIds]
