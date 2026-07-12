@@ -243,7 +243,8 @@ public class LambdaHttpRouter {
                             id,
                             body.payerUserId(),
                             body.stockAllocations(),
-                            body.couponCodes()
+                            body.couponCodes(),
+                            body.personIds()
                     ));
                 }
             }

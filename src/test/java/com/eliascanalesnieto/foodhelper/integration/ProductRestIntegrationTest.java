@@ -2040,10 +2040,16 @@ class ProductRestIntegrationTest {
 
         CurrentWeekMenuResponse established = postAuthorized(
                 proposedMenusUrl + "/" + planning.id() + "/menu",
-                new EstablishProposedWeekMenuRequest(authenticatedUserId()),
+                new EstablishProposedWeekMenuRequest(
+                        authenticatedUserId(),
+                        null,
+                        null,
+                        List.of(authenticatedUserId(), secondPerson.userId())
+                ),
                 CurrentWeekMenuResponse.class
         ).getBody();
         assertThat(established).isNotNull();
+        assertThat(established.personIds()).containsExactly(authenticatedUserId(), secondPerson.userId());
 
         ResponseEntity<CurrentWeekMenuResponse> responsibleUpdated = restTemplate.exchange(
                 menusUrl + "/" + established.id() + "/payer",

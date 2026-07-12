@@ -14,6 +14,7 @@ public class CurrentWeekMenu {
     Long proposedWeekMenuId;
     Long payerUserId;
     String payerUsername;
+    List<Long> personIds;
     LocalDate startDate;
     LocalDate endDate;
     List<ProposedWeekMenuDay> days;

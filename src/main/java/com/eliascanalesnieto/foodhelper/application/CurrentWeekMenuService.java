@@ -103,7 +103,7 @@ public class CurrentWeekMenuService {
 
     @Transactional
     public CurrentWeekMenuResponse establishFromProposed(Long proposedWeekMenuId, Long payerUserId) {
-        return establishFromProposed(proposedWeekMenuId, payerUserId, null, null);
+        return establishFromProposed(proposedWeekMenuId, payerUserId, null, null, null);
     }
 
     @Transactional
@@ -112,7 +112,7 @@ public class CurrentWeekMenuService {
             Long payerUserId,
             List<MenuStockAllocationRequest> stockAllocations
     ) {
-        return establishFromProposed(proposedWeekMenuId, payerUserId, stockAllocations, null);
+        return establishFromProposed(proposedWeekMenuId, payerUserId, stockAllocations, null, null);
     }
 
     @Transactional
@@ -121,6 +121,17 @@ public class CurrentWeekMenuService {
             Long payerUserId,
             List<MenuStockAllocationRequest> stockAllocations,
             List<String> couponCodes
+    ) {
+        return establishFromProposed(proposedWeekMenuId, payerUserId, stockAllocations, couponCodes, null);
+    }
+
+    @Transactional
+    public CurrentWeekMenuResponse establishFromProposed(
+            Long proposedWeekMenuId,
+            Long payerUserId,
+            List<MenuStockAllocationRequest> stockAllocations,
+            List<String> couponCodes,
+            List<Long> personIds
     ) {
         try {
             return withPersonIdsFromHistory(applyCurrentRules(currentWeekMenuRepository.findByProposedWeekMenuId(proposedWeekMenuId)));
@@ -147,6 +158,7 @@ public class CurrentWeekMenuService {
                 .shoppingList(allocation.shoppingList())
                 .stockMovements(List.of())
                 .recipeProductions(recipeProductions)
+                .personIds(personIds == null ? List.of() : personIds)
                 .build();
         CurrentWeekMenuResponse created = withPersonIds(currentWeekMenuRepository.create(mapper.toResponse(currentWeekMenu)));
         planningCouponService.redeemCoupons(proposedMenu, payer.getId(), created.id(), couponCodes);
@@ -1181,12 +1193,16 @@ public class CurrentWeekMenuService {
     }
 
     private CurrentWeekMenuResponse withPersonIdsFromHistory(CurrentWeekMenuResponse menu) {
+        List<Long> personIds = userMenuHistoryRepository.findPersonIds(menu.id());
+        if (personIds.isEmpty()) {
+            personIds = safePersonIds(menu);
+        }
         return normalizeShoppingList(new CurrentWeekMenuResponse(
                 menu.id(),
                 menu.planningId(),
                 menu.payerUserId(),
                 menu.payerUsername(),
-                userMenuHistoryRepository.findPersonIds(menu.id()),
+                personIds,
                 menu.startDate(),
                 menu.endDate(),
                 menu.days(),

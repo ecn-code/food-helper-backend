@@ -999,10 +999,10 @@ class ProductLambdaRouterIntegrationTest {
                 .withHttpMethod("POST")
                 .withPath("/api/v1/planning/" + menuId + "/menu")
                 .withHeaders(authHeaders(token))
-                .withBody("{\"payerUserId\":" + auth.userId() + "}"));
+                .withBody("{\"payerUserId\":" + auth.userId() + ",\"personIds\":[" + auth.userId() + "]}"));
         assertThat(establish.getStatusCode()).isEqualTo(201);
         long currentWeekMenuId = readLong(establish.getBody(), "id");
-        assertThat(readNode(establish.getBody()).get("personIds").size()).isZero();
+        assertThat(readLong(establish.getBody(), "personIds.0")).isEqualTo(auth.userId());
 
         APIGatewayProxyResponseEvent establishedCatalog = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")
