@@ -90,6 +90,7 @@ public class CurrentWeekMenuService {
     private final CurrentWeekMenuStatsService currentWeekMenuStatsService;
     private final ProductRepository productRepository;
     private final RecipeRepository recipeRepository;
+    private final MenuProductResolver menuProductResolver;
     private final StockRepository stockRepository;
     private final SupermarketRepository supermarketRepository;
     private final AppUserRepository appUserRepository;
@@ -142,26 +143,33 @@ public class CurrentWeekMenuService {
         AppUser payer = appUserRepository.findById(payerUserId);
         ProposedWeekMenu proposedMenu = proposedWeekMenuService.findById(proposedWeekMenuId);
         ensurePayerHasNoOverlappingMenu(payer.getId(), proposedMenu.getStartDate(), proposedMenu.getEndDate());
-        AllocationResult allocation = allocateStock(proposedMenu, stockAllocations, proposedMenu.getStartDate());
-        List<CurrentWeekMenuRecipeProduction> recipeProductions = toCurrentRecipeProductions(proposedMenu.getDays());
+        List<AppUser> people = personIds == null || personIds.isEmpty() ? List.of() : loadPeople(personIds);
+        ProposedWeekMenu effectiveMenu = people.isEmpty()
+                ? proposedMenu
+                : proposedWeekMenuService.withUsers(proposedMenu, people.size());
+        AllocationResult allocation = allocateStock(effectiveMenu, stockAllocations, effectiveMenu.getStartDate());
+        List<CurrentWeekMenuRecipeProduction> recipeProductions = toCurrentRecipeProductions(effectiveMenu.getDays());
+        List<Long> resolvedPersonIds = people.stream()
+                .map(AppUser::getId)
+                .toList();
         CurrentWeekMenu currentWeekMenu = CurrentWeekMenu.builder()
                 .proposedWeekMenuId(proposedWeekMenuId)
                 .payerUserId(payer.getId())
                 .payerUsername(payer.getUsername())
-                .startDate(proposedMenu.getStartDate())
-                .endDate(proposedMenu.getEndDate())
-                .days(proposedMenu.getDays())
-                .nutritionalValues(proposedMenu.getNutritionalValues())
-                .stockSummary(proposedMenu.getStockSummary())
+                .startDate(effectiveMenu.getStartDate())
+                .endDate(effectiveMenu.getEndDate())
+                .days(effectiveMenu.getDays())
+                .nutritionalValues(effectiveMenu.getNutritionalValues())
+                .stockSummary(effectiveMenu.getStockSummary())
                 .usedStock(allocation.usedStock())
                 .weekStock(List.of())
                 .shoppingList(allocation.shoppingList())
                 .stockMovements(List.of())
                 .recipeProductions(recipeProductions)
-                .personIds(personIds == null ? List.of() : personIds)
+                .personIds(resolvedPersonIds)
                 .build();
         CurrentWeekMenuResponse created = withPersonIds(currentWeekMenuRepository.create(mapper.toResponse(currentWeekMenu)));
-        planningCouponService.redeemCoupons(proposedMenu, payer.getId(), created.id(), couponCodes);
+        planningCouponService.redeemCoupons(effectiveMenu, payer.getId(), created.id(), couponCodes);
         userMoneyRepository.addMovement(
                 payer.getId(),
                 allocationCost(allocation.usedStock()).negate(),
@@ -901,18 +909,7 @@ public class CurrentWeekMenuService {
                 .filter(java.util.Objects::nonNull)
                 .distinct()
                 .toList();
-        if (productIds.isEmpty()) {
-            return Map.of();
-        }
-        List<Product> products = productRepository.findByIds(productIds);
-        if (products.size() != productIds.size()) {
-            throw new ResourceNotFoundException("One or more products were not found");
-        }
-        Map<Long, Product> productsById = new HashMap<>();
-        products.stream()
-                .map(this::attachDerivedProduct)
-                .forEach(product -> productsById.put(product.getId(), product));
-        return productsById;
+        return menuProductResolver.loadByIds(productIds, "One or more products were not found");
     }
 
     private Map<Long, BigDecimal> requiredUnitsByProduct(
@@ -1059,17 +1056,9 @@ public class CurrentWeekMenuService {
                 .filter(java.util.Objects::nonNull)
                 .distinct()
                 .toList();
-        if (productIds.isEmpty()) {
-            return Map.of();
-        }
-        List<Product> products = productRepository.findByIds(productIds);
-        if (products.size() != productIds.size()) {
-            throw new ResourceNotFoundException("One or more products were not found");
-        }
-        Map<Long, Product> productsById = new HashMap<>();
-        products.stream()
-                .map(this::attachDerivedProduct)
-                .forEach(product -> productsById.put(product.getId(), product));
+        Map<Long, Product> productsById = new LinkedHashMap<>(
+                menuProductResolver.loadByIds(productIds, "One or more products were not found")
+        );
         productsById.putAll(loadCompositionProducts(productsById));
         return productsById;
     }
@@ -1083,28 +1072,7 @@ public class CurrentWeekMenuService {
     }
 
     private Map<Long, Product> loadCompositionProducts(Map<Long, Product> productsById) {
-        List<Long> ingredientIds = productsById.values().stream()
-                .map(Product::getDerivedProduct)
-                .filter(java.util.Objects::nonNull)
-                .filter(this::usesCompositionStock)
-                .flatMap(derivedProduct -> derivedProduct.getIngredients().stream())
-                .map(RecipeIngredient::getProductId)
-                .filter(java.util.Objects::nonNull)
-                .filter(productId -> !productsById.containsKey(productId))
-                .distinct()
-                .toList();
-        if (ingredientIds.isEmpty()) {
-            return Map.of();
-        }
-        List<Product> loadedProducts = productRepository.findByIds(ingredientIds);
-        if (loadedProducts.size() != ingredientIds.size()) {
-            throw new ResourceNotFoundException("One or more ingredient products were not found");
-        }
-        Map<Long, Product> compositionProductsById = new LinkedHashMap<>();
-        loadedProducts.stream()
-                .map(this::attachDerivedProduct)
-                .forEach(product -> compositionProductsById.put(product.getId(), product));
-        return compositionProductsById;
+        return menuProductResolver.loadCompositionProducts(productsById, "One or more ingredient products were not found");
     }
 
     private void accumulateCompositionRequirements(
@@ -1134,20 +1102,11 @@ public class CurrentWeekMenuService {
     }
 
     private boolean usesCompositionStock(Product product) {
-        return usesCompositionStock(product == null ? null : product.getDerivedProduct());
+        return menuProductResolver.usesCompositionStock(product);
     }
 
     private boolean usesCompositionStock(RecipeDerivedProduct derivedProduct) {
-        return derivedProduct != null
-                && derivedProduct.isStockFromComposition()
-                && derivedProduct.getIngredients() != null
-                && !derivedProduct.getIngredients().isEmpty();
-    }
-
-    private Product attachDerivedProduct(Product product) {
-        return product.toBuilder()
-                .derivedProduct(recipeRepository.findDerivedProductByProductId(product.getId()).orElse(null))
-                .build();
+        return menuProductResolver.usesCompositionStock(derivedProduct);
     }
 
     private CurrentWeekMenuResponse applyCurrentRules(CurrentWeekMenuResponse menu) {

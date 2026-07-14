@@ -159,7 +159,7 @@ public class ProposedWeekMenuController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
             summary = "Create menu from planning",
-            description = "Consumes the user-confirmed stock allocation, or automatically uses the earliest expiration date when no allocation is supplied. It creates a menu snapshot, stores missing products as a shopping list, subtracts the applied stock cost from the selected payer user's money box, revalidates the requested planning coupons inside the same transaction, carries recipe productions into the menu snapshot, and can persist the assigned person identifiers when provided."
+            description = "Consumes the user-confirmed stock allocation, or automatically uses the earliest expiration date when no allocation is supplied. It creates a menu snapshot, stores missing products as a shopping list, subtracts the applied stock cost from the selected payer user's money box, revalidates the requested planning coupons inside the same transaction, carries recipe productions into the menu snapshot, persists the assigned person identifiers when provided, and recalculates stock for that execution group size."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Menu created",

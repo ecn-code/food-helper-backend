@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.eliascanalesnieto.foodhelper.application.CurrentWeekMenuService;
 import com.eliascanalesnieto.foodhelper.application.CurrentWeekMenuStatsService;
+import com.eliascanalesnieto.foodhelper.application.MenuProductResolver;
 import com.eliascanalesnieto.foodhelper.application.NutritionalRulesService;
 import com.eliascanalesnieto.foodhelper.application.PlanningCouponService;
 import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
@@ -56,6 +57,7 @@ class CurrentWeekMenuHistoryServiceTest {
     @Mock CurrentWeekMenuStatsService statsService;
     @Mock ProductRepository productRepository;
     @Mock RecipeRepository recipeRepository;
+    @Mock MenuProductResolver menuProductResolver;
     @Mock StockRepository stockRepository;
     @Mock SupermarketRepository supermarketRepository;
     @Mock AppUserRepository userRepository;

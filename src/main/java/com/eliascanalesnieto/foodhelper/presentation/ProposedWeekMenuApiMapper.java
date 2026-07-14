@@ -7,10 +7,6 @@ import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDay;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuProduct;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuRecipeProduction;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuSection;
-import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockRequirement;
-import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummary;
-import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummaryCalories;
-import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummaryDayCalories;
 import org.springframework.stereotype.Component;
 import lombok.RequiredArgsConstructor;
 
@@ -18,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class ProposedWeekMenuApiMapper {
     private final NutritionalRulesService nutritionalRulesService;
+    private final WeekMenuSnapshotMapper snapshotMapper;
 
     public ProposedWeekMenuResponse toResponse(ProposedWeekMenu menu) {
         java.util.List<ProposedWeekMenuDay> days = menu.getDays() == null ? java.util.List.of() : menu.getDays();
@@ -26,9 +23,9 @@ public class ProposedWeekMenuApiMapper {
                 menu.getUsers(),
                 menu.getStartDate(),
                 menu.getEndDate(),
-                days.stream().map(this::toResponse).toList(),
-                toResponse(menu.getNutritionalValues()),
-                toResponse(menu.getStockSummary()),
+                snapshotMapper.toResponseDays(days),
+                snapshotMapper.toResponse(menu.getNutritionalValues()),
+                snapshotMapper.toResponse(menu.getStockSummary()),
                 nutritionalRulesService.evaluate(menu.getNutritionalValues(), days.size())
         );
     }
@@ -83,103 +80,4 @@ public class ProposedWeekMenuApiMapper {
                 .build();
     }
 
-    private ProposedWeekMenuDayResponse toResponse(ProposedWeekMenuDay day) {
-        return new ProposedWeekMenuDayResponse(
-                day.getId(),
-                day.getDate(),
-                (day.getSections() == null ? java.util.List.<ProposedWeekMenuSection>of() : day.getSections()).stream().map(this::toResponse).toList(),
-                (day.getRecipeProductions() == null ? java.util.List.<ProposedWeekMenuRecipeProduction>of() : day.getRecipeProductions()).stream().map(this::toResponse).toList(),
-                toResponse(day.getNutritionalValues())
-        );
-    }
-
-    private ProposedWeekMenuSectionResponse toResponse(ProposedWeekMenuSection section) {
-        return new ProposedWeekMenuSectionResponse(
-                section.getId(),
-                section.getDayPartId(),
-                section.getName(),
-                section.getDescription(),
-                section.getSortOrder(),
-                section.getProducts().stream().map(this::toResponse).toList(),
-                toResponse(section.getNutritionalValues())
-        );
-    }
-
-    private ProposedWeekMenuProductResponse toResponse(ProposedWeekMenuProduct product) {
-        return new ProposedWeekMenuProductResponse(
-                product.getProductId(),
-                product.getProductName(),
-                product.getProductId() == null ? null : product.getUnits(),
-                product.getProductId() == null ? null : product.getGrams(),
-                product.getSortOrder(),
-                toResponse(product.getNutritionalValues())
-        );
-    }
-
-    private ProposedWeekMenuRecipeProductionResponse toResponse(ProposedWeekMenuRecipeProduction production) {
-        return new ProposedWeekMenuRecipeProductionResponse(
-                production.getId(),
-                production.getRecipeId(),
-                production.getRecipeName(),
-                production.getProductId(),
-                production.getProductName(),
-                production.getUnits(),
-                production.getSortOrder()
-        );
-    }
-
-    private NutritionalValuesResponse toResponse(NutritionalValues nutritionalValues) {
-        if (nutritionalValues == null) {
-            return null;
-        }
-        return new NutritionalValuesResponse(
-                nutritionalValues.getCalories(),
-                nutritionalValues.getCarbohydrates(),
-                nutritionalValues.getProteins(),
-                nutritionalValues.getFats()
-        );
-    }
-
-    private ProposedWeekMenuStockSummaryResponse toResponse(ProposedWeekMenuStockSummary stockSummary) {
-        if (stockSummary == null) {
-            return null;
-        }
-        return new ProposedWeekMenuStockSummaryResponse(
-                stockSummary.getPlannedDays(),
-                stockSummary.getDistinctProducts(),
-                toResponse(stockSummary.getCalories()),
-                stockSummary.getEstimatedCost(),
-                stockSummary.getRequirements().stream().map(this::toResponse).toList()
-        );
-    }
-
-    private ProposedWeekMenuStockSummaryCaloriesResponse toResponse(ProposedWeekMenuStockSummaryCalories calories) {
-        return new ProposedWeekMenuStockSummaryCaloriesResponse(
-                calories.getAveragePerPlannedDay(),
-                toResponse(calories.getMaxDay()),
-                toResponse(calories.getMinDay())
-        );
-    }
-
-    private ProposedWeekMenuStockSummaryDayCaloriesResponse toResponse(ProposedWeekMenuStockSummaryDayCalories dayCalories) {
-        if (dayCalories == null) {
-            return null;
-        }
-        return new ProposedWeekMenuStockSummaryDayCaloriesResponse(
-                dayCalories.getDate(),
-                dayCalories.getCalories()
-        );
-    }
-
-    private ProposedWeekMenuStockRequirementResponse toResponse(ProposedWeekMenuStockRequirement requirement) {
-        return new ProposedWeekMenuStockRequirementResponse(
-                requirement.getProductId(),
-                requirement.getProductName(),
-                requirement.getRequiredUnits(),
-                requirement.getAvailableUnits(),
-                requirement.getCoveredUnits(),
-                requirement.getMissingUnits(),
-                requirement.getEstimatedCost()
-        );
-    }
 }

@@ -207,7 +207,9 @@ public class LambdaHttpRouter {
 
         if ("POST".equals(method) && "/api/v1/planning".equals(path)) {
             CreateProposedWeekMenuRequest body = parseProposedWeekMenuCreate(request.getBody());
-            return json(201, proposedWeekMenuMapper.toResponse(proposedWeekMenuService.create(body.startDate(), body.endDate())));
+            return json(201, proposedWeekMenuMapper.toResponse(
+                    proposedWeekMenuService.create(body.startDate(), body.endDate(), body.users())
+            ));
         }
 
         if ("GET".equals(method) && "/api/v1/planning".equals(path)) {
@@ -437,7 +439,7 @@ public class LambdaHttpRouter {
                 Long id = parseId(path.substring(0, path.lastIndexOf('/')));
                 if ("POST".equals(method)) {
                     CloseCurrentWeekMenuRequest body = readBody(request.getBody(), CloseCurrentWeekMenuRequest.class);
-                    return json(200, currentWeekMenuService.close(id, body.personIds()));
+                    return json(200, currentWeekMenuService.close(id, body.personIds(), body.transferWeekStock()));
                 }
             }
             if (path.endsWith("/stats")) {

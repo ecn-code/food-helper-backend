@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
+import com.eliascanalesnieto.foodhelper.application.MenuProductResolver;
 import com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuStatsRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProductRepository;
 import com.eliascanalesnieto.foodhelper.domain.RecipeRepository;
@@ -28,6 +29,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -51,8 +53,19 @@ class ProposedWeekMenuServiceTest {
     @Mock
     private StockRepository stockRepository;
 
-    @InjectMocks
     private ProposedWeekMenuService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new ProposedWeekMenuService(
+                menuRepository,
+                productRepository,
+                recipeRepository,
+                new MenuProductResolver(productRepository, recipeRepository),
+                stockRepository,
+                currentWeekMenuStatsRepository
+        );
+    }
 
     @Test
     void shouldRejectProposedMenusLongerThanTwoWeeksRange() {

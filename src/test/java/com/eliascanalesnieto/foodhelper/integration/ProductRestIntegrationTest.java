@@ -126,7 +126,7 @@ class ProductRestIntegrationTest {
     private static final String REGISTRATION_CODE = "test-registration-code";
 
     @Container
-    static PostgreSQLContainer<?> postgres = postgres("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = TestContainerSupport.postgres("postgres:16-alpine");
 
     @DynamicPropertySource
     static void configureDataSource(DynamicPropertyRegistry registry) {
@@ -1352,6 +1352,82 @@ class ProductRestIntegrationTest {
     }
 
     @Test
+    void establishingWithSelectedPeopleShouldRecalculateStockForTheExecutionGroup() {
+        String productsUrl = "http://localhost:" + port + "/api/v1/products";
+        String dayPartsUrl = "http://localhost:" + port + "/api/v1/planning/day-parts";
+        String proposedMenusUrl = "http://localhost:" + port + "/api/v1/planning";
+
+        Long riceId = createProduct(productsUrl, "Execution Rice", "Rice", "100", "0", "2.7", "0.3", "1.20");
+        Long lunchDayPartId = createDayPart(dayPartsUrl, "Lunch execution", "Main meal of the day", 10);
+
+        AuthResponse secondPerson = restTemplate.postForEntity(
+                "http://localhost:" + port + "/api/v1/auth/register",
+                new RegisterRequest("execution-user-" + System.nanoTime(), "secret-password", REGISTRATION_CODE),
+                AuthResponse.class
+        ).getBody();
+        assertThat(secondPerson).isNotNull();
+
+        ResponseEntity<StockEntryResponse> riceStock = postAuthorized(
+                productsUrl + "/" + riceId + "/stock",
+                new CreateStockEntryRequest(new BigDecimal("1.00"), new BigDecimal("1.25"), null, LocalDate.of(2026, 6, 12)),
+                StockEntryResponse.class
+        );
+        assertThat(riceStock.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(riceStock.getBody()).isNotNull();
+
+        ResponseEntity<ProposedWeekMenuResponse> planning = postAuthorized(
+                proposedMenusUrl,
+                new CreateProposedWeekMenuRequest(LocalDate.of(2026, 6, 15), LocalDate.of(2026, 6, 21)),
+                ProposedWeekMenuResponse.class
+        );
+        assertThat(planning.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<ProposedWeekMenuResponse> plannedMenu = restTemplate.exchange(
+                proposedMenusUrl + "/" + planning.getBody().id() + "/days",
+                HttpMethod.PUT,
+                authorizedEntity(new UpsertProposedWeekMenuDayRequest(
+                        LocalDate.of(2026, 6, 15),
+                        List.of(
+                                new ProposedWeekMenuSectionRequest(
+                                        lunchDayPartId,
+                                        List.of(new ProposedWeekMenuProductRequest(riceId, new BigDecimal("1.00"), null, 10))
+                                )
+                        )
+                )),
+                ProposedWeekMenuResponse.class
+        );
+        assertThat(plannedMenu.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(plannedMenu.getBody()).isNotNull();
+        assertThat(plannedMenu.getBody().stockSummary().requirements()).singleElement().satisfies(requirement ->
+                assertThat(requirement.requiredUnits()).isEqualByComparingTo("1.00")
+        );
+
+        ResponseEntity<CurrentWeekMenuResponse> established = postAuthorized(
+                proposedMenusUrl + "/" + planning.getBody().id() + "/menu",
+                new EstablishProposedWeekMenuRequest(
+                        authenticatedUserId(),
+                        null,
+                        null,
+                        List.of(authenticatedUserId(), secondPerson.userId())
+                ),
+                CurrentWeekMenuResponse.class
+        );
+        assertThat(established.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(established.getBody()).isNotNull();
+        assertThat(established.getBody().personIds()).containsExactly(authenticatedUserId(), secondPerson.userId());
+        assertThat(established.getBody().stockSummary().requirements()).singleElement().satisfies(requirement -> {
+            assertThat(requirement.requiredUnits()).isEqualByComparingTo("2.00");
+            assertThat(requirement.missingUnits()).isEqualByComparingTo("1.00");
+        });
+        assertThat(established.getBody().usedStock()).singleElement().satisfies(used ->
+                assertThat(used.usedUnits()).isEqualByComparingTo("1.00")
+        );
+        assertThat(established.getBody().shoppingList()).singleElement().satisfies(item ->
+                assertThat(item.missingUnits()).isEqualByComparingTo("1.00")
+        );
+    }
+
+    @Test
     void planningShouldBeDeletableAndDisappearFromTheCatalog() {
         String planningUrl = "http://localhost:" + port + "/api/v1/planning";
 
@@ -2079,7 +2155,7 @@ class ProductRestIntegrationTest {
         assertThat(repercussion.getBody().shoppingList())
                 .filteredOn(item -> item.productId().equals(riceId))
                 .singleElement()
-                .satisfies(item -> assertThat(item.missingUnits()).isEqualByComparingTo("1.00"));
+                .satisfies(item -> assertThat(item.missingUnits()).isEqualByComparingTo("3.00"));
         assertThat(repercussion.getBody().stockMovements()).singleElement().satisfies(movement -> {
             assertThat(movement.userId()).isEqualTo(secondPerson.userId());
             assertThat(movement.productId()).isEqualTo(riceId);
@@ -4341,21 +4417,6 @@ class ProductRestIntegrationTest {
         } catch (Exception ex) {
             throw new AssertionError("Unable to build test image", ex);
         }
-    }
-
-    private static PostgreSQLContainer<?> postgres(String imageName) {
-        PostgreSQLContainer<?> container = new PostgreSQLContainer<>(imageName)
-                .withDatabaseName("foodhelper")
-                .withUsername("foodhelper")
-                .withPassword("foodhelper")
-                .withInitScript("db/test-init.sql");
-
-        String fixedPort = System.getenv("TESTCONTAINERS_POSTGRES_HOST_PORT");
-        if (fixedPort != null && !fixedPort.isBlank()) {
-            container.setPortBindings(List.of(fixedPort + ":5432"));
-        }
-
-        return container;
     }
 
 }

@@ -39,7 +39,7 @@ class ProductLambdaRouterIntegrationTest {
     private static final String REGISTRATION_CODE = "test-registration-code";
 
     @Container
-    static PostgreSQLContainer<?> postgres = postgres("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = TestContainerSupport.postgres("postgres:16-alpine");
 
     @DynamicPropertySource
     static void configureDataSource(DynamicPropertyRegistry registry) {
@@ -108,6 +108,14 @@ class ProductLambdaRouterIntegrationTest {
         APIGatewayProxyResponseEvent healthResponse = productHttpHandler.apply(health);
         assertThat(healthResponse.getStatusCode()).isEqualTo(200);
         assertThat(healthResponse.getBody()).contains("UP");
+
+        APIGatewayProxyResponseEvent planning = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath("/api/v1/planning")
+                .withHeaders(authHeaders(token))
+                .withBody("{\"startDate\":\"2042-01-01\",\"endDate\":\"2042-01-01\",\"users\":3}"));
+        assertThat(planning.getStatusCode()).isEqualTo(201);
+        assertThat(readNode(planning.getBody()).get("users").asInt()).isEqualTo(3);
     }
 
     @Test
@@ -1049,11 +1057,18 @@ class ProductLambdaRouterIntegrationTest {
                 .withHeaders(authHeaders(token)));
         assertThat(missingSupermarket.getStatusCode()).isEqualTo(404);
 
+        APIGatewayProxyResponseEvent weekStock = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("PUT")
+                .withPath("/api/v1/menus/" + currentWeekMenuId + "/week-stock")
+                .withHeaders(authHeaders(token))
+                .withBody("{\"weekStock\":[{\"productId\":" + riceId + ",\"quantity\":1,\"price\":1.20}]}"));
+        assertThat(weekStock.getStatusCode()).isEqualTo(200);
+
         APIGatewayProxyResponseEvent close = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("POST")
                 .withPath("/api/v1/menus/" + currentWeekMenuId + "/close")
                 .withHeaders(authHeaders(token))
-                .withBody("{\"personIds\":[" + auth.userId() + "]}"));
+                .withBody("{\"personIds\":[" + auth.userId() + "],\"transferWeekStock\":false}"));
         assertThat(close.getStatusCode()).isEqualTo(200);
         assertThat(readDecimal(close.getBody(), "period.moneySpent")).isEqualByComparingTo("5.40");
         assertThat(readDecimal(close.getBody(), "month.moneySpent")).isEqualByComparingTo("5.40");
@@ -1066,6 +1081,13 @@ class ProductLambdaRouterIntegrationTest {
                 .withHeaders(authHeaders(token)));
         assertThat(currentMenu.getStatusCode()).isEqualTo(200);
         assertThat(readLong(currentMenu.getBody(), "personIds.0")).isEqualTo(auth.userId());
+
+        APIGatewayProxyResponseEvent riceStockAfterClose = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/products/" + riceId + "/stock")
+                .withHeaders(authHeaders(token)));
+        assertThat(riceStockAfterClose.getStatusCode()).isEqualTo(200);
+        assertThat(readNode(riceStockAfterClose.getBody())).isEmpty();
 
         APIGatewayProxyResponseEvent closedCatalog = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
                 .withHttpMethod("GET")
@@ -1511,18 +1533,4 @@ class ProductLambdaRouterIntegrationTest {
         }
     }
 
-    private static PostgreSQLContainer<?> postgres(String imageName) {
-        PostgreSQLContainer<?> container = new PostgreSQLContainer<>(imageName)
-                .withDatabaseName("foodhelper")
-                .withUsername("foodhelper")
-                .withPassword("foodhelper")
-                .withInitScript("db/test-init.sql");
-
-        String fixedPort = System.getenv("TESTCONTAINERS_POSTGRES_HOST_PORT");
-        if (fixedPort != null && !fixedPort.isBlank()) {
-            container.setPortBindings(java.util.List.of(fixedPort + ":5432"));
-        }
-
-        return container;
-    }
 }

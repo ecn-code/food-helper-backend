@@ -51,6 +51,7 @@ public class ProposedWeekMenuService {
     private final ProposedWeekMenuRepository menuRepository;
     private final ProductRepository productRepository;
     private final RecipeRepository recipeRepository;
+    private final MenuProductResolver menuProductResolver;
     private final StockRepository stockRepository;
     private final CurrentWeekMenuStatsRepository currentWeekMenuStatsRepository;
 
@@ -79,6 +80,12 @@ public class ProposedWeekMenuService {
     @Transactional(readOnly = true)
     public ProposedWeekMenu findById(Long id) {
         return enrich(menuRepository.findById(id));
+    }
+
+    public ProposedWeekMenu withUsers(ProposedWeekMenu menu, Integer users) {
+        return enrich(menu.toBuilder()
+                .users(normalizeUsers(users))
+                .build());
     }
 
     @Transactional(readOnly = true)
@@ -281,18 +288,7 @@ public class ProposedWeekMenuService {
                 .filter(java.util.Objects::nonNull)
                 .distinct()
                 .toList();
-        if (ids.isEmpty()) {
-            return Map.of();
-        }
-        List<Product> loadedProducts = productRepository.findByIds(ids);
-        if (loadedProducts.size() != ids.size()) {
-            throw new ResourceNotFoundException("One or more products were not found");
-        }
-        Map<Long, Product> productsById = new LinkedHashMap<>();
-        loadedProducts.stream()
-                .map(this::attachDerivedProduct)
-                .forEach(product -> productsById.put(product.getId(), product));
-        return productsById;
+        return menuProductResolver.loadByIds(ids, "One or more products were not found");
     }
 
     private Map<Long, Product> loadProductsFromSections(List<ProposedWeekMenuSection> sections) {
@@ -311,46 +307,11 @@ public class ProposedWeekMenuService {
             productIds.add(derivedProduct.getProductId());
         }
         List<Long> uniqueProductIds = productIds.stream().distinct().toList();
-        List<Product> loadedProducts = productRepository.findByIds(uniqueProductIds);
-        if (loadedProducts.size() != uniqueProductIds.size()) {
-            throw new ResourceNotFoundException("Derived product not found for recipe production");
-        }
-        Map<Long, Product> productsById = new LinkedHashMap<>();
-        loadedProducts.stream()
-                .map(this::attachDerivedProduct)
-                .forEach(product -> productsById.put(product.getId(), product));
-        return productsById;
-    }
-
-    private Product attachDerivedProduct(Product product) {
-        return product.toBuilder()
-                .derivedProduct(recipeRepository.findDerivedProductByProductId(product.getId()).orElse(null))
-                .build();
+        return menuProductResolver.loadByIds(uniqueProductIds, "Derived product not found for recipe production");
     }
 
     private Map<Long, Product> loadCompositionProducts(Map<Long, Product> productsById) {
-        List<Long> ingredientIds = productsById.values().stream()
-                .map(Product::getDerivedProduct)
-                .filter(java.util.Objects::nonNull)
-                .filter(derivedProduct -> derivedProduct.isStockFromComposition()
-                        && derivedProduct.getIngredients() != null
-                        && !derivedProduct.getIngredients().isEmpty())
-                .flatMap(derivedProduct -> derivedProduct.getIngredients().stream())
-                .map(RecipeIngredient::getProductId)
-                .filter(java.util.Objects::nonNull)
-                .filter(productId -> !productsById.containsKey(productId))
-                .distinct()
-                .toList();
-        if (ingredientIds.isEmpty()) {
-            return Map.of();
-        }
-        List<Product> loadedProducts = productRepository.findByIds(ingredientIds);
-        if (loadedProducts.size() != ingredientIds.size()) {
-            throw new ResourceNotFoundException("One or more ingredient products were not found");
-        }
-        Map<Long, Product> compositionProductsById = new LinkedHashMap<>();
-        loadedProducts.forEach(product -> compositionProductsById.put(product.getId(), product));
-        return compositionProductsById;
+        return menuProductResolver.loadCompositionProducts(productsById, "One or more ingredient products were not found");
     }
 
     private void accumulateCompositionRequirements(
@@ -389,11 +350,7 @@ public class ProposedWeekMenuService {
     }
 
     private boolean usesCompositionStock(Product product) {
-        RecipeDerivedProduct derivedProduct = product == null ? null : product.getDerivedProduct();
-        return derivedProduct != null
-                && derivedProduct.isStockFromComposition()
-                && derivedProduct.getIngredients() != null
-                && !derivedProduct.getIngredients().isEmpty();
+        return menuProductResolver.usesCompositionStock(product);
     }
 
     private Map<Long, Recipe> loadRecipes(List<ProposedWeekMenuRecipeProduction> recipeProductions) {

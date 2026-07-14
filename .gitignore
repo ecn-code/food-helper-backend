@@ -9,6 +9,9 @@ target/
 # OS files
 .DS_Store
 
+# Generated exports
+/exports/
+
 # Java artifacts
 *.class
 *.log

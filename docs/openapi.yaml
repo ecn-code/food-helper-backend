@@ -1590,7 +1590,7 @@ paths:
       tags:
         - Planning
       summary: Create menu from planning
-      description: Consumes the user-confirmed stock allocation, or automatically uses the earliest expiration date when no allocation is supplied. It creates a menu snapshot, stores missing products as a shopping list, subtracts the applied stock cost from the selected payer user's money box, revalidates the requested planning coupons on the server, and can redeem one or more planning coupons that add money back to the payer's money box.
+      description: Consumes the user-confirmed stock allocation, or automatically uses the earliest expiration date when no allocation is supplied. It creates a menu snapshot, stores missing products as a shopping list, subtracts the applied stock cost from the selected payer user's money box, revalidates the requested planning coupons on the server, can redeem one or more planning coupons that add money back to the payer's money box, and recalculates stock for the selected execution people when they are provided.
       operationId: createMenuFromPlanning
       parameters:
         - name: id
@@ -1603,7 +1603,7 @@ paths:
         required: true
         content:
           application/json:
-              schema:
+            schema:
               $ref: '#/components/schemas/CreateMenuRequest'
             examples:
               default:
@@ -1614,6 +1614,9 @@ paths:
                       usedUnits: 1.5
                   couponCodes:
                     - NO_REPEATED_PRODUCTS
+                  personIds:
+                    - 1
+                    - 7
       responses:
         '201':
           description: Menu created
@@ -3623,7 +3626,7 @@ components:
           description: Number of users covered by the planning
           example: 4
     CreateMenuRequest:
-      description: Request used to establish a planning, assign its cost, optionally confirm the exact stock allocation, and redeem planning coupons after a final server-side revalidation.
+      description: Request used to establish a planning, assign its cost, optionally confirm the exact stock allocation, optionally attach the selected people, and redeem planning coupons after a final server-side revalidation. When person identifiers are provided, their count is used to recalculate stock for the execution.
       type: object
       required:
         - payerUserId
@@ -3646,6 +3649,14 @@ components:
           items:
             type: string
           example: [NO_REPEATED_PRODUCTS]
+        personIds:
+          type: array
+          nullable: true
+          description: Optional identifiers of the people assigned to the menu when it is established. Their count is used to recalculate stock for that execution.
+          items:
+            type: integer
+            format: int64
+          example: [1, 7]
     MenuStockAllocationRequest:
       type: object
       required:
