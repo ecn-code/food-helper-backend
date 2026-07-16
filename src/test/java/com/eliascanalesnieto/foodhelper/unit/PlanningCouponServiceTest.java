@@ -13,6 +13,8 @@ import com.eliascanalesnieto.foodhelper.application.PlanningCouponService;
 import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
 import com.eliascanalesnieto.foodhelper.domain.AppUser;
 import com.eliascanalesnieto.foodhelper.domain.AppUserRepository;
+import com.eliascanalesnieto.foodhelper.domain.CouponDefinition;
+import com.eliascanalesnieto.foodhelper.domain.CouponDefinitionRepository;
 import com.eliascanalesnieto.foodhelper.domain.PlanningCouponRedemption;
 import com.eliascanalesnieto.foodhelper.domain.PlanningCouponRedemptionRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenu;
@@ -50,6 +52,9 @@ class PlanningCouponServiceTest {
     private AppUserRepository appUserRepository;
 
     @Mock
+    private CouponDefinitionRepository couponDefinitionRepository;
+
+    @Mock
     private Clock clock;
 
     private PlanningCouponService service;
@@ -62,9 +67,11 @@ class PlanningCouponServiceTest {
                 userMoneyRepository,
                 appUserRepository,
                 List.of(new NoRepeatedProductsPlanningCouponStrategy()),
+                couponDefinitionRepository,
                 clock
         );
         when(appUserRepository.findById(1L)).thenReturn(AppUser.builder().id(1L).username("payer").build());
+        when(couponDefinitionRepository.findAll()).thenReturn(List.of(coupon("NO_REPEATED_PRODUCTS", "NO_REPEATED_PRODUCTS")));
     }
 
     @Test
@@ -137,14 +144,20 @@ class PlanningCouponServiceTest {
                 userMoneyRepository,
                 appUserRepository,
                 List.of(new SushiPlanningCouponStrategy()),
+                couponDefinitionRepository,
                 clock
         );
+        when(couponDefinitionRepository.findAll()).thenReturn(List.of(coupon("SUSHI", "SUSHI")));
         when(clock.instant()).thenReturn(Instant.parse("2026-06-15T10:00:00Z"));
         when(redemptionRepository.findLatestByUserIdAndCouponCode(1L, "SUSHI")).thenReturn(Optional.empty());
 
         List<PlanningCouponResponse> coupons = sushiService.findCoupons(menu, 1L);
 
         assertThat(coupons).isEmpty();
+    }
+
+    private CouponDefinition coupon(String code, String ruleCode) {
+        return CouponDefinition.builder().id(1L).code(code).name(code).conditionDescription("Test rule").ruleCode(ruleCode).rewardAmount(new BigDecimal("15.00")).periodDays(30).build();
     }
 
     @Test

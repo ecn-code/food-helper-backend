@@ -405,4 +405,50 @@ class CurrentWeekMenuHistoryServiceTest {
         );
         verify(historyRepository).save(org.mockito.ArgumentMatchers.eq(10L), org.mockito.ArgumentMatchers.eq(person), org.mockito.ArgumentMatchers.eq(persisted.getValue()));
     }
+
+    @Test
+    void closeShouldKeepAnExcludedRecipeOnlyProductionPending() {
+        CurrentWeekMenuResponse menu = new CurrentWeekMenuResponse(
+                10L, 20L, 1L, "payer",
+                List.of(),
+                LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 7),
+                List.of(),
+                null,
+                null,
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(new CurrentWeekMenuRecipeProductionResponse(
+                        91L, 77L, "Recipe", 55L, "Derived Product",
+                        new BigDecimal("4.00"), 1,
+                        false, null, null, null
+                )),
+                null
+        );
+        AppUser person = AppUser.builder().id(1L).username("one").build();
+        CurrentWeekMenuStatsResponse stats = new CurrentWeekMenuStatsResponse(10L, null, null);
+
+        when(statsRepository.findByCurrentWeekMenuId(10L)).thenThrow(new ResourceNotFoundException("not closed"));
+        when(menuRepository.findById(10L)).thenReturn(menu);
+        when(clock.instant()).thenReturn(Instant.parse("2026-06-08T10:00:00Z"));
+        when(clock.getZone()).thenReturn(ZoneOffset.UTC);
+        when(userRepository.findById(1L)).thenReturn(person);
+        when(statsRepository.findClosedWeekMenusByMonth(java.time.YearMonth.of(2026, 6))).thenReturn(List.of());
+        when(statsService.build(menu, List.of(menu))).thenReturn(stats);
+        when(statsRepository.save(stats)).thenReturn(stats);
+
+        assertThat(service.close(10L, List.of(1L), true, List.of(55L))).isSameAs(stats);
+
+        verify(stockRepository, never()).create(
+                org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()
+        );
+        verify(menuRepository, never()).save(org.mockito.ArgumentMatchers.any());
+        verify(historyRepository).save(10L, person, menu);
+        assertThat(menu.recipeProductions()).singleElement().satisfies(production ->
+                assertThat(production.transferred()).isFalse()
+        );
+    }
 }

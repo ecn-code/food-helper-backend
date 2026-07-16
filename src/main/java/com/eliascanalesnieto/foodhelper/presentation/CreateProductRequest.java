@@ -17,6 +17,8 @@ public record CreateProductRequest(
         @NotBlank String description,
         @Schema(description = "Default grams represented by one unit of this product", example = "150")
         @NotNull @Positive BigDecimal gramsPerUnit,
+        @Schema(description = "Whether stock quantities must be returned in units instead of their stored grams", example = "false", defaultValue = "false")
+        boolean isStockInUnits,
         @Schema(description = "Calories per 100 grams", example = "52")
         @NotNull @PositiveOrZero BigDecimal calories,
         @Schema(description = "Carbohydrates per 100 grams", example = "14")
@@ -25,7 +27,7 @@ public record CreateProductRequest(
         @NotNull @PositiveOrZero BigDecimal proteins,
         @Schema(description = "Fats per 100 grams", example = "0.2")
         @NotNull @PositiveOrZero BigDecimal fats,
-        @Schema(description = "Optional default price for this product", example = "2.49", nullable = true)
+        @Schema(description = "Optional default price for this product. Supports up to four decimal places", example = "0.0068", nullable = true)
         @PositiveOrZero BigDecimal defaultPrice,
         @Schema(description = "Optional product photo that will be compressed before storage")
         @Valid PhotoUploadRequest photo,
@@ -41,7 +43,7 @@ public record CreateProductRequest(
             BigDecimal proteins,
             BigDecimal fats
     ) {
-        this(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, null, null, List.of());
+        this(name, description, gramsPerUnit, false, calories, carbohydrates, proteins, fats, null, null, List.of());
     }
 
     public CreateProductRequest(
@@ -54,7 +56,7 @@ public record CreateProductRequest(
             BigDecimal fats,
             PhotoUploadRequest photo
     ) {
-        this(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, null, photo, List.of());
+        this(name, description, gramsPerUnit, false, calories, carbohydrates, proteins, fats, null, photo, List.of());
     }
 
     public CreateProductRequest(
@@ -67,7 +69,7 @@ public record CreateProductRequest(
             BigDecimal fats,
             BigDecimal defaultPrice
     ) {
-        this(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, defaultPrice, null, List.of());
+        this(name, description, gramsPerUnit, false, calories, carbohydrates, proteins, fats, defaultPrice, null, List.of());
     }
 
     public CreateProductRequest(
@@ -81,6 +83,6 @@ public record CreateProductRequest(
             BigDecimal defaultPrice,
             List<Long> supermarketIds
     ) {
-        this(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, defaultPrice, null, supermarketIds);
+        this(name, description, gramsPerUnit, false, calories, carbohydrates, proteins, fats, defaultPrice, null, supermarketIds);
     }
 }

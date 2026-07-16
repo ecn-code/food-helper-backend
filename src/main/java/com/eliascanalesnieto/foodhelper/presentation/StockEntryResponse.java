@@ -12,9 +12,11 @@ public record StockEntryResponse(
         Long productId,
         @Schema(description = "Linked product name", example = "Apple")
         String productName,
-        @Schema(description = "Available quantity in this stock entry", example = "6.5")
+        @Schema(description = "Available quantity in this stock entry, returned in units when isStockInUnits is true", example = "6.5")
         BigDecimal quantity,
-        @Schema(description = "Price paid for this stock entry", example = "4.99")
+        @Schema(description = "Whether quantity is returned in units rather than stored grams", example = "false")
+        boolean isStockInUnits,
+        @Schema(description = "Price paid for this stock entry. Supports up to four decimal places", example = "0.0068")
         BigDecimal price,
         @Schema(description = "Stock expiration date when available", example = "2026-06-20", nullable = true)
         LocalDate expirationDate,

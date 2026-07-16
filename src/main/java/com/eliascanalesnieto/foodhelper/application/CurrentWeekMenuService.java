@@ -42,6 +42,11 @@ import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuStockItemRes
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuUsedStockResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CreateMenuStockMovementRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateMenuStockTransferRequest;
+import com.eliascanalesnieto.foodhelper.presentation.CreateMenuItemImportsRequest;
+import com.eliascanalesnieto.foodhelper.presentation.MenuItemImportDestination;
+import com.eliascanalesnieto.foodhelper.presentation.MenuItemImportRequest;
+import com.eliascanalesnieto.foodhelper.presentation.MenuItemImportsResponse;
+import com.eliascanalesnieto.foodhelper.presentation.MoneyBoxMovementResponse;
 import com.eliascanalesnieto.foodhelper.presentation.MenuStockMovementResponse;
 import com.eliascanalesnieto.foodhelper.presentation.MenuStockAllocationRequest;
 import com.eliascanalesnieto.foodhelper.presentation.UpdateCurrentWeekMenuStockRequest;
@@ -54,6 +59,7 @@ import com.eliascanalesnieto.foodhelper.presentation.UserMenuHistoryEntryRespons
 import com.eliascanalesnieto.foodhelper.presentation.UserMenuHistoryResponse;
 import com.eliascanalesnieto.foodhelper.presentation.UserResponse;
 import com.eliascanalesnieto.foodhelper.presentation.UserMoneyMovementResponse;
+import com.eliascanalesnieto.foodhelper.presentation.ProductApiMapper;
 import com.eliascanalesnieto.foodhelper.presentation.error.ResourceNotFoundException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -68,6 +74,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -99,6 +106,7 @@ public class CurrentWeekMenuService {
     private final UserMenuHistoryRepository userMenuHistoryRepository;
     private final PlanningCouponService planningCouponService;
     private final CurrentWeekMenuApiMapper mapper;
+    private final ProductApiMapper productApiMapper;
     private final NutritionalRulesService nutritionalRulesService;
     private final Clock clock;
 
@@ -267,11 +275,21 @@ public class CurrentWeekMenuService {
 
     @Transactional
     public CurrentWeekMenuStatsResponse close(Long id, List<Long> personIds) {
-        return close(id, personIds, true);
+        return close(id, personIds, true, List.of());
     }
 
     @Transactional
     public CurrentWeekMenuStatsResponse close(Long id, List<Long> personIds, boolean transferWeekStock) {
+        return close(id, personIds, transferWeekStock, List.of());
+    }
+
+    @Transactional
+    public CurrentWeekMenuStatsResponse close(
+            Long id,
+            List<Long> personIds,
+            boolean transferWeekStock,
+            List<Long> excludedPositiveStockProductIds
+    ) {
         try {
             return currentWeekMenuStatsRepository.findByCurrentWeekMenuId(id);
         } catch (ResourceNotFoundException ex) {
@@ -280,13 +298,17 @@ public class CurrentWeekMenuService {
 
         CurrentWeekMenuResponse closedWeek = currentWeekMenuRepository.findById(id);
         ensureMenuCanBeClosed(closedWeek);
-        CurrentWeekMenuResponse updatedMenu = transferPendingRecipeProductions(closedWeek);
+        Set<Long> excludedProductIds = validateExcludedPositiveStockProductIds(
+                closedWeek,
+                excludedPositiveStockProductIds
+        );
+        CurrentWeekMenuResponse updatedMenu = transferPendingRecipeProductions(closedWeek, excludedProductIds);
         if (updatedMenu != null) {
             currentWeekMenuRepository.save(updatedMenu);
             closedWeek = updatedMenu;
         }
         if (transferWeekStock) {
-            transferWeekStockToProducts(closedWeek);
+            transferWeekStockToProducts(closedWeek, excludedProductIds);
         }
         List<AppUser> people = loadPeople(personIds);
         List<CurrentWeekMenuResponse> closedWeeksInMonth = new ArrayList<>(currentWeekMenuStatsRepository.findClosedWeekMenusByMonth(YearMonth.from(closedWeek.endDate())));
@@ -414,6 +436,92 @@ public class CurrentWeekMenuService {
         return withPersonIds(currentWeekMenuRepository.save(updated));
     }
 
+    @Transactional
+    public MenuItemImportsResponse importItems(Long menuId, CreateMenuItemImportsRequest request) {
+        CurrentWeekMenuResponse menu = normalizeShoppingList(currentWeekMenuRepository.findById(menuId));
+        ensureMenuIsOpen(menuId);
+        List<MenuItemImportRequest> items = validateItemImports(request);
+
+        Map<Long, Product> productsById = new LinkedHashMap<>();
+        for (MenuItemImportRequest item : items) {
+            productsById.computeIfAbsent(item.productId(), productRepository::findById);
+        }
+        items.stream()
+                .filter(item -> item.destination() == MenuItemImportDestination.MONEY_BOX)
+                .map(MenuItemImportRequest::moneyBoxId)
+                .distinct()
+                .forEach(userMoneyRepository::findMoneyBoxById);
+
+        List<CurrentWeekMenuStockItemResponse> updatedWeekStock = new ArrayList<>(safeWeekStock(menu));
+        List<CurrentWeekMenuShoppingListItemResponse> updatedShoppingList = new ArrayList<>(
+                menu.shoppingList() == null ? List.of() : menu.shoppingList()
+        );
+        List<MoneyBoxMovementResponse> moneyBoxMovements = new ArrayList<>();
+        List<com.eliascanalesnieto.foodhelper.presentation.StockEntryResponse> globalStockEntries = new ArrayList<>();
+        LocalDate entryDate = LocalDate.now(clock);
+
+        for (MenuItemImportRequest item : items) {
+            Product product = productsById.get(item.productId());
+            BigDecimal quantity = scale(item.quantity());
+            BigDecimal price = scale(item.price());
+            switch (item.destination()) {
+                case MENU_STOCK -> {
+                    updatedWeekStock = appendWeekStock(
+                            updatedWeekStock,
+                            product.getId(),
+                            quantity,
+                            price,
+                            product.getName()
+                    );
+                    updatedShoppingList = adjustShoppingList(updatedShoppingList, product.getId(), quantity);
+                }
+                case MONEY_BOX -> moneyBoxMovements.add(toMoneyBoxMovementResponse(
+                        userMoneyRepository.addMoneyBoxMovement(
+                                item.moneyBoxId(),
+                                scale(item.quantity().multiply(item.price())).negate(),
+                                "Compra: " + product.getName()
+                        )
+                ));
+                case GLOBAL_STOCK -> globalStockEntries.add(productApiMapper.toResponse(
+                        stockRepository.create(product.getId(), StockEntry.builder()
+                                .quantity(quantity)
+                                .price(price)
+                                .expirationDate(item.expirationDate())
+                                .entryDate(entryDate)
+                                .build(), StockMovementType.ENTRY, entryDate)
+                ));
+            }
+        }
+
+        CurrentWeekMenuResponse updatedMenu = menu;
+        if (items.stream().anyMatch(item -> item.destination() == MenuItemImportDestination.MENU_STOCK)) {
+            updatedMenu = currentWeekMenuRepository.save(new CurrentWeekMenuResponse(
+                    menu.id(),
+                    menu.planningId(),
+                    menu.payerUserId(),
+                    menu.payerUsername(),
+                    safePersonIds(menu),
+                    menu.startDate(),
+                    menu.endDate(),
+                    menu.days(),
+                    menu.nutritionalValues(),
+                    menu.stockSummary(),
+                    menu.usedStock(),
+                    updatedWeekStock,
+                    updatedShoppingList,
+                    safeStockMovements(menu),
+                    menu.recipeProductions(),
+                    menu.nutritionalRules(),
+                    menu.state()
+            ));
+        }
+        return new MenuItemImportsResponse(
+                withPersonIds(updatedMenu),
+                moneyBoxMovements,
+                globalStockEntries
+        );
+    }
+
     @Transactional(readOnly = true)
     public List<MenuStockMovementResponse> findStockMovements(Long id) {
         currentWeekMenuRepository.findById(id);
@@ -467,23 +575,32 @@ public class CurrentWeekMenuService {
                 .toList();
     }
 
-    private CurrentWeekMenuResponse transferPendingRecipeProductions(CurrentWeekMenuResponse menu) {
+    private CurrentWeekMenuResponse transferPendingRecipeProductions(
+            CurrentWeekMenuResponse menu,
+            Set<Long> excludedProductIds
+    ) {
         List<CurrentWeekMenuRecipeProductionResponse> productions = safeRecipeProductions(menu);
-        boolean hasPending = productions.stream().anyMatch(production -> !production.transferred());
+        boolean hasPending = productions.stream()
+                .anyMatch(production -> !production.transferred() && !excludedProductIds.contains(production.productId()));
         if (!hasPending) {
             return null;
         }
         CurrentWeekMenuResponse updated = menu;
         for (CurrentWeekMenuRecipeProductionResponse production : productions) {
-            if (!production.transferred()) {
+            if (!production.transferred() && !excludedProductIds.contains(production.productId())) {
                 updated = applyRecipeProductionTransfer(updated, production, "AUTO");
             }
         }
         return updated;
     }
 
-    private void transferWeekStockToProducts(CurrentWeekMenuResponse menu) {
+    private void transferWeekStockToProducts(CurrentWeekMenuResponse menu, Set<Long> excludedProductIds) {
         for (CurrentWeekMenuStockItemResponse item : safeWeekStock(menu)) {
+            if (item.quantity() == null
+                    || item.quantity().signum() <= 0
+                    || excludedProductIds.contains(item.productId())) {
+                continue;
+            }
             productRepository.findById(item.productId());
             stockRepository.create(item.productId(), StockEntry.builder()
                     .quantity(item.quantity())
@@ -492,6 +609,36 @@ public class CurrentWeekMenuService {
                     .entryDate(menu.endDate())
                     .build(), StockMovementType.ENTRY, menu.endDate());
         }
+    }
+
+    private Set<Long> validateExcludedPositiveStockProductIds(
+            CurrentWeekMenuResponse menu,
+            List<Long> excludedPositiveStockProductIds
+    ) {
+        List<Long> requestedIds = excludedPositiveStockProductIds == null
+                ? List.of()
+                : excludedPositiveStockProductIds;
+        if (requestedIds.stream().anyMatch(id -> id == null || id <= 0)) {
+            throw new IllegalArgumentException("Excluded positive stock product identifiers must be positive");
+        }
+        Set<Long> excludedProductIds = Set.copyOf(requestedIds);
+        if (excludedProductIds.size() != requestedIds.size()) {
+            throw new IllegalArgumentException("Excluded positive stock product identifiers must be unique");
+        }
+        Set<Long> positiveProductIds = new HashSet<>();
+        safeWeekStock(menu).stream()
+                .filter(item -> item.quantity() != null && item.quantity().signum() > 0)
+                .map(CurrentWeekMenuStockItemResponse::productId)
+                .forEach(positiveProductIds::add);
+        safeRecipeProductions(menu).stream()
+                .filter(production -> !production.transferred())
+                .filter(production -> production.units() != null && production.units().signum() > 0)
+                .map(CurrentWeekMenuRecipeProductionResponse::productId)
+                .forEach(positiveProductIds::add);
+        if (!positiveProductIds.containsAll(excludedProductIds)) {
+            throw new IllegalArgumentException("Excluded product is not pending positive stock for this menu");
+        }
+        return excludedProductIds;
     }
 
     private CurrentWeekMenuCloseSummaryResponse buildCloseSummary(CurrentWeekMenuResponse menu) {
@@ -1203,6 +1350,35 @@ public class CurrentWeekMenuService {
         return appendWeekStock(safeWeekStock(menu), productId, quantity, price, productName);
     }
 
+    private List<MenuItemImportRequest> validateItemImports(CreateMenuItemImportsRequest request) {
+        if (request == null || request.items() == null || request.items().isEmpty()) {
+            throw new IllegalArgumentException("At least one item import is required");
+        }
+        for (MenuItemImportRequest item : request.items()) {
+            if (item == null
+                    || item.productId() == null
+                    || item.productId() <= 0
+                    || item.quantity() == null
+                    || item.quantity().compareTo(new BigDecimal("0.01")) < 0
+                    || item.price() == null
+                    || item.price().signum() < 0
+                    || item.destination() == null) {
+                throw new IllegalArgumentException("Item imports require a productId, quantity of at least 0.01, non-negative price, and destination");
+            }
+            if (item.destination() == MenuItemImportDestination.MONEY_BOX) {
+                if (item.moneyBoxId() == null || item.moneyBoxId() <= 0) {
+                    throw new IllegalArgumentException("moneyBoxId is required for MONEY_BOX item imports");
+                }
+            } else if (item.moneyBoxId() != null) {
+                throw new IllegalArgumentException("moneyBoxId is accepted only for MONEY_BOX item imports");
+            }
+            if (item.destination() != MenuItemImportDestination.GLOBAL_STOCK && item.expirationDate() != null) {
+                throw new IllegalArgumentException("expirationDate is accepted only for GLOBAL_STOCK item imports");
+            }
+        }
+        return request.items();
+    }
+
     private WeekStockUpdateResult replaceWeekStock(
             CurrentWeekMenuResponse menu,
             List<CurrentWeekMenuStockItemRequest> requestedWeekStock
@@ -1307,6 +1483,20 @@ public class CurrentWeekMenuService {
     private UserMoneyMovementResponse toResponse(com.eliascanalesnieto.foodhelper.domain.UserMoneyMovement movement) {
         return new UserMoneyMovementResponse(
                 movement.getId(),
+                movement.getUserId(),
+                movement.getAmount(),
+                movement.getDescription(),
+                movement.getCurrentWeekMenuId(),
+                movement.getCreatedAt()
+        );
+    }
+
+    private MoneyBoxMovementResponse toMoneyBoxMovementResponse(
+            com.eliascanalesnieto.foodhelper.domain.UserMoneyMovement movement
+    ) {
+        return new MoneyBoxMovementResponse(
+                movement.getId(),
+                movement.getMoneyBoxId(),
                 movement.getUserId(),
                 movement.getAmount(),
                 movement.getDescription(),

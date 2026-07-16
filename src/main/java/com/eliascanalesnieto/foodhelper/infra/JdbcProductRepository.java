@@ -33,6 +33,7 @@ public class JdbcProductRepository implements ProductRepository {
                    p.name,
                    p.description,
                    p.grams_per_unit,
+                   p.is_stock_in_units,
                    p.nutrition_basis,
                    p.default_price,
                    p.created_at,
@@ -66,6 +67,7 @@ public class JdbcProductRepository implements ProductRepository {
                     product.getName(),
                     product.getDescription(),
                     product.getGramsPerUnit(),
+                    product.isStockInUnits(),
                     product.getNutritionBasis() == null ? NutritionBasis.PER_100_GRAMS.name() : product.getNutritionBasis().name(),
                     product.getDefaultPrice(),
                     mediaId(product),
@@ -92,6 +94,7 @@ public class JdbcProductRepository implements ProductRepository {
                     product.getName(),
                     product.getDescription(),
                     product.getGramsPerUnit(),
+                    product.isStockInUnits(),
                     product.getNutritionBasis() == null ? NutritionBasis.PER_100_GRAMS.name() : product.getNutritionBasis().name(),
                     product.getDefaultPrice(),
                     mediaId(product),
@@ -227,6 +230,7 @@ public class JdbcProductRepository implements ProductRepository {
                 .name(product.name())
                 .description(product.description())
                 .gramsPerUnit(product.gramsPerUnit())
+                .stockInUnits(product.stockInUnits())
                 .createdAt(product.createdAt())
                 .nutritionBasis(product.nutritionBasis() == null ? NutritionBasis.PER_100_GRAMS : NutritionBasis.valueOf(product.nutritionBasis()))
                 .defaultPrice(product.defaultPrice())
@@ -270,6 +274,7 @@ public class JdbcProductRepository implements ProductRepository {
                 .name(rs.getString("name"))
                 .description(rs.getString("description"))
                 .gramsPerUnit(rs.getBigDecimal("grams_per_unit"))
+                .stockInUnits(rs.getBoolean("is_stock_in_units"))
                 .createdAt(rs.getTimestamp("created_at").toInstant())
                 .nutritionBasis(NutritionBasis.valueOf(rs.getString("nutrition_basis")))
                 .defaultPrice(rs.getBigDecimal("default_price"))

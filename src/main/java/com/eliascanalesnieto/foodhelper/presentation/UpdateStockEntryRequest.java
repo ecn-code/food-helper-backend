@@ -9,9 +9,9 @@ import java.time.LocalDate;
 
 @Schema(name = "UpdateStockEntryRequest", description = "Payload for updating a stock entry")
 public record UpdateStockEntryRequest(
-        @Schema(description = "Available quantity for this stock entry", example = "6.5")
+        @Schema(description = "Available quantity for this stock entry, always supplied and stored in grams", example = "150")
         @NotNull @Positive BigDecimal quantity,
-        @Schema(description = "Price paid for this stock entry", example = "4.99")
+        @Schema(description = "Price paid for this stock entry. Supports up to four decimal places", example = "0.0068")
         @NotNull @PositiveOrZero BigDecimal price,
         @Schema(description = "Stock expiration date when available", example = "2026-06-20", nullable = true)
         LocalDate expirationDate,

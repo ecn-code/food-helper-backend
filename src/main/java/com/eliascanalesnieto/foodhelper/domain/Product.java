@@ -12,6 +12,8 @@ public class Product {
     String name;
     String description;
     java.math.BigDecimal gramsPerUnit;
+    @Builder.Default
+    boolean stockInUnits = false;
     java.math.BigDecimal defaultPrice;
     Instant createdAt;
     NutritionBasis nutritionBasis;

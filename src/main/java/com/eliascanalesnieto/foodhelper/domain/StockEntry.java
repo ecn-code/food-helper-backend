@@ -12,6 +12,8 @@ public class StockEntry {
     Long productId;
     String productName;
     BigDecimal quantity;
+    BigDecimal gramsPerUnit;
+    boolean stockInUnits;
     BigDecimal price;
     LocalDate expirationDate;
     LocalDate entryDate;

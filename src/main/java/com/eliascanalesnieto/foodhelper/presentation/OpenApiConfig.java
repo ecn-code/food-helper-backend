@@ -106,6 +106,11 @@ public class OpenApiConfig {
     }
 
     @Bean
+    GroupedOpenApi challengesApi() {
+        return groupedApi("challenges", "Challenges", "/api/v1/challenges", "/api/v1/challenges/**").build();
+    }
+
+    @Bean
     GroupedOpenApi planningApi() {
         return groupedApi(
                 "planning",

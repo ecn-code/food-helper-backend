@@ -13,6 +13,7 @@ import com.eliascanalesnieto.foodhelper.application.ProductService;
 import com.eliascanalesnieto.foodhelper.application.CurrentWeekMenuService;
 import com.eliascanalesnieto.foodhelper.application.ProposedWeekMenuService;
 import com.eliascanalesnieto.foodhelper.application.PlanningCouponService;
+import com.eliascanalesnieto.foodhelper.application.ChallengeService;
 import com.eliascanalesnieto.foodhelper.application.RecipeService;
 import com.eliascanalesnieto.foodhelper.application.StatsService;
 import com.eliascanalesnieto.foodhelper.application.StockService;
@@ -29,6 +30,7 @@ import com.eliascanalesnieto.foodhelper.presentation.CreateProductRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateMoneyBoxRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateProposedWeekMenuRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateMenuStockMovementRequest;
+import com.eliascanalesnieto.foodhelper.presentation.CreateMenuItemImportsRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeDerivedProductRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateRecipeRequest;
 import com.eliascanalesnieto.foodhelper.presentation.CreateStockEntryRequest;
@@ -86,6 +88,7 @@ public class LambdaHttpRouter {
     private final ProposedWeekMenuService proposedWeekMenuService;
     private final CurrentWeekMenuService currentWeekMenuService;
     private final PlanningCouponService planningCouponService;
+    private final ChallengeService challengeService;
     private final UserMoneyService userMoneyService;
     private final UserWeightService userWeightService;
     private final NutritionalRulesService nutritionalRulesService;
@@ -155,12 +158,25 @@ public class LambdaHttpRouter {
             return json(200, planningCouponService.findGlobalCoupons(payerUserId, onlyAvailable));
         }
 
+        if ("GET".equals(method) && "/api/v1/challenges".equals(path)) {
+            Long payerUserId = parseRequiredLong(queryParam(request, "payerUserId"), "payerUserId");
+            boolean onlyAvailable = Boolean.parseBoolean(queryParam(request, "onlyAvailable"));
+            return json(200, challengeService.findChallenges(payerUserId, onlyAvailable));
+        }
+
+        if (path != null && path.startsWith("/api/v1/challenges/") && path.endsWith("/redeem") && "POST".equals(method)) {
+            String challengeCode = path.substring("/api/v1/challenges/".length(), path.length() - "/redeem".length());
+            Long payerUserId = parseRequiredLong(queryParam(request, "payerUserId"), "payerUserId");
+            return json(200, challengeService.redeemChallenge(payerUserId, challengeCode));
+        }
+
         if ("POST".equals(method) && "/api/v1/products".equals(path)) {
             CreateProductRequest body = parseCreate(request.getBody());
             Product created = service.create(
                     body.name(),
                     body.description(),
                     body.gramsPerUnit(),
+                    body.isStockInUnits(),
                     body.calories(),
                     body.carbohydrates(),
                     body.proteins(),
@@ -341,6 +357,7 @@ public class LambdaHttpRouter {
                         body.name(),
                         body.description(),
                         body.gramsPerUnit(),
+                        body.isStockInUnits(),
                         body.calories(),
                         body.carbohydrates(),
                         body.proteins(),
@@ -400,6 +417,13 @@ public class LambdaHttpRouter {
         }
 
         if (path != null && path.startsWith("/api/v1/menus/")) {
+            if (path.endsWith("/item-imports")) {
+                Long id = parseId(path.substring(0, path.lastIndexOf('/')));
+                if ("POST".equals(method)) {
+                    CreateMenuItemImportsRequest body = readBody(request.getBody(), CreateMenuItemImportsRequest.class);
+                    return json(200, currentWeekMenuService.importItems(id, body));
+                }
+            }
             if (path.endsWith("/payer")) {
                 Long id = parseId(path.substring(0, path.lastIndexOf('/')));
                 if ("PUT".equals(method)) {
@@ -439,7 +463,12 @@ public class LambdaHttpRouter {
                 Long id = parseId(path.substring(0, path.lastIndexOf('/')));
                 if ("POST".equals(method)) {
                     CloseCurrentWeekMenuRequest body = readBody(request.getBody(), CloseCurrentWeekMenuRequest.class);
-                    return json(200, currentWeekMenuService.close(id, body.personIds(), body.transferWeekStock()));
+                    return json(200, currentWeekMenuService.close(
+                            id,
+                            body.personIds(),
+                            body.transferWeekStock(),
+                            body.excludedPositiveStockProductIds()
+                    ));
                 }
             }
             if (path.endsWith("/stats")) {

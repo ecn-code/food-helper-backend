@@ -1706,6 +1706,138 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+    post:
+      tags: [Coupons]
+      summary: Create coupon definition
+      operationId: createCoupon
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CouponDefinitionRequest'
+      responses:
+        '201': {description: Coupon created, content: {application/json: {schema: {$ref: '#/components/schemas/CouponResponse'}}}}
+        '400': {description: Invalid request or rule, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+        '409': {description: Coupon code already exists, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+  /api/v1/coupons/{code}:
+    put:
+      tags: [Coupons]
+      summary: Update coupon definition
+      operationId: updateCoupon
+      parameters: [{name: code, in: path, required: true, schema: {type: string}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CouponDefinitionRequest'}}}}
+      responses:
+        '200': {description: Coupon updated, content: {application/json: {schema: {$ref: '#/components/schemas/CouponResponse'}}}}
+        '404': {description: Coupon not found, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+    delete:
+      tags: [Coupons]
+      summary: Delete coupon definition
+      operationId: deleteCoupon
+      parameters: [{name: code, in: path, required: true, schema: {type: string}}]
+      responses:
+        '204': {description: Coupon deleted}
+        '404': {description: Coupon not found, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+  /api/v1/challenges:
+    get:
+      tags:
+        - Challenges
+      summary: List challenges
+      description: Returns every configured challenge for the requested user. Challenges do not require menu validation; use onlyAvailable=true to hide challenges on cooldown.
+      operationId: listChallenges
+      parameters:
+        - name: payerUserId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: onlyAvailable
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Challenges returned
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChallengeResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+    post:
+      tags: [Challenges]
+      summary: Create challenge definition
+      operationId: createChallenge
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChallengeDefinitionRequest'}}}}
+      responses:
+        '201': {description: Challenge created, content: {application/json: {schema: {$ref: '#/components/schemas/ChallengeResponse'}}}}
+        '400': {description: Invalid request, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+        '409': {description: Challenge code already exists, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+  /api/v1/challenges/{challengeCode}:
+    put:
+      tags: [Challenges]
+      summary: Update challenge definition
+      operationId: updateChallenge
+      parameters: [{name: challengeCode, in: path, required: true, schema: {type: string}}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChallengeDefinitionRequest'}}}}
+      responses:
+        '200': {description: Challenge updated, content: {application/json: {schema: {$ref: '#/components/schemas/ChallengeResponse'}}}}
+        '404': {description: Challenge not found, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+    delete:
+      tags: [Challenges]
+      summary: Delete challenge definition
+      operationId: deleteChallenge
+      parameters: [{name: challengeCode, in: path, required: true, schema: {type: string}}]
+      responses:
+        '204': {description: Challenge deleted}
+        '404': {description: Challenge not found, content: {application/json: {schema: {$ref: '#/components/schemas/ApiError'}}}}
+  /api/v1/challenges/{challengeCode}/redeem:
+    post:
+      tags:
+        - Challenges
+      summary: Select a challenge
+      description: Immediately credits the challenge reward to the user's money box and starts its cooldown. No completion validation is performed.
+      operationId: redeemChallenge
+      parameters:
+        - name: challengeCode
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: payerUserId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Challenge selected and reward credited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChallengeResponse'
+        '400':
+          description: Unknown or unavailable challenge
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /api/v1/planning/{id}/coupons/validate:
     post:
       tags:
@@ -2060,12 +2192,73 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /api/v1/menus/{menuId}/item-imports:
+    post:
+      tags:
+        - Menus
+      summary: Import purchased menu items
+      description: Validates the open menu and every product, money box, numeric value, destination-specific field, and ISO-8601 date before writing. All rows are then applied atomically. Repeated products remain separate rows; money box movements are independent and are never linked to the menu.
+      operationId: importMenuItems
+      parameters:
+        - name: menuId
+          in: path
+          required: true
+          description: Open menu identifier
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMenuItemImportsRequest'
+            example:
+              items:
+                - productId: 12
+                  quantity: 3
+                  price: 2.49
+                  destination: MENU_STOCK
+                  moneyBoxId: null
+                  expirationDate: null
+                - productId: 12
+                  quantity: 1
+                  price: 2.49
+                  destination: MONEY_BOX
+                  moneyBoxId: 4
+                  expirationDate: null
+                - productId: 15
+                  quantity: 2
+                  price: 1.75
+                  destination: GLOBAL_STOCK
+                  moneyBoxId: null
+                  expirationDate: 2026-08-31
+      responses:
+        '200':
+          description: All item rows imported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuItemImportsResponse'
+        '400':
+          description: Empty or invalid payload, invalid ISO date, destination field mismatch, or closed menu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Menu, product, or money box not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /api/v1/menus/{id}/close:
     post:
       tags:
         - Menus
       summary: Close menu
-      description: Closes a menu after its end date, saves statistics, and records an immutable snapshot for every selected person.
+      description: Closes a menu after its end date, saves statistics, and records an immutable snapshot for every selected person. Positive week stock is transferred unless transferWeekStock is false. Products selected in excludedPositiveStockProductIds keep all their week-stock lines and pending recipe productions untransferred.
       operationId: closeMenu
       parameters:
         - name: id
@@ -2082,6 +2275,8 @@ paths:
               $ref: '#/components/schemas/CloseMenuRequest'
             example:
               personIds: [1, 2]
+              transferWeekStock: true
+              excludedPositiveStockProductIds: [10, 12]
       responses:
         '200':
           description: Menu closed
@@ -2090,7 +2285,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/MenuStatsResponse'
         '400':
-          description: Menu cannot be closed yet
+          description: Menu cannot be closed yet or the excluded product selection is invalid or stale
           content:
             application/json:
               schema:
@@ -2651,12 +2846,17 @@ components:
           exclusiveMinimum: 0
           description: Default grams represented by one unit of this product
           example: 150
+        isStockInUnits:
+          type: boolean
+          default: false
+          description: Whether stock quantities must be returned in units instead of their stored grams
+          example: false
         defaultPrice:
           type: number
           minimum: 0
           nullable: true
-          description: Optional default price for this product
-          example: 2.49
+          description: Optional default price for this product. Supports up to four decimal places
+          example: 0.0068
         calories:
           type: number
           minimum: 0
@@ -2695,13 +2895,13 @@ components:
         quantity:
           type: number
           exclusiveMinimum: 0
-          description: Available quantity for this stock entry
-          example: 6.5
+          description: Available quantity for this stock entry, always supplied and stored in grams
+          example: 150
         price:
           type: number
           minimum: 0
-          description: Price paid for this stock entry
-          example: 4.99
+          description: Price paid for this stock entry. Supports up to four decimal places
+          example: 0.0068
         expirationDate:
           type: string
           format: date
@@ -2723,13 +2923,13 @@ components:
         quantity:
           type: number
           exclusiveMinimum: 0
-          description: Available quantity for this stock entry
-          example: 6.5
+          description: Available quantity for this stock entry, always supplied and stored in grams
+          example: 150
         price:
           type: number
           minimum: 0
-          description: Price paid for this stock entry
-          example: 4.99
+          description: Price paid for this stock entry. Supports up to four decimal places
+          example: 0.0068
         expirationDate:
           type: string
           format: date
@@ -2749,8 +2949,8 @@ components:
         quantity:
           type: number
           exclusiveMinimum: 0
-          description: Quantity to add or remove
-          example: 2
+          description: Quantity in grams to add or remove
+          example: 50
     UpdateProductRequest:
       allOf:
         - $ref: '#/components/schemas/CreateProductRequest'
@@ -2774,6 +2974,10 @@ components:
           type: number
           description: Default grams represented by one unit of this product
           example: 150
+        isStockInUnits:
+          type: boolean
+          description: Whether stock quantities are returned in units instead of stored grams
+          example: false
         nutritionBasis:
           type: string
           description: Nutrition basis used by this product
@@ -2781,8 +2985,8 @@ components:
         defaultPrice:
           type: number
           nullable: true
-          description: Optional default price for this product
-          example: 2.49
+          description: Optional default price for this product. Supports up to four decimal places
+          example: 0.0068
         nutritionalValues:
           $ref: '#/components/schemas/NutritionalValuesResponse'
         photo:
@@ -2983,12 +3187,16 @@ components:
           example: Apple
         quantity:
           type: number
-          description: Available quantity in this stock entry
+          description: Available quantity in this stock entry, returned in units when isStockInUnits is true
           example: 6.5
+        isStockInUnits:
+          type: boolean
+          description: Whether quantity is returned in units rather than stored grams
+          example: false
         price:
           type: number
-          description: Price paid for this stock entry
-          example: 4.99
+          description: Price paid for this stock entry. Supports up to four decimal places
+          example: 0.0068
         expirationDate:
           type: string
           format: date
@@ -3044,8 +3252,8 @@ components:
         price:
           type: number
           nullable: true
-          description: Price per unit at the time of the movement
-          example: 4.99
+          description: Price per unit at the time of the movement. Supports up to four decimal places
+          example: 0.0068
         expirationDate:
           type: string
           format: date
@@ -3878,8 +4086,9 @@ components:
             $ref: '#/components/schemas/PlanningCouponUnavailabilityReason'
     CouponResponse:
       type: object
-      required: [code, name, conditionDescription, available]
+      required: [id, code, name, conditionDescription, ruleCode, rewardAmount, periodDays, available]
       properties:
+        id: {type: integer, format: int64, description: Coupon definition identifier}
         code:
           type: string
           description: Stable coupon code
@@ -3892,6 +4101,9 @@ components:
           type: string
           description: Human-readable rule that the coupon requires
           example: The menu must fill every planned day with at least 3 products and cannot repeat the same product on the same day or in the same day part across different days
+        ruleCode: {type: string, description: Eligibility rule code, example: ALWAYS}
+        rewardAmount: {type: number, format: double, description: Money added when redeemed, example: 10.00}
+        periodDays: {type: integer, format: int32, description: Cooldown in days, example: 30}
         available:
           type: boolean
           description: Whether the coupon can be redeemed now
@@ -3901,6 +4113,65 @@ components:
           description: Reasons why the coupon cannot be redeemed now
           items:
             $ref: '#/components/schemas/PlanningCouponUnavailabilityReason'
+    ChallengeResponse:
+      type: object
+      required: [id, code, name, description, rewardAmount, periodDays, available]
+      properties:
+        id: {type: integer, format: int64, description: Challenge definition identifier}
+        code:
+          type: string
+          description: Stable challenge code
+          example: QUEUES
+        name:
+          type: string
+          description: Challenge display name
+          example: Queue challenge
+        description:
+          type: string
+          description: Instructions for completing the challenge
+        rewardAmount:
+          type: number
+          format: double
+          description: Money added to the user's money box immediately when the challenge is selected
+          example: 10.00
+        periodDays:
+          type: integer
+          format: int32
+          description: Cooldown in days before the challenge can be selected again
+          example: 30
+        available:
+          type: boolean
+          description: Whether the challenge can be selected now
+          example: true
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Instant when the challenge was last selected, or null if never selected
+        nextAvailableAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Instant when the challenge becomes selectable again, or null when available
+    CouponDefinitionRequest:
+      type: object
+      required: [code, name, conditionDescription, ruleCode, rewardAmount, periodDays]
+      properties:
+        code: {type: string, pattern: '^[A-Za-z0-9_]{1,80}$', example: WEEKLY_TREAT}
+        name: {type: string, example: Weekly treat}
+        conditionDescription: {type: string, example: No menu validation required}
+        ruleCode: {type: string, description: Use ALWAYS for a coupon without menu validation, example: ALWAYS}
+        rewardAmount: {type: number, format: double, minimum: 0, example: 10.00}
+        periodDays: {type: integer, minimum: 0, example: 30}
+    ChallengeDefinitionRequest:
+      type: object
+      required: [code, name, description, rewardAmount, periodDays]
+      properties:
+        code: {type: string, pattern: '^[A-Za-z0-9_]{1,80}$', example: NO_SPEND_DAY}
+        name: {type: string, example: No-spend day}
+        description: {type: string, example: Do not spend money for one full day.}
+        rewardAmount: {type: number, format: double, minimum: 0, example: 10.00}
+        periodDays: {type: integer, minimum: 0, example: 30}
     PlanningCouponAvailabilityState:
       type: string
       enum: [AVAILABLE, CONDITION_NOT_MET, USED_RECENTLY, CONDITION_NOT_MET_AND_USED_RECENTLY]
@@ -4096,6 +4367,21 @@ components:
             type: integer
             format: int64
           example: [1, 2]
+        transferWeekStock:
+          type: boolean
+          default: true
+          description: Whether positive week stock should be transferred to global stock. When false, all week stock is skipped regardless of product exclusions.
+          example: true
+        excludedPositiveStockProductIds:
+          type: array
+          nullable: true
+          uniqueItems: true
+          description: Distinct product identifiers with positive menu stock whose week-stock lines and pending recipe productions must not be transferred to global stock. Omitted or empty preserves the default close behavior.
+          items:
+            type: integer
+            format: int64
+            minimum: 1
+          example: [10, 12]
     UserResponse:
       type: object
       properties:
@@ -4642,6 +4928,84 @@ components:
           type: number
           description: Units still missing after consuming available stock
           example: 2
+    MenuItemImportDestination:
+      type: string
+      description: Destination where an imported purchased item is applied
+      enum:
+        - MENU_STOCK
+        - MONEY_BOX
+        - GLOBAL_STOCK
+    MenuItemImportRequest:
+      type: object
+      required:
+        - productId
+        - quantity
+        - price
+        - destination
+      properties:
+        productId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Purchased product identifier
+          example: 12
+        quantity:
+          type: number
+          minimum: 0.01
+          description: Purchased quantity
+          example: 3
+        price:
+          type: number
+          minimum: 0
+          description: Purchased unit price
+          example: 2.49
+        destination:
+          $ref: '#/components/schemas/MenuItemImportDestination'
+        moneyBoxId:
+          type:
+            - integer
+            - 'null'
+          format: int64
+          minimum: 1
+          description: Required only for MONEY_BOX and rejected for other destinations
+          example: 4
+        expirationDate:
+          type:
+            - string
+            - 'null'
+          format: date
+          description: Optional ISO-8601 expiration date accepted only for GLOBAL_STOCK
+          example: 2026-08-31
+    CreateMenuItemImportsRequest:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          minItems: 1
+          description: Rows validated and applied in one transaction; duplicate products are preserved as separate rows
+          items:
+            $ref: '#/components/schemas/MenuItemImportRequest'
+    MenuItemImportsResponse:
+      type: object
+      required:
+        - menu
+        - moneyBoxMovements
+        - globalStockEntries
+      properties:
+        menu:
+          $ref: '#/components/schemas/MenuResponse'
+        moneyBoxMovements:
+          type: array
+          description: MONEY_BOX movements created in request order, each with menuId null
+          items:
+            $ref: '#/components/schemas/MoneyBoxMovementResponse'
+        globalStockEntries:
+          type: array
+          description: GLOBAL_STOCK batches created in request order
+          items:
+            $ref: '#/components/schemas/StockEntryResponse'
     UpdateCurrentWeekMenuStockRequest:
       type: object
       required:

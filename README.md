@@ -50,6 +50,7 @@ Every new endpoint, and every change to request or response data in an existing 
 
 Planning creation requests accept a `users` count so stock requirements can be scaled for multi-person weeks.
 Stock now exposes a historical ledger at `/api/v1/stock/movements` and a per-product reconciliation view at `/api/v1/products/{productId}/stock/reconciliation`.
+Challenges are available through `/api/v1/challenges`; selecting one immediately credits its reward without menu validation and starts its cooldown.
 
 ## Tests
 - Unit tests for service and mapper

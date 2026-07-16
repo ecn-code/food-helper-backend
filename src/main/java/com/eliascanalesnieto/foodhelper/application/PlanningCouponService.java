@@ -1,6 +1,8 @@
 package com.eliascanalesnieto.foodhelper.application;
 
 import com.eliascanalesnieto.foodhelper.domain.AppUserRepository;
+import com.eliascanalesnieto.foodhelper.domain.CouponDefinition;
+import com.eliascanalesnieto.foodhelper.domain.CouponDefinitionRepository;
 import com.eliascanalesnieto.foodhelper.domain.PlanningCouponRedemption;
 import com.eliascanalesnieto.foodhelper.domain.PlanningCouponRedemptionRepository;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenu;
@@ -29,6 +31,7 @@ public class PlanningCouponService {
     private final UserMoneyRepository userMoneyRepository;
     private final AppUserRepository appUserRepository;
     private final List<PlanningCouponStrategy> strategies;
+    private final CouponDefinitionRepository couponDefinitionRepository;
     private final Clock clock;
 
     @Transactional(readOnly = true)
@@ -37,6 +40,23 @@ public class PlanningCouponService {
                 .map(this::toCouponResponse)
                 .filter(coupon -> !onlyAvailable || coupon.available())
                 .toList();
+    }
+
+    @Transactional
+    public CouponDefinition createDefinition(CouponDefinition coupon) {
+        validateRule(coupon.getRuleCode());
+        return couponDefinitionRepository.create(normalizeDefinition(coupon));
+    }
+
+    @Transactional
+    public CouponDefinition updateDefinition(String code, CouponDefinition coupon) {
+        validateRule(coupon.getRuleCode());
+        return couponDefinitionRepository.update(normalizeCode(code), normalizeDefinition(coupon));
+    }
+
+    @Transactional
+    public void deleteDefinition(String code) {
+        couponDefinitionRepository.delete(normalizeCode(code));
     }
 
     @Transactional(readOnly = true)
@@ -130,20 +150,13 @@ public class PlanningCouponService {
         );
     }
 
-    private Map<String, PlanningCouponStrategy> strategiesByCode() {
-        Map<String, PlanningCouponStrategy> strategiesByCode = new LinkedHashMap<>();
-        for (PlanningCouponStrategy strategy : strategies) {
-            strategiesByCode.put(strategy.code().toUpperCase(Locale.ROOT), strategy);
-        }
-        return strategiesByCode;
-    }
-
     private List<PlanningCouponResponse> evaluateTemporalCoupons(Long payerUserId) {
         appUserRepository.findById(payerUserId);
         Instant now = Instant.now(clock);
-        Map<String, PlanningCouponStrategy> strategiesByCode = strategiesByCode();
+        List<PlanningCouponStrategy> configuredStrategies = configuredStrategies();
+        Map<String, PlanningCouponStrategy> strategiesByCode = strategiesByCode(configuredStrategies);
         Map<String, PlanningCouponRedemption> latestRedemptions = loadLatestRedemptions(payerUserId, strategiesByCode.keySet());
-        return strategies.stream()
+        return configuredStrategies.stream()
                 .sorted(java.util.Comparator.comparing(PlanningCouponStrategy::code))
                 .map(strategy -> strategy.evaluateTemporal(latestRedemptions.get(strategy.code()), now))
                 .toList();
@@ -151,9 +164,13 @@ public class PlanningCouponService {
 
     private CouponResponse toCouponResponse(PlanningCouponResponse response) {
         return new CouponResponse(
+                couponDefinitionRepository.findByCode(response.code()).getId(),
                 response.code(),
                 response.name(),
                 response.conditionDescription(),
+                couponDefinitionRepository.findByCode(response.code()).getRuleCode(),
+                response.rewardAmount(),
+                response.periodDays(),
                 response.available(),
                 response.unavailableReasons()
         );
@@ -162,9 +179,10 @@ public class PlanningCouponService {
     private List<PlanningCouponResponse> evaluateCoupons(ProposedWeekMenu proposedMenu, Long payerUserId) {
         appUserRepository.findById(payerUserId);
         Instant now = Instant.now(clock);
-        Map<String, PlanningCouponStrategy> strategiesByCode = strategiesByCode();
+        List<PlanningCouponStrategy> configuredStrategies = configuredStrategies();
+        Map<String, PlanningCouponStrategy> strategiesByCode = strategiesByCode(configuredStrategies);
         Map<String, PlanningCouponRedemption> latestRedemptions = loadLatestRedemptions(payerUserId, strategiesByCode.keySet());
-        return strategies.stream()
+        return configuredStrategies.stream()
                 .sorted(java.util.Comparator.comparing(PlanningCouponStrategy::code))
                 .map(strategy -> strategy.evaluate(proposedMenu, payerUserId, latestRedemptions.get(strategy.code()), now))
                 .toList();
@@ -208,5 +226,34 @@ public class PlanningCouponService {
             }
         }
         return new ArrayList<>(normalized);
+    }
+
+    private List<PlanningCouponStrategy> configuredStrategies() {
+        Map<String, PlanningCouponStrategy> rules = strategiesByCode(strategies);
+        return couponDefinitionRepository.findAll().stream()
+                .map(definition -> new ConfiguredPlanningCouponStrategy(definition, rules.get(definition.getRuleCode())))
+                .map(PlanningCouponStrategy.class::cast)
+                .toList();
+    }
+
+    private Map<String, PlanningCouponStrategy> strategiesByCode(List<PlanningCouponStrategy> source) {
+        Map<String, PlanningCouponStrategy> byCode = new LinkedHashMap<>();
+        for (PlanningCouponStrategy strategy : source) byCode.put(strategy.code().toUpperCase(Locale.ROOT), strategy);
+        return byCode;
+    }
+
+    private void validateRule(String ruleCode) {
+        if (!"ALWAYS".equals(normalizeCode(ruleCode)) && !strategiesByCode(strategies).containsKey(normalizeCode(ruleCode))) {
+            throw new IllegalArgumentException("Unknown coupon rule: " + ruleCode);
+        }
+    }
+
+    private CouponDefinition normalizeDefinition(CouponDefinition coupon) {
+        return coupon.toBuilder().code(normalizeCode(coupon.getCode())).name(coupon.getName().trim()).conditionDescription(coupon.getConditionDescription().trim()).ruleCode(normalizeCode(coupon.getRuleCode())).rewardAmount(coupon.getRewardAmount().setScale(2, java.math.RoundingMode.HALF_UP)).build();
+    }
+
+    private String normalizeCode(String code) {
+        if (code == null || code.isBlank()) throw new IllegalArgumentException("Coupon code is required");
+        return code.trim().toUpperCase(Locale.ROOT);
     }
 }

@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyRequestEvent;
 import com.amazonaws.services.lambda.runtime.events.APIGatewayProxyResponseEvent;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDayPart;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDayPartRepository;
 import java.awt.Color;
@@ -14,8 +14,10 @@ import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.time.LocalDate;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import javax.imageio.ImageIO;
@@ -116,6 +118,19 @@ class ProductLambdaRouterIntegrationTest {
                 .withBody("{\"startDate\":\"2042-01-01\",\"endDate\":\"2042-01-01\",\"users\":3}"));
         assertThat(planning.getStatusCode()).isEqualTo(201);
         assertThat(readNode(planning.getBody()).get("users").asInt()).isEqualTo(3);
+    }
+
+    @Test
+    void shouldExposeMenuItemImportsRouteThroughLambda() {
+        AuthSession auth = registerAndReadAuth();
+        APIGatewayProxyResponseEvent response = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath("/api/v1/menus/999999999/item-imports")
+                .withHeaders(authHeaders(auth.token()))
+                .withBody("{\"items\":[{\"productId\":1,\"quantity\":1,\"price\":2.49,\"destination\":\"MENU_STOCK\",\"moneyBoxId\":null,\"expirationDate\":null}]}"));
+
+        assertThat(response.getStatusCode()).isEqualTo(404);
+        assertThat(response.getBody()).contains("Menu not found");
     }
 
     @Test
@@ -293,6 +308,62 @@ class ProductLambdaRouterIntegrationTest {
                 .withQueryStringParameters(Map.of("payerUserId", Long.toString(otherUser.userId()))));
         assertThat(otherCoupons.getStatusCode()).isEqualTo(200);
         assertThat(findCoupon(readNode(otherCoupons.getBody()), "NO_REPEATED_PRODUCTS").get("available").asBoolean()).isTrue();
+    }
+
+    @Test
+    void shouldListAndRedeemChallengesThroughLambdaWithoutMenuValidation() {
+        AuthSession auth = registerAndReadAuth();
+        String token = auth.token();
+
+        APIGatewayProxyResponseEvent challengesBefore = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/challenges")
+                .withHeaders(authHeaders(token))
+                .withQueryStringParameters(Map.of("payerUserId", Long.toString(auth.userId()))));
+        assertThat(challengesBefore.getStatusCode()).isEqualTo(200);
+        JsonNode beforeList = readNode(challengesBefore.getBody());
+        assertThat(beforeList).hasSize(6);
+        assertThat(findChallenge(beforeList, "QUEUES").get("rewardAmount").decimalValue()).isEqualByComparingTo("10.00");
+        assertThat(findChallenge(beforeList, "TOO_GOOD_TO_GO").get("rewardAmount").decimalValue()).isEqualByComparingTo("10.00");
+        assertThat(findChallenge(beforeList, "FIVE_EURO_DAYS").get("rewardAmount").decimalValue()).isEqualByComparingTo("20.00");
+        assertThat(findChallenge(beforeList, "LOW_CARB_DAY").get("rewardAmount").decimalValue()).isEqualByComparingTo("8.00");
+        assertThat(findChallenge(beforeList, "NO_CAFFEINE_DAY").get("rewardAmount").decimalValue()).isEqualByComparingTo("8.00");
+        assertThat(findChallenge(beforeList, "CHEESE_DAY").get("rewardAmount").decimalValue()).isEqualByComparingTo("10.00");
+        assertThat(findChallenge(beforeList, "QUEUES").get("available").asBoolean()).isTrue();
+
+        APIGatewayProxyResponseEvent redemption = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath("/api/v1/challenges/QUEUES/redeem")
+                .withHeaders(authHeaders(token))
+                .withQueryStringParameters(Map.of("payerUserId", Long.toString(auth.userId()))));
+        assertThat(redemption.getStatusCode()).isEqualTo(200);
+        JsonNode redeemedChallenge = readNode(redemption.getBody());
+        assertThat(redeemedChallenge.get("available").asBoolean()).isFalse();
+        assertThat(redeemedChallenge.get("lastUsedAt").asText()).isNotBlank();
+        assertThat(redeemedChallenge.get("nextAvailableAt").asText()).isNotBlank();
+
+        APIGatewayProxyResponseEvent moneyBox = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/users/" + auth.userId() + "/money-box")
+                .withHeaders(authHeaders(token)));
+        assertThat(moneyBox.getStatusCode()).isEqualTo(200);
+        assertThat(readDecimal(moneyBox.getBody(), "balance")).isEqualByComparingTo("10.00");
+
+        APIGatewayProxyResponseEvent onlyAvailable = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("GET")
+                .withPath("/api/v1/challenges")
+                .withHeaders(authHeaders(token))
+                .withQueryStringParameters(Map.of("payerUserId", Long.toString(auth.userId()), "onlyAvailable", "true")));
+        assertThat(onlyAvailable.getStatusCode()).isEqualTo(200);
+        assertThat(readNode(onlyAvailable.getBody())).hasSize(5);
+
+        APIGatewayProxyResponseEvent secondRedemption = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
+                .withHttpMethod("POST")
+                .withPath("/api/v1/challenges/QUEUES/redeem")
+                .withHeaders(authHeaders(token))
+                .withQueryStringParameters(Map.of("payerUserId", Long.toString(auth.userId()))));
+        assertThat(secondRedemption.getStatusCode()).isEqualTo(400);
+        assertThat(secondRedemption.getBody()).contains("Challenge QUEUES is not available");
     }
 
     @Test
@@ -522,6 +593,15 @@ class ProductLambdaRouterIntegrationTest {
             }
         }
         throw new AssertionError("Coupon not found: " + code);
+    }
+
+    private JsonNode findChallenge(JsonNode challenges, String code) {
+        for (JsonNode challenge : challenges) {
+            if (code.equals(challenge.get("code").asText())) {
+                return challenge;
+            }
+        }
+        throw new AssertionError("Challenge not found: " + code);
     }
 
     @Test
@@ -1032,7 +1112,7 @@ class ProductLambdaRouterIntegrationTest {
         assertThat(establishedMenusPage.get("page").asInt()).isEqualTo(0);
         assertThat(establishedMenusPage.get("size").asInt()).isEqualTo(5);
         assertThat(establishedMenusPage.get("totalElements").asInt()).isGreaterThanOrEqualTo(1);
-        assertThat(establishedMenusPage.get("items").findValuesAsText("id"))
+        assertThat(arrayTextValues(establishedMenusPage.get("items"), "id"))
                 .contains(Long.toString(currentWeekMenuId));
 
         APIGatewayProxyResponseEvent completeList = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
@@ -1068,7 +1148,8 @@ class ProductLambdaRouterIntegrationTest {
                 .withHttpMethod("POST")
                 .withPath("/api/v1/menus/" + currentWeekMenuId + "/close")
                 .withHeaders(authHeaders(token))
-                .withBody("{\"personIds\":[" + auth.userId() + "],\"transferWeekStock\":false}"));
+                .withBody("{\"personIds\":[" + auth.userId() + "],\"transferWeekStock\":false,"
+                        + "\"excludedPositiveStockProductIds\":[" + riceId + "]}"));
         assertThat(close.getStatusCode()).isEqualTo(200);
         assertThat(readDecimal(close.getBody(), "period.moneySpent")).isEqualByComparingTo("5.40");
         assertThat(readDecimal(close.getBody(), "month.moneySpent")).isEqualByComparingTo("5.40");
@@ -1103,7 +1184,7 @@ class ProductLambdaRouterIntegrationTest {
         assertThat(closedMenus.getStatusCode()).isEqualTo(200);
         JsonNode closedMenusPage = readNode(closedMenus.getBody());
         assertThat(closedMenusPage.get("totalElements").asInt()).isGreaterThanOrEqualTo(1);
-        assertThat(closedMenusPage.get("items").findValuesAsText("id"))
+        assertThat(arrayTextValues(closedMenusPage.get("items"), "id"))
                 .contains(Long.toString(currentWeekMenuId));
 
         APIGatewayProxyResponseEvent updateProduct = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
@@ -1118,7 +1199,7 @@ class ProductLambdaRouterIntegrationTest {
                 .withPath("/api/v1/users")
                 .withHeaders(authHeaders(token)));
         assertThat(people.getStatusCode()).isEqualTo(200);
-        assertThat(readNode(people.getBody()).findValuesAsText("id"))
+        assertThat(arrayTextValues(readNode(people.getBody()), "id"))
                 .contains(Long.toString(auth.userId()));
 
         APIGatewayProxyResponseEvent monthlyHistory = productHttpHandler.apply(new APIGatewayProxyRequestEvent()
@@ -1435,6 +1516,14 @@ class ProductLambdaRouterIntegrationTest {
             }
         }
         throw new AssertionError("Entry with id " + id + " not found in response: " + array);
+    }
+
+    private List<String> arrayTextValues(JsonNode array, String field) {
+        List<String> values = new ArrayList<>();
+        for (JsonNode item : array) {
+            values.add(item.get(field).asText());
+        }
+        return values;
     }
 
     private Map<String, String> queryParams(String query) {

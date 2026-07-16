@@ -169,6 +169,8 @@ public class JdbcStockRepository implements StockRepository {
                        s.product_id,
                        p.name AS product_name,
                        s.quantity,
+                       p.grams_per_unit,
+                       p.is_stock_in_units,
                        s.price,
                        s.expiration_date,
                        s.entry_date
@@ -202,6 +204,8 @@ public class JdbcStockRepository implements StockRepository {
                         .productId(rs.getLong("product_id"))
                         .productName(rs.getString("product_name"))
                         .quantity(rs.getBigDecimal("quantity"))
+                        .gramsPerUnit(rs.getBigDecimal("grams_per_unit"))
+                        .stockInUnits(rs.getBoolean("is_stock_in_units"))
                         .price(rs.getBigDecimal("price"))
                         .expirationDate(rs.getObject("expiration_date", LocalDate.class))
                         .entryDate(rs.getObject("entry_date", LocalDate.class))
@@ -215,6 +219,8 @@ public class JdbcStockRepository implements StockRepository {
                        s.product_id,
                        p.name AS product_name,
                        s.quantity,
+                       p.grams_per_unit,
+                       p.is_stock_in_units,
                        s.price,
                        s.expiration_date,
                        s.entry_date
@@ -228,6 +234,8 @@ public class JdbcStockRepository implements StockRepository {
                         .productId(rs.getLong("product_id"))
                         .productName(rs.getString("product_name"))
                         .quantity(rs.getBigDecimal("quantity"))
+                        .gramsPerUnit(rs.getBigDecimal("grams_per_unit"))
+                        .stockInUnits(rs.getBoolean("is_stock_in_units"))
                         .price(rs.getBigDecimal("price"))
                         .expirationDate(rs.getObject("expiration_date", LocalDate.class))
                         .entryDate(rs.getObject("entry_date", LocalDate.class))

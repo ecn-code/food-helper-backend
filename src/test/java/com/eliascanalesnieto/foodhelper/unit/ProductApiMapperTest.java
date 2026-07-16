@@ -9,9 +9,11 @@ import com.eliascanalesnieto.foodhelper.domain.QuantityType;
 import com.eliascanalesnieto.foodhelper.domain.Recipe;
 import com.eliascanalesnieto.foodhelper.domain.RecipeDerivedProduct;
 import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
+import com.eliascanalesnieto.foodhelper.domain.StockEntry;
 import com.eliascanalesnieto.foodhelper.presentation.ProductApiMapper;
 import com.eliascanalesnieto.foodhelper.presentation.ProductResponse;
 import com.eliascanalesnieto.foodhelper.presentation.RecipeResponse;
+import com.eliascanalesnieto.foodhelper.presentation.StockEntryResponse;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -111,5 +113,23 @@ class ProductApiMapperTest {
         assertThat(response.derivedProduct().unitsProduced()).isEqualByComparingTo("4");
         assertThat(response.derivedProduct().stockFromComposition()).isTrue();
         assertThat(response.derivedProduct().ingredients()).hasSize(1);
+    }
+
+    @Test
+    void shouldReturnStockQuantityInUnitsWhenConfigured() {
+        StockEntry stockEntry = StockEntry.builder()
+                .id(3L)
+                .productId(1L)
+                .productName("Apple")
+                .quantity(new BigDecimal("150"))
+                .gramsPerUnit(new BigDecimal("50"))
+                .stockInUnits(true)
+                .price(new BigDecimal("2.49"))
+                .build();
+
+        StockEntryResponse response = mapper.toResponse(stockEntry);
+
+        assertThat(response.quantity()).isEqualByComparingTo("3.00");
+        assertThat(response.isStockInUnits()).isTrue();
     }
 }

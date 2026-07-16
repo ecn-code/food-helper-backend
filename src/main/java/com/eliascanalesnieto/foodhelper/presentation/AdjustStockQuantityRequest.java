@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 
 @Schema(name = "AdjustStockQuantityRequest", description = "Payload for increasing or decreasing stock quantity")
 public record AdjustStockQuantityRequest(
-        @Schema(description = "Quantity to add or remove", example = "2")
+        @Schema(description = "Quantity in grams to add or remove", example = "50")
         @NotNull @Positive BigDecimal quantity
 ) {
 }

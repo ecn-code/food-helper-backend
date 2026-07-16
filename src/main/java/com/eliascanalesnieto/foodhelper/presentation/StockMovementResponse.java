@@ -23,7 +23,7 @@ public record StockMovementResponse(
         LocalDate effectiveDate,
         @Schema(description = "Timestamp when the movement was recorded", example = "2026-06-10T14:30:00")
         LocalDateTime recordedAt,
-        @Schema(description = "Price per unit at the time of the movement", example = "4.99", nullable = true)
+        @Schema(description = "Price per unit at the time of the movement. Supports up to four decimal places", example = "0.0068", nullable = true)
         BigDecimal price,
         @Schema(description = "Expiration date captured with the movement when available", example = "2026-06-20", nullable = true)
         LocalDate expirationDate,

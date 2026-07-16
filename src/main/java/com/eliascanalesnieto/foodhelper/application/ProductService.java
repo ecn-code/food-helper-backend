@@ -24,24 +24,31 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class ProductService {
+    private static final int PRICE_SCALE = 4;
     private final ProductRepository repository;
     private final RecipeRepository recipeRepository;
     private final SupermarketRepository supermarketRepository;
     private final MediaService mediaService;
 
     @Transactional
-    public Product create(String name, String description, BigDecimal gramsPerUnit, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, BigDecimal defaultPrice, MediaUpload photoUpload) {
-        return create(name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, defaultPrice, photoUpload, List.of());
+    public Product create(String name, String description, BigDecimal gramsPerUnit, boolean isStockInUnits, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, BigDecimal defaultPrice, MediaUpload photoUpload) {
+        return create(name, description, gramsPerUnit, isStockInUnits, calories, carbohydrates, proteins, fats, defaultPrice, photoUpload, List.of());
     }
 
     @Transactional
-    public Product create(String name, String description, BigDecimal gramsPerUnit, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, BigDecimal defaultPrice, MediaUpload photoUpload, List<Long> supermarketIds) {
+    public Product create(String name, String description, BigDecimal gramsPerUnit, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, BigDecimal defaultPrice, MediaUpload photoUpload) {
+        return create(name, description, gramsPerUnit, false, calories, carbohydrates, proteins, fats, defaultPrice, photoUpload, List.of());
+    }
+
+    @Transactional
+    public Product create(String name, String description, BigDecimal gramsPerUnit, boolean isStockInUnits, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, BigDecimal defaultPrice, MediaUpload photoUpload, List<Long> supermarketIds) {
         var supermarkets = supermarketRepository.findByIds(supermarketIds == null ? List.of() : supermarketIds);
         Media photo = mediaService.createOptimized(photoUpload);
         Product created = repository.create(Product.builder()
                 .name(name)
                 .description(description)
                 .gramsPerUnit(scale(gramsPerUnit))
+                .stockInUnits(isStockInUnits)
                 .nutritionBasis(NutritionBasis.PER_100_GRAMS)
                 .defaultPrice(scaleOptional(defaultPrice))
                 .nutritionalValues(buildNutritionalValues(calories, carbohydrates, proteins, fats))
@@ -52,12 +59,17 @@ public class ProductService {
     }
 
     @Transactional
-    public Product update(Long id, String name, String description, BigDecimal gramsPerUnit, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, BigDecimal defaultPrice, MediaUpload photoUpload) {
-        return update(id, name, description, gramsPerUnit, calories, carbohydrates, proteins, fats, defaultPrice, photoUpload, List.of());
+    public Product update(Long id, String name, String description, BigDecimal gramsPerUnit, boolean isStockInUnits, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, BigDecimal defaultPrice, MediaUpload photoUpload) {
+        return update(id, name, description, gramsPerUnit, isStockInUnits, calories, carbohydrates, proteins, fats, defaultPrice, photoUpload, List.of());
     }
 
     @Transactional
-    public Product update(Long id, String name, String description, BigDecimal gramsPerUnit, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, BigDecimal defaultPrice, MediaUpload photoUpload, List<Long> supermarketIds) {
+    public Product update(Long id, String name, String description, BigDecimal gramsPerUnit, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, BigDecimal defaultPrice, MediaUpload photoUpload) {
+        return update(id, name, description, gramsPerUnit, false, calories, carbohydrates, proteins, fats, defaultPrice, photoUpload, List.of());
+    }
+
+    @Transactional
+    public Product update(Long id, String name, String description, BigDecimal gramsPerUnit, boolean isStockInUnits, BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, BigDecimal defaultPrice, MediaUpload photoUpload, List<Long> supermarketIds) {
         Product existing = repository.findById(id);
         var supermarkets = supermarketRepository.findByIds(supermarketIds == null ? List.of() : supermarketIds);
         Media photo = photoUpload == null ? existing.getPhoto() : mediaService.createOptimized(photoUpload);
@@ -66,6 +78,7 @@ public class ProductService {
                 .name(name)
                 .description(description)
                 .gramsPerUnit(scale(gramsPerUnit))
+                .stockInUnits(isStockInUnits)
                 .nutritionBasis(existing.getNutritionBasis() == null ? NutritionBasis.PER_100_GRAMS : existing.getNutritionBasis())
                 .defaultPrice(resolvedDefaultPrice)
                 .nutritionalValues(buildNutritionalValues(calories, carbohydrates, proteins, fats))
@@ -178,6 +191,6 @@ public class ProductService {
         if (value == null) {
             return null;
         }
-        return value.setScale(2, RoundingMode.HALF_UP);
+        return value.setScale(PRICE_SCALE, RoundingMode.HALF_UP);
     }
 }

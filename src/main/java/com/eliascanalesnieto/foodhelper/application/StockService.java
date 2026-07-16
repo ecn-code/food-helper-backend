@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class StockService {
+    private static final int PRICE_SCALE = 4;
     private final StockRepository stockRepository;
     private final ProductRepository productRepository;
     private final StockMovementRepository stockMovementRepository;
@@ -127,7 +128,7 @@ public class StockService {
     }
 
     private BigDecimal scale(BigDecimal value) {
-        return value.setScale(2, java.math.RoundingMode.HALF_UP);
+        return value.setScale(PRICE_SCALE, java.math.RoundingMode.HALF_UP);
     }
 
     private void validateDateRange(LocalDate fromDate, LocalDate toDate) {

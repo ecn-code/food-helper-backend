@@ -217,6 +217,27 @@ public class CurrentWeekMenuController {
         return service.addStockMovement(id, request);
     }
 
+    @PostMapping("/{menuId}/item-imports")
+    @Operation(
+            operationId = "importMenuItems",
+            summary = "Import purchased menu items",
+            description = "Validates every row before writing and atomically applies each one to temporary menu stock, a money box, or global stock. Repeated products remain separate rows, money movements are not linked to the menu, and the response contains every created resource."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "All item rows imported",
+                    content = @Content(schema = @Schema(implementation = MenuItemImportsResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Payload is invalid or the menu is closed",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "404", description = "Menu, product, or money box not found",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public MenuItemImportsResponse importItems(
+            @PathVariable Long menuId,
+            @Valid @RequestBody CreateMenuItemImportsRequest request
+    ) {
+        return service.importItems(menuId, request);
+    }
+
     @PostMapping("/{id}/week-stock/transfer")
     @Operation(
             summary = "Transfer stock entry to week stock",
@@ -260,21 +281,26 @@ public class CurrentWeekMenuController {
     @PostMapping("/{id}/close")
     @Operation(
             summary = "Close menu",
-            description = "Closes a menu after its end date and saves an immutable history snapshot for every selected person. Repeating a successful close returns the originally saved statistics without duplicating snapshots. Positive week stock is transferred to the global stock unless transferWeekStock is set to false."
+            description = "Closes a menu after its end date and saves an immutable history snapshot for every selected person. Repeating a successful close returns the originally saved statistics without duplicating snapshots. Positive week stock is transferred to the global stock unless transferWeekStock is set to false. Products selected in excludedPositiveStockProductIds keep all their week-stock lines and pending recipe productions untransferred."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Menu closed",
                     content = @Content(schema = @Schema(implementation = CurrentWeekMenuStatsResponse.class))),
             @ApiResponse(responseCode = "404", description = "Menu not found",
                     content = @Content(schema = @Schema(implementation = ApiError.class))),
-            @ApiResponse(responseCode = "400", description = "Menu cannot be closed yet",
+            @ApiResponse(responseCode = "400", description = "Menu cannot be closed yet or the excluded product selection is invalid or stale",
                     content = @Content(schema = @Schema(implementation = ApiError.class)))
     })
     public CurrentWeekMenuStatsResponse close(
             @PathVariable Long id,
             @Valid @RequestBody CloseCurrentWeekMenuRequest request
     ) {
-        return service.close(id, request.personIds(), request.transferWeekStock());
+        return service.close(
+                id,
+                request.personIds(),
+                request.transferWeekStock(),
+                request.excludedPositiveStockProductIds()
+        );
     }
 
     @GetMapping("/{id}/close/summary")

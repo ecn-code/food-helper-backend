@@ -10,6 +10,7 @@ import com.eliascanalesnieto.foodhelper.domain.RecipeIngredient;
 import com.eliascanalesnieto.foodhelper.domain.StockEntry;
 import com.eliascanalesnieto.foodhelper.domain.StockMovement;
 import com.eliascanalesnieto.foodhelper.domain.Supermarket;
+import java.math.RoundingMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -20,6 +21,7 @@ public abstract class ProductApiMapper {
     protected MediaUrlService mediaUrlService;
 
     @Mapping(target = "photo", expression = "java(toSignedPhotoUrl(product.getPhoto()))")
+    @Mapping(target = "isStockInUnits", source = "stockInUnits")
     public abstract ProductResponse toResponse(Product product);
 
     public abstract SupermarketResponse toResponse(Supermarket supermarket);
@@ -34,7 +36,22 @@ public abstract class ProductApiMapper {
 
     public abstract RecipeDerivedProductResponse toResponse(RecipeDerivedProduct derivedProduct);
 
-    public abstract StockEntryResponse toResponse(StockEntry stockEntry);
+    public StockEntryResponse toResponse(StockEntry stockEntry) {
+        boolean isStockInUnits = stockEntry.isStockInUnits();
+        java.math.BigDecimal quantity = isStockInUnits
+                ? stockEntry.getQuantity().divide(stockEntry.getGramsPerUnit(), 2, RoundingMode.HALF_UP)
+                : stockEntry.getQuantity();
+        return new StockEntryResponse(
+                stockEntry.getId(),
+                stockEntry.getProductId(),
+                stockEntry.getProductName(),
+                quantity,
+                isStockInUnits,
+                stockEntry.getPrice(),
+                stockEntry.getExpirationDate(),
+                stockEntry.getEntryDate()
+        );
+    }
 
     public StockMovementResponse toResponse(StockMovement movement) {
         return new StockMovementResponse(

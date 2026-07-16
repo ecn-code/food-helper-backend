@@ -15,9 +15,11 @@ public record ProductResponse(
         String description,
         @Schema(description = "Default grams represented by one unit of this product", example = "150")
         BigDecimal gramsPerUnit,
+        @Schema(description = "Whether stock quantities are returned in units instead of stored grams", example = "false")
+        boolean isStockInUnits,
         @Schema(description = "Nutrition basis used by this product", example = "PER_100_GRAMS")
         NutritionBasis nutritionBasis,
-        @Schema(description = "Optional default price for this product", example = "2.49", nullable = true)
+        @Schema(description = "Optional default price for this product. Supports up to four decimal places", example = "0.0068", nullable = true)
         BigDecimal defaultPrice,
         @Schema(description = "Product nutritional values")
         NutritionalValuesResponse nutritionalValues,

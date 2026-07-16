@@ -22,6 +22,7 @@ import org.springframework.stereotype.Repository;
 @RequiredArgsConstructor
 public class JdbcStockMovementRepository implements StockMovementRepository {
     private static final int SCALE = 2;
+    private static final int PRICE_SCALE = 4;
 
     private final JdbcTemplate jdbcTemplate;
     private final JdbcClient jdbcClient;
@@ -59,7 +60,7 @@ public class JdbcStockMovementRepository implements StockMovementRepository {
             if (movement.getPrice() == null) {
                 ps.setNull(8, java.sql.Types.NUMERIC);
             } else {
-                ps.setBigDecimal(8, scale(movement.getPrice()));
+                ps.setBigDecimal(8, scalePrice(movement.getPrice()));
             }
             if (movement.getExpirationDate() == null) {
                 ps.setNull(9, java.sql.Types.DATE);
@@ -182,5 +183,9 @@ public class JdbcStockMovementRepository implements StockMovementRepository {
 
     private BigDecimal scale(BigDecimal value) {
         return value.setScale(SCALE, java.math.RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal scalePrice(BigDecimal value) {
+        return value.setScale(PRICE_SCALE, java.math.RoundingMode.HALF_UP);
     }
 }

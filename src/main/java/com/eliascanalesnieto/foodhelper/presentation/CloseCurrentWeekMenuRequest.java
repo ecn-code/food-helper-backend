@@ -2,6 +2,8 @@ package com.eliascanalesnieto.foodhelper.presentation;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import java.util.List;
 
 @Schema(name = "CloseMenuRequest", description = "People for whom the closed menu must be recorded")
@@ -14,13 +16,26 @@ public record CloseCurrentWeekMenuRequest(
                 example = "true",
                 defaultValue = "true"
         )
-        Boolean transferWeekStock
+        Boolean transferWeekStock,
+        @Schema(
+                description = "Product identifiers whose positive week stock and pending recipe productions must not be transferred to global stock",
+                example = "[10, 12]",
+                defaultValue = "[]"
+        )
+        List<@NotNull @Positive Long> excludedPositiveStockProductIds
 ) {
     public CloseCurrentWeekMenuRequest(List<Long> personIds) {
-        this(personIds, true);
+        this(personIds, true, List.of());
+    }
+
+    public CloseCurrentWeekMenuRequest(List<Long> personIds, Boolean transferWeekStock) {
+        this(personIds, transferWeekStock, List.of());
     }
 
     public CloseCurrentWeekMenuRequest {
         transferWeekStock = transferWeekStock == null ? true : transferWeekStock;
+        excludedPositiveStockProductIds = excludedPositiveStockProductIds == null
+                ? List.of()
+                : List.copyOf(excludedPositiveStockProductIds);
     }
 }

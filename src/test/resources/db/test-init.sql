@@ -3,8 +3,9 @@ CREATE TABLE IF NOT EXISTS products (
     name VARCHAR(150) NOT NULL UNIQUE,
     description TEXT NOT NULL,
     grams_per_unit NUMERIC(10,2) NOT NULL DEFAULT 100.00,
+    is_stock_in_units BOOLEAN NOT NULL DEFAULT FALSE,
     nutrition_basis VARCHAR(30) NOT NULL DEFAULT 'PER_100_GRAMS',
-    default_price NUMERIC(10,2),
+    default_price NUMERIC(12,4),
     media_id BIGINT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -116,7 +117,7 @@ CREATE TABLE IF NOT EXISTS stock_entries (
     id BIGSERIAL PRIMARY KEY,
     product_id BIGINT NOT NULL,
     quantity NUMERIC(10,2) NOT NULL CHECK (quantity >= 0),
-    price NUMERIC(10,2) NOT NULL,
+    price NUMERIC(12,4) NOT NULL,
     expiration_date DATE,
     entry_date DATE NOT NULL,
     CONSTRAINT fk_stock_entries_product
@@ -137,7 +138,7 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     effective_date DATE NOT NULL,
     recorded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     product_name VARCHAR(150) NOT NULL,
-    price NUMERIC(12,2),
+    price NUMERIC(14,4),
     expiration_date DATE,
     entry_date DATE,
     CONSTRAINT fk_stock_movements_product
@@ -352,6 +353,59 @@ CREATE TABLE IF NOT EXISTS planning_coupon_redemptions (
 
 CREATE INDEX IF NOT EXISTS idx_planning_coupon_redemptions_user_coupon_used
     ON planning_coupon_redemptions(user_id, coupon_code, used_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS challenge_redemptions (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    challenge_code VARCHAR(80) NOT NULL,
+    reward_amount NUMERIC(10,2) NOT NULL,
+    used_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT fk_challenge_redemptions_user
+        FOREIGN KEY (user_id)
+        REFERENCES app_users(id)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_challenge_redemptions_user_challenge_used
+    ON challenge_redemptions(user_id, challenge_code, used_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS coupon_definitions (
+    id BIGSERIAL PRIMARY KEY,
+    code VARCHAR(80) NOT NULL UNIQUE,
+    name VARCHAR(150) NOT NULL,
+    condition_description TEXT NOT NULL,
+    rule_code VARCHAR(80) NOT NULL,
+    reward_amount NUMERIC(10,2) NOT NULL CHECK (reward_amount >= 0),
+    period_days INTEGER NOT NULL CHECK (period_days >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS challenge_definitions (
+    id BIGSERIAL PRIMARY KEY,
+    code VARCHAR(80) NOT NULL UNIQUE,
+    name VARCHAR(150) NOT NULL,
+    description TEXT NOT NULL,
+    reward_amount NUMERIC(10,2) NOT NULL CHECK (reward_amount >= 0),
+    period_days INTEGER NOT NULL CHECK (period_days >= 0)
+);
+
+INSERT INTO coupon_definitions (code, name, condition_description, rule_code, reward_amount, period_days) VALUES
+    ('CAPRICHO', 'Capricho', 'No menu validation required', 'ALWAYS', 10.00, 90),
+    ('INOVACION', 'Innovacion', 'The menu must include a recipe-derived product created less than one month ago', 'INOVACION', 15.00, 30),
+    ('LUXURY', 'Luxury', 'No menu validation required', 'ALWAYS', 50.00, 180),
+    ('NO_REPEATED_PRODUCTS', 'No repeated products', 'The menu must fill every planned day with at least 3 products and cannot repeat the same product on the same day or in the same day part across different days', 'NO_REPEATED_PRODUCTS', 15.00, 30),
+    ('OUTSIDE', 'Outside', 'No menu validation required', 'ALWAYS', 20.00, 90),
+    ('SUSHI', 'Sushi', 'The menu must include product 256', 'SUSHI', 20.00, 60),
+    ('VINTAGE', 'Vintage', 'The menu must include a product not used in the last two months', 'VINTAGE', 5.00, 30)
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO challenge_definitions (code, name, description, reward_amount, period_days) VALUES
+    ('QUEUES', 'Queue challenge', 'Prepare five types of cola in numbered containers and write the number-to-cola correspondence on a hidden note. One person fills the containers, then the other fills cups without seeing the number or contents. Drink through a straw and identify each cola.', 10.00, 30),
+    ('TOO_GOOD_TO_GO', 'Too Good To Go challenge', 'For one full day, eat only food from Too Good To Go or food bought with a supermarket discount receipt.', 10.00, 30),
+    ('FIVE_EURO_DAYS', '5 euro per day challenge', 'Create a five-day menu for two people using only 25 euros. Only low-value staples such as rice may be reused, and no meal may repeat more than twice, except breakfasts.', 20.00, 30),
+    ('LOW_CARB_DAY', 'Low carb day', 'For one full day, consume fewer than 50 grams of carbohydrates.', 8.00, 30),
+    ('NO_CAFFEINE_DAY', 'No caffeine day', 'Go one full day without caffeine, theine, or carbonated drinks.', 8.00, 30),
+    ('CHEESE_DAY', 'Cheese day', 'For one full day, make cheese the main ingredient at breakfast, lunch, and dinner.', 10.00, 30)
+ON CONFLICT (code) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS user_weight_entries (
     id BIGSERIAL PRIMARY KEY,

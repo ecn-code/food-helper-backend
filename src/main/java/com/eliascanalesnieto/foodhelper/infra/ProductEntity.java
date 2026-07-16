@@ -12,6 +12,7 @@ public record ProductEntity(
         @Column("name") String name,
         @Column("description") String description,
         @Column("grams_per_unit") BigDecimal gramsPerUnit,
+        @Column("is_stock_in_units") boolean stockInUnits,
         @Column("nutrition_basis") String nutritionBasis,
         @Column("default_price") BigDecimal defaultPrice,
         @Column("media_id") Long mediaId,
