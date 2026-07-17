@@ -2495,6 +2495,56 @@ class ProductRestIntegrationTest {
     }
 
     @Test
+    void planningStockSummaryAndPublicationShouldUseUnitsForUnitBasedStockWhilePersistingGrams() {
+        String productsUrl = "http://localhost:" + port + "/api/v1/products";
+        String dayPartsUrl = "http://localhost:" + port + "/api/v1/planning/day-parts";
+        String planningUrl = "http://localhost:" + port + "/api/v1/planning";
+
+        ResponseEntity<ProductResponse> eggs = postAuthorized(
+                productsUrl,
+                new CreateProductRequest("Planning eggs", "Eggs stored in grams", new BigDecimal("60"), true,
+                        new BigDecimal("155"), new BigDecimal("1.1"), new BigDecimal("13"), new BigDecimal("11"), null, null, List.of()),
+                ProductResponse.class
+        );
+        assertThat(eggs.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        Long eggsId = eggs.getBody().id();
+        ResponseEntity<StockEntryResponse> stock = postAuthorized(
+                productsUrl + "/" + eggsId + "/stock",
+                new CreateStockEntryRequest(new BigDecimal("240"), BigDecimal.ONE, null, LocalDate.of(2026, 6, 10)),
+                StockEntryResponse.class
+        );
+        assertThat(stock.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        Long dayPartId = createDayPart(dayPartsUrl, "Egg breakfast", "Breakfast", 10);
+        LocalDate startDate = LocalDate.now().plusDays(1);
+
+        ResponseEntity<ProposedWeekMenuResponse> planning = postAuthorized(
+                planningUrl, new CreateProposedWeekMenuRequest(startDate, startDate), ProposedWeekMenuResponse.class
+        );
+        ResponseEntity<ProposedWeekMenuResponse> planned = restTemplate.exchange(
+                planningUrl + "/" + planning.getBody().id() + "/days", HttpMethod.PUT,
+                authorizedEntity(new UpsertProposedWeekMenuDayRequest(startDate, List.of(
+                        new ProposedWeekMenuSectionRequest(dayPartId, List.of(
+                                new ProposedWeekMenuProductRequest(eggsId, new BigDecimal("3"), null, 10)
+                        ))
+                ))), ProposedWeekMenuResponse.class
+        );
+        assertThat(planned.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(planned.getBody().stockSummary().requirements()).singleElement().satisfies(requirement -> {
+            assertThat(requirement.isStockInUnits()).isTrue();
+            assertThat(requirement.requiredUnits()).isEqualByComparingTo("3.00");
+            assertThat(requirement.availableUnits()).isEqualByComparingTo("4.00");
+        });
+
+        ResponseEntity<CurrentWeekMenuResponse> published = postAuthorized(
+                planningUrl + "/" + planning.getBody().id() + "/menu",
+                new EstablishProposedWeekMenuRequest(authenticatedUserId()), CurrentWeekMenuResponse.class
+        );
+        assertThat(published.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(jdbcTemplate.queryForObject("SELECT quantity FROM stock_entries WHERE id = ?", BigDecimal.class, stock.getBody().id()))
+                .isEqualByComparingTo("60.00");
+    }
+
+    @Test
     void stockEndpointsShouldCreateAdjustAndFilterStock() {
         String productsUrl = "http://localhost:" + port + "/api/v1/products";
         String stockUrl = "http://localhost:" + port + "/api/v1/stock";

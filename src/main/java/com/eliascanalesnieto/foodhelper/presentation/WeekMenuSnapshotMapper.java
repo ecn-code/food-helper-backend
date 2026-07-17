@@ -112,6 +112,7 @@ public class WeekMenuSnapshotMapper {
         return new ProposedWeekMenuStockRequirementResponse(
                 requirement.getProductId(),
                 requirement.getProductName(),
+                requirement.isStockInUnits(),
                 requirement.getRequiredUnits(),
                 requirement.getAvailableUnits(),
                 requirement.getCoveredUnits(),

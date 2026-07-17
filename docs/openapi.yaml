@@ -4613,21 +4613,25 @@ components:
           type: string
           description: Product name
           example: Apple
+        isStockInUnits:
+          type: boolean
+          description: Whether requiredUnits, availableUnits, coveredUnits, and missingUnits are expressed in units instead of grams
+          example: false
         requiredUnits:
           type: number
-          description: Total units required by the planning
+          description: Total quantity required by the planning, expressed in units when isStockInUnits is true or grams otherwise
           example: 4.5
         availableUnits:
           type: number
-          description: Total units available in stock
+          description: Total quantity available in stock, expressed in units when isStockInUnits is true or grams otherwise
           example: 6
         coveredUnits:
           type: number
-          description: Units that can be covered by available stock
+          description: Quantity that can be covered by available stock, expressed in units when isStockInUnits is true or grams otherwise
           example: 4.5
         missingUnits:
           type: number
-          description: Units still missing after consuming all available stock
+          description: Quantity still missing after consuming all available stock, expressed in units when isStockInUnits is true or grams otherwise
           example: 0
         estimatedCost:
           type: number

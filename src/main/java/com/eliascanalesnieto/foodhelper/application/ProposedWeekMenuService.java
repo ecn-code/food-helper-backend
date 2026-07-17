@@ -324,9 +324,9 @@ public class ProposedWeekMenuService {
         if (derivedProduct == null || derivedProduct.getIngredients() == null || derivedProduct.getIngredients().isEmpty()) {
             StockRequirementAccumulator accumulator = requirements.computeIfAbsent(
                     linkedProduct.getId(),
-                    productId -> new StockRequirementAccumulator(productId, linkedProduct.getName())
+                    productId -> new StockRequirementAccumulator(linkedProduct)
             );
-            accumulator.requiredUnits = accumulator.requiredUnits.add(requiredUnits);
+            accumulator.addRequiredUnits(requiredUnits);
             return;
         }
 
@@ -338,9 +338,13 @@ public class ProposedWeekMenuService {
             BigDecimal ingredientRequiredUnits = scale(requiredUnits.multiply(normalizeIngredientUnits(ingredient)));
             StockRequirementAccumulator accumulator = requirements.computeIfAbsent(
                     ingredientProduct.getId(),
-                    productId -> new StockRequirementAccumulator(productId, ingredientProduct.getName())
+                    productId -> new StockRequirementAccumulator(ingredientProduct)
             );
-            accumulator.requiredUnits = accumulator.requiredUnits.add(ingredientRequiredUnits);
+            if (ingredient.getQuantityType() == com.eliascanalesnieto.foodhelper.domain.QuantityType.GRAMS) {
+                accumulator.addRequiredGrams(ingredientRequiredUnits);
+            } else {
+                accumulator.addRequiredUnits(ingredientRequiredUnits);
+            }
         }
     }
 
@@ -439,9 +443,9 @@ public class ProposedWeekMenuService {
                     } else {
                         StockRequirementAccumulator accumulator = requirements.computeIfAbsent(
                                 product.getProductId(),
-                                productId -> new StockRequirementAccumulator(productId, linkedProduct.getName())
+                                productId -> new StockRequirementAccumulator(linkedProduct)
                         );
-                        accumulator.requiredUnits = accumulator.requiredUnits.add(requiredUnits);
+                        accumulator.addRequiredUnits(requiredUnits);
                     }
                 }
             }
@@ -617,15 +621,30 @@ public class ProposedWeekMenuService {
     private final class StockRequirementAccumulator {
         private final Long productId;
         private final String productName;
+        private final boolean stockInUnits;
+        private final BigDecimal gramsPerUnit;
+        private BigDecimal requiredGrams = BigDecimal.ZERO;
         private BigDecimal requiredUnits = BigDecimal.ZERO;
         private BigDecimal availableUnits = BigDecimal.ZERO;
         private BigDecimal coveredUnits = BigDecimal.ZERO;
         private BigDecimal missingUnits = BigDecimal.ZERO;
         private BigDecimal estimatedCost = BigDecimal.ZERO;
 
-        private StockRequirementAccumulator(Long productId, String productName) {
-            this.productId = productId;
-            this.productName = productName;
+        private StockRequirementAccumulator(Product product) {
+            this.productId = product.getId();
+            this.productName = product.getName();
+            this.stockInUnits = product.isStockInUnits();
+            this.gramsPerUnit = product.getGramsPerUnit() == null ? BigDecimal.ONE : product.getGramsPerUnit();
+        }
+
+        private void addRequiredUnits(BigDecimal units) {
+            requiredGrams = requiredGrams.add(scale(units).multiply(gramsPerUnit));
+            requiredUnits = toDisplayQuantity(requiredGrams);
+        }
+
+        private void addRequiredGrams(BigDecimal grams) {
+            requiredGrams = requiredGrams.add(scale(grams));
+            requiredUnits = toDisplayQuantity(requiredGrams);
         }
 
         private void applyStock(List<StockEntry> stockEntries) {
@@ -644,7 +663,7 @@ public class ProposedWeekMenuService {
         private void applyDirectStock(List<StockEntry> stockEntries) {
             BigDecimal remainingRequiredUnits = requiredUnits;
             for (StockEntry stockEntry : stockEntries) {
-                BigDecimal quantity = scale(stockEntry.getQuantity());
+                BigDecimal quantity = toDisplayQuantity(stockEntry.getQuantity());
                 availableUnits = availableUnits.add(quantity);
                 if (remainingRequiredUnits.signum() <= 0) {
                     continue;
@@ -755,12 +774,20 @@ public class ProposedWeekMenuService {
             return ProposedWeekMenuStockRequirement.builder()
                     .productId(productId)
                     .productName(productName)
+                    .stockInUnits(stockInUnits)
                     .requiredUnits(scale(requiredUnits))
                     .availableUnits(scale(availableUnits))
                     .coveredUnits(scale(coveredUnits))
                     .missingUnits(scale(missingUnits))
                     .estimatedCost(scale(estimatedCost))
                     .build();
+        }
+
+        private BigDecimal toDisplayQuantity(BigDecimal grams) {
+            BigDecimal normalizedGrams = scale(grams);
+            return stockInUnits
+                    ? scale(normalizedGrams.divide(gramsPerUnit, SCALE, RoundingMode.HALF_UP))
+                    : normalizedGrams;
         }
     }
 }

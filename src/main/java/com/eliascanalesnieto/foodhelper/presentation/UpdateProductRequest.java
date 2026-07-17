@@ -18,7 +18,7 @@ public record UpdateProductRequest(
         @Schema(description = "Default grams represented by one unit of this product", example = "140")
         @NotNull @Positive BigDecimal gramsPerUnit,
         @Schema(description = "Whether stock quantities must be returned in units instead of their stored grams", example = "false", defaultValue = "false")
-        boolean isStockInUnits,
+        Boolean isStockInUnits,
         @Schema(description = "Calories per 100 grams", example = "48")
         @NotNull @PositiveOrZero BigDecimal calories,
         @Schema(description = "Carbohydrates per 100 grams", example = "13")

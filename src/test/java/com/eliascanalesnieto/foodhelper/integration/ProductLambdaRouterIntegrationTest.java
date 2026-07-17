@@ -76,6 +76,7 @@ class ProductLambdaRouterIntegrationTest {
         assertThat(createResponse.getBody()).contains("Banana " + suffix);
         assertThat(createResponse.getBody()).contains("Fresh banana " + suffix);
         assertThat(createResponse.getBody()).contains("\"defaultPrice\":2.49");
+        assertThat(createResponse.getBody()).contains("\"isStockInUnits\":false");
 
         APIGatewayProxyRequestEvent createSecond = new APIGatewayProxyRequestEvent()
                 .withHttpMethod("POST")

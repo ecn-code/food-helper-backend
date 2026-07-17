@@ -908,34 +908,33 @@ public class CurrentWeekMenuService {
         for (Map.Entry<Long, BigDecimal> requirement : requiredUnitsByProduct.entrySet()) {
             Long productId = requirement.getKey();
             Product product = productsForStock.get(productId);
-            BigDecimal remainingRequiredUnits = scale(requirement.getValue());
+            BigDecimal remainingRequiredGrams = scale(requirement.getValue());
             for (StockEntry stockEntry : stockByProduct.getOrDefault(productId, List.of())) {
-                if (remainingRequiredUnits.signum() <= 0) {
+                if (remainingRequiredGrams.signum() <= 0) {
                     break;
                 }
-                BigDecimal availableUnits = scale(stockEntry.getQuantity());
-                BigDecimal unitsToConsume = availableUnits.min(remainingRequiredUnits);
-                if (unitsToConsume.signum() <= 0) {
+                BigDecimal gramsToConsume = scale(stockEntry.getQuantity()).min(remainingRequiredGrams);
+                if (gramsToConsume.signum() <= 0) {
                     continue;
                 }
-                stockRepository.removeQuantity(stockEntry.getId(), unitsToConsume, StockMovementType.ADJUSTMENT, effectiveDate);
+                stockRepository.removeQuantity(stockEntry.getId(), gramsToConsume, StockMovementType.ADJUSTMENT, effectiveDate);
                 usedStock.add(CurrentWeekMenuUsedStock.builder()
                         .stockEntryId(stockEntry.getId())
                         .productId(productId)
                         .productName(product.getName())
-                        .usedUnits(scale(unitsToConsume))
+                        .usedUnits(scale(gramsToConsume))
                         .price(scale(stockEntry.getPrice()))
-                        .totalCost(scale(unitsToConsume.multiply(stockEntry.getPrice())))
+                        .totalCost(scale(gramsToConsume.multiply(stockEntry.getPrice())))
                         .expirationDate(stockEntry.getExpirationDate())
                         .entryDate(stockEntry.getEntryDate())
                         .build());
-                remainingRequiredUnits = remainingRequiredUnits.subtract(unitsToConsume);
+                remainingRequiredGrams = remainingRequiredGrams.subtract(gramsToConsume);
             }
-            if (remainingRequiredUnits.signum() > 0) {
+            if (remainingRequiredGrams.signum() > 0) {
                 shoppingList.add(CurrentWeekMenuShoppingListItem.builder()
                         .productId(productId)
                         .productName(product.getName())
-                        .missingUnits(scale(remainingRequiredUnits))
+                        .missingUnits(scale(remainingRequiredGrams))
                         .build());
             }
         }
@@ -968,27 +967,28 @@ public class CurrentWeekMenuService {
             if (stockEntry == null) {
                 throw new ResourceNotFoundException("Stock entry not found for a product required by the menu");
             }
+            Product product = productsById.get(stockEntry.getProductId());
             BigDecimal usedUnits = scale(requested.usedUnits());
-            if (usedUnits.compareTo(scale(stockEntry.getQuantity())) > 0) {
+            BigDecimal usedGrams = toStoredGrams(usedUnits, product);
+            if (usedGrams.compareTo(scale(stockEntry.getQuantity())) > 0) {
                 throw new IllegalArgumentException("Allocated quantity exceeds current stock");
             }
             BigDecimal allocated = allocatedByProduct.merge(
                     stockEntry.getProductId(),
-                    usedUnits,
+                    usedGrams,
                     BigDecimal::add
             );
             if (allocated.compareTo(scale(requiredUnitsByProduct.get(stockEntry.getProductId()))) > 0) {
                 throw new IllegalArgumentException("Allocated quantity exceeds the quantity required by the menu");
             }
-            stockRepository.removeQuantity(stockEntry.getId(), usedUnits, StockMovementType.ADJUSTMENT, effectiveDate);
-            Product product = productsById.get(stockEntry.getProductId());
+            stockRepository.removeQuantity(stockEntry.getId(), usedGrams, StockMovementType.ADJUSTMENT, effectiveDate);
             usedStock.add(CurrentWeekMenuUsedStock.builder()
                     .stockEntryId(stockEntry.getId())
                     .productId(stockEntry.getProductId())
                     .productName(product.getName())
-                    .usedUnits(usedUnits)
+                    .usedUnits(usedGrams)
                     .price(scale(stockEntry.getPrice()))
-                    .totalCost(scale(usedUnits.multiply(stockEntry.getPrice())))
+                    .totalCost(scale(usedGrams.multiply(stockEntry.getPrice())))
                     .expirationDate(stockEntry.getExpirationDate())
                     .entryDate(stockEntry.getEntryDate())
                     .build());
@@ -1080,7 +1080,7 @@ public class CurrentWeekMenuService {
                     if (usesCompositionStock(linkedProduct)) {
                         accumulateCompositionRequirements(requiredUnits, productsById, linkedProduct, requiredUnitsForProduct);
                     } else {
-                        requiredUnits.merge(product.getProductId(), requiredUnitsForProduct, BigDecimal::add);
+                        requiredUnits.merge(product.getProductId(), unitsToGrams(requiredUnitsForProduct, linkedProduct), BigDecimal::add);
                     }
                 }
             }
@@ -1097,6 +1097,21 @@ public class CurrentWeekMenuService {
             return scale(product.getGrams().divide(linkedProduct.getGramsPerUnit(), SCALE, RoundingMode.HALF_UP));
         }
         return BigDecimal.ONE.setScale(SCALE, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal toStoredGrams(BigDecimal quantity, Product product) {
+        if (product == null || !product.isStockInUnits()) {
+            return scale(quantity);
+        }
+        BigDecimal gramsPerUnit = product.getGramsPerUnit() == null ? BigDecimal.ONE : product.getGramsPerUnit();
+        return scale(quantity.multiply(gramsPerUnit));
+    }
+
+    private BigDecimal unitsToGrams(BigDecimal units, Product product) {
+        BigDecimal gramsPerUnit = product == null || product.getGramsPerUnit() == null
+                ? BigDecimal.ONE
+                : product.getGramsPerUnit();
+        return scale(units.multiply(gramsPerUnit));
     }
 
     private int normalizeUsers(Integer users) {
@@ -1230,7 +1245,7 @@ public class CurrentWeekMenuService {
     ) {
         RecipeDerivedProduct derivedProduct = linkedProduct.getDerivedProduct();
         if (derivedProduct == null || derivedProduct.getIngredients() == null || derivedProduct.getIngredients().isEmpty()) {
-            requirements.merge(linkedProduct.getId(), requiredUnits, BigDecimal::add);
+            requirements.merge(linkedProduct.getId(), unitsToGrams(requiredUnits, linkedProduct), BigDecimal::add);
             return;
         }
 
@@ -1240,7 +1255,10 @@ public class CurrentWeekMenuService {
                 throw new ResourceNotFoundException("One or more ingredient products were not found");
             }
             BigDecimal ingredientRequiredUnits = scale(requiredUnits.multiply(normalizeIngredientUnits(ingredient)));
-            requirements.merge(ingredientProduct.getId(), ingredientRequiredUnits, BigDecimal::add);
+            BigDecimal ingredientRequiredGrams = ingredient.getQuantityType() == com.eliascanalesnieto.foodhelper.domain.QuantityType.GRAMS
+                    ? ingredientRequiredUnits
+                    : unitsToGrams(ingredientRequiredUnits, ingredientProduct);
+            requirements.merge(ingredientProduct.getId(), ingredientRequiredGrams, BigDecimal::add);
         }
     }
 

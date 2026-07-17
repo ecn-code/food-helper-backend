@@ -11,6 +11,7 @@ import lombok.Value;
 public class ProposedWeekMenuStockRequirement {
     Long productId;
     String productName;
+    boolean stockInUnits;
     BigDecimal requiredUnits;
     BigDecimal availableUnits;
     BigDecimal coveredUnits;
