@@ -59,6 +59,18 @@ public class NutritionalRulesService {
         return evaluate(totals.calories(), totals.carbohydrates(), totals.proteins(), totals.fats(), plannedDays);
     }
 
+    /** Evaluates one planned day against the configured daily limits. */
+    @Transactional(readOnly = true)
+    public NutritionalRulesEvaluationPeriodResponse evaluateDaily(NutritionalValuesResponse totals) {
+        NutritionalValuesResponse safeTotals = totals == null
+                ? new NutritionalValuesResponse(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
+                : totals;
+        NutritionalRules rules = repository.find();
+        return evaluatePeriod(
+                safeTotals.calories(), safeTotals.carbohydrates(), safeTotals.proteins(), safeTotals.fats(),
+                1, 1, rules.getDaily());
+    }
+
     private NutritionalRulesEvaluationResponse evaluate(
             BigDecimal calories, BigDecimal carbohydrates, BigDecimal proteins, BigDecimal fats, int plannedDays
     ) {

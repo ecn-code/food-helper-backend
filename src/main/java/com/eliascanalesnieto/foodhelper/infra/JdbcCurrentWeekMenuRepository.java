@@ -99,6 +99,27 @@ public class JdbcCurrentWeekMenuRepository implements CurrentWeekMenuRepository 
     }
 
     @Override
+    public List<CurrentWeekMenuResponse> findAll(CurrentWeekMenuState state) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT cwm.snapshot_json, cwms.current_week_menu_id IS NOT NULL AS closed
+                FROM current_week_menus cwm
+                LEFT JOIN current_week_menu_stats cwms ON cwms.current_week_menu_id = cwm.id
+                """);
+        appendStateFilter(sql, state);
+        sql.append("""
+
+                ORDER BY (cwm.snapshot_json::json ->> 'startDate')::date DESC, cwm.id DESC
+                """);
+        return jdbcTemplate.query(
+                sql.toString(),
+                (rs, rowNum) -> withState(
+                        objectMapper.readValue(rs.getString("snapshot_json"), CurrentWeekMenuResponse.class),
+                        rs.getBoolean("closed") ? CurrentWeekMenuState.CLOSED : CurrentWeekMenuState.ESTABLISHED
+                )
+        );
+    }
+
+    @Override
     public List<CurrentWeekMenuResponse> findPage(int offset, int limit, CurrentWeekMenuState state) {
         StringBuilder sql = new StringBuilder("""
                 SELECT cwm.snapshot_json, cwms.current_week_menu_id IS NOT NULL AS closed

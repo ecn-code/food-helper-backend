@@ -80,8 +80,22 @@ public class ProductController {
             java.math.BigDecimal fatsMin,
             @Parameter(description = "Maximum fats per 100 grams, inclusive", example = "10")
             @RequestParam(required = false)
-            java.math.BigDecimal fatsMax
+            java.math.BigDecimal fatsMax,
+            @Parameter(description = "Optional product identifiers for bulk resolution; at most 100", example = "1,2,3")
+            @RequestParam(required = false)
+            java.util.List<Long> ids
     ) {
+        if (ids != null) {
+            if (search != null || caloriesMin != null || caloriesMax != null || carbohydratesMin != null || carbohydratesMax != null
+                    || proteinsMin != null || proteinsMax != null || fatsMin != null || fatsMax != null) {
+                throw new IllegalArgumentException("ids cannot be combined with other product filters");
+            }
+            var products = service.findByIds(ids);
+            int start = Math.min(PaginationRequest.of(page, size).offset(), products.size());
+            int end = Math.min(start + size, products.size());
+            return new ProductPageResponse(products.subList(start, end).stream().map(mapper::toResponse).toList(),
+                    page, size, products.size(), (int) Math.ceil((double) products.size() / size));
+        }
         PageResult<com.eliascanalesnieto.foodhelper.domain.Product> result = service.findPage(
                 PaginationRequest.of(page, size),
                 ProductSearchCriteria.of(search, caloriesMin, caloriesMax, carbohydratesMin, carbohydratesMax, proteinsMin, proteinsMax, fatsMin, fatsMax)

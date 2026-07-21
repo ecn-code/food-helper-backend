@@ -14,6 +14,8 @@ public interface CurrentWeekMenuRepository {
 
     List<CurrentWeekMenuResponse> findAll();
 
+    List<CurrentWeekMenuResponse> findAll(CurrentWeekMenuState state);
+
     List<CurrentWeekMenuResponse> findPage(int offset, int limit, CurrentWeekMenuState state);
 
     long count(CurrentWeekMenuState state);

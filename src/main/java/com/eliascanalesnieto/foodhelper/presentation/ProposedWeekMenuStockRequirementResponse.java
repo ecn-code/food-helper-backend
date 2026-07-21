@@ -10,7 +10,7 @@ public record ProposedWeekMenuStockRequirementResponse(
         @Schema(description = "Product name", example = "Apple")
         String productName,
         @Schema(description = "Whether all quantity fields in this requirement are expressed in units instead of grams", example = "false")
-        boolean isStockInUnits,
+        Boolean isStockInUnits,
         @Schema(description = "Total quantity required by the planning, expressed in units when isStockInUnits is true or grams otherwise", example = "4.50")
         BigDecimal requiredUnits,
         @Schema(description = "Total quantity available in stock, expressed in units when isStockInUnits is true or grams otherwise", example = "6.00")
@@ -22,4 +22,7 @@ public record ProposedWeekMenuStockRequirementResponse(
         @Schema(description = "Estimated cost for the covered units", example = "12.75")
         BigDecimal estimatedCost
 ) {
+    public ProposedWeekMenuStockRequirementResponse {
+        isStockInUnits = Boolean.TRUE.equals(isStockInUnits);
+    }
 }

@@ -97,17 +97,17 @@ public class CurrentWeekMenuStatsService {
     public CurrentWeekMenuRangeStatsResponse summarizeRange(List<CurrentWeekMenuResponse> menus, LocalDate from, LocalDate to) {
         validateRange(from, to);
 
-        List<CurrentWeekMenuResponse> filteredMenus = menus.stream()
-                .map(menu -> filterMenu(menu, from, to))
-                .filter(menu -> !menu.days().isEmpty())
+        List<FilteredMenu> selectedMenus = menus.stream()
+                .map(menu -> new FilteredMenu(menu, filterMenu(menu, from, to)))
+                .filter(menu -> !menu.included().days().isEmpty())
                 .toList();
 
-        if (filteredMenus.isEmpty()) {
-            return new CurrentWeekMenuRangeStatsResponse(from, to, 0, ZERO, 0, ZERO, List.of());
+        if (selectedMenus.isEmpty()) {
+            return new CurrentWeekMenuRangeStatsResponse(from, to, 0, ZERO, 0, ZERO, ZERO, List.of());
         }
 
-        List<ProposedWeekMenuDayResponse> days = filteredMenus.stream()
-                .flatMap(menu -> menu.days().stream())
+        List<ProposedWeekMenuDayResponse> days = selectedMenus.stream()
+                .flatMap(menu -> menu.included().days().stream())
                 .toList();
 
         BigDecimal calories = days.stream()
@@ -122,10 +122,13 @@ public class CurrentWeekMenuStatsService {
                 .filter(java.util.Objects::nonNull)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
 
-        BigDecimal estimatedCost = filteredMenus.stream()
-                .map(menu -> summarize(List.of(menu)).moneySpent())
+        BigDecimal estimatedCost = selectedMenus.stream()
+                .map(this::proratedCost)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(SCALE, RoundingMode.HALF_UP);
+
+        BigDecimal averageCaloriesPerPlannedDay = calories.divide(
+                BigDecimal.valueOf(days.size()), SCALE, RoundingMode.HALF_UP);
 
         return new CurrentWeekMenuRangeStatsResponse(
                 from,
@@ -134,8 +137,21 @@ public class CurrentWeekMenuStatsService {
                 calories.setScale(SCALE, RoundingMode.HALF_UP),
                 distinctProductIds.size(),
                 estimatedCost,
-                filteredMenus.stream().map(CurrentWeekMenuResponse::id).toList()
+                averageCaloriesPerPlannedDay,
+                selectedMenus.stream().map(menu -> menu.original().id()).toList()
         );
+    }
+
+    /** Returns the menu cost apportioned to the days included in the requested range. */
+    private BigDecimal proratedCost(FilteredMenu menu) {
+        long plannedDays = Math.max(1, safeDays(menu.original()).size());
+        long includedDays = safeDays(menu.included()).size();
+        BigDecimal fullMenuCost = summarize(List.of(menu.original())).moneySpent();
+        return fullMenuCost.multiply(BigDecimal.valueOf(includedDays))
+                .divide(BigDecimal.valueOf(plannedDays), SCALE, RoundingMode.HALF_UP);
+    }
+
+    private record FilteredMenu(CurrentWeekMenuResponse original, CurrentWeekMenuResponse included) {
     }
 
     private Comparator<CurrentWeekMenuPeriodStatsDayResponse> dayComparator() {

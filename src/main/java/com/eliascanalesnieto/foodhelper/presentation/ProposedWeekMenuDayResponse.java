@@ -15,6 +15,13 @@ public record ProposedWeekMenuDayResponse(
         @Schema(description = "Recipe productions scheduled for the day")
         List<ProposedWeekMenuRecipeProductionResponse> recipeProductions,
         @Schema(description = "Nutritional totals for the day")
-        NutritionalValuesResponse nutritionalValues
+        NutritionalValuesResponse nutritionalValues,
+        @Schema(description = "Evaluation of this day's nutrition against the configured daily rules")
+        NutritionalRulesEvaluationPeriodResponse dailyNutritionalEvaluation
 ) {
+    /** Compatibility constructor for persisted snapshots and existing clients. */
+    public ProposedWeekMenuDayResponse(Long id, LocalDate date, List<ProposedWeekMenuSectionResponse> sections,
+            List<ProposedWeekMenuRecipeProductionResponse> recipeProductions, NutritionalValuesResponse nutritionalValues) {
+        this(id, date, sections, recipeProductions, nutritionalValues, null);
+    }
 }

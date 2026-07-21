@@ -19,6 +19,8 @@ public record CurrentWeekMenuRangeStatsResponse(
         long distinctProducts,
         @Schema(description = "Estimated cost of the menus included in the range", example = "54.30")
         BigDecimal estimatedCost,
+        @Schema(description = "Average calories for each planned day included in the range", example = "1535.75")
+        BigDecimal averageCaloriesPerPlannedDay,
         @Schema(description = "Identifiers of the menus contributing to the range")
         List<Long> menuIds
 ) {

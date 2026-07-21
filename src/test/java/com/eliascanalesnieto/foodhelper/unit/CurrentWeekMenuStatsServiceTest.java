@@ -90,14 +90,16 @@ class CurrentWeekMenuStatsServiceTest {
         assertThat(partial.plannedDays()).isEqualTo(1);
         assertThat(partial.calories()).isEqualByComparingTo("200.00");
         assertThat(partial.distinctProducts()).isEqualTo(1L);
-        assertThat(partial.estimatedCost()).isEqualByComparingTo("17.50");
+        assertThat(partial.estimatedCost()).isEqualByComparingTo("8.75");
+        assertThat(partial.averageCaloriesPerPlannedDay()).isEqualByComparingTo("200.00");
         assertThat(partial.menuIds()).containsExactly(10L);
 
         CurrentWeekMenuRangeStatsResponse multi = service.summarizeRange(List.of(juneMenu, juneMenuTwo), LocalDate.of(2026, 6, 4), LocalDate.of(2026, 6, 10));
         assertThat(multi.plannedDays()).isEqualTo(3);
         assertThat(multi.calories()).isEqualByComparingTo("900.00");
         assertThat(multi.distinctProducts()).isEqualTo(3L);
-        assertThat(multi.estimatedCost()).isEqualByComparingTo("27.50");
+        assertThat(multi.estimatedCost()).isEqualByComparingTo("18.75");
+        assertThat(multi.averageCaloriesPerPlannedDay()).isEqualByComparingTo("300.00");
         assertThat(multi.menuIds()).containsExactly(10L, 11L);
 
         CurrentWeekMenuRangeStatsResponse empty = service.summarizeRange(List.of(juneMenu, juneMenuTwo), LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 7));
@@ -105,6 +107,7 @@ class CurrentWeekMenuStatsServiceTest {
         assertThat(empty.calories()).isEqualByComparingTo("0.00");
         assertThat(empty.distinctProducts()).isZero();
         assertThat(empty.estimatedCost()).isEqualByComparingTo("0.00");
+        assertThat(empty.averageCaloriesPerPlannedDay()).isEqualByComparingTo("0.00");
         assertThat(empty.menuIds()).isEmpty();
     }
 

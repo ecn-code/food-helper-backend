@@ -4441,6 +4441,28 @@ class ProductRestIntegrationTest {
                         tuple(middleMenu.getBody().id(), com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuState.CLOSED, false)
                 );
 
+        tools.jackson.databind.node.ObjectNode legacyEstablishedSnapshot = (tools.jackson.databind.node.ObjectNode) objectMapper.readTree(
+                jdbcTemplate.queryForObject(
+                        "SELECT snapshot_json FROM current_week_menus WHERE id = ?",
+                        String.class,
+                        oldestMenu.getBody().id()
+                )
+        );
+        legacyEstablishedSnapshot.withObject("stockSummary").putArray("requirements").addObject()
+                .put("productId", 1)
+                .put("productName", "Legacy product")
+                .putNull("isStockInUnits")
+                .put("requiredUnits", 1)
+                .put("availableUnits", 0)
+                .put("coveredUnits", 0)
+                .put("missingUnits", 1)
+                .put("estimatedCost", 0);
+        jdbcTemplate.update(
+                "UPDATE current_week_menus SET snapshot_json = ? WHERE id = ?",
+                objectMapper.writeValueAsString(legacyEstablishedSnapshot),
+                oldestMenu.getBody().id()
+        );
+
         ResponseEntity<MenuPageResponse> establishedMenus = getAuthorized(menusUrl + "?page=0&size=100&state=ESTABLISHED", MenuPageResponse.class);
         assertThat(establishedMenus.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(establishedMenus.getBody()).isNotNull();
@@ -4451,6 +4473,11 @@ class ProductRestIntegrationTest {
                 .containsExactly(
                         tuple(oldestMenu.getBody().id(), com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuState.ESTABLISHED, true)
                 );
+        assertThat(establishedMenus.getBody().items())
+                .filteredOn(menu -> java.util.Objects.equals(menu.id(), oldestMenu.getBody().id()))
+                .flatExtracting(menu -> menu.stockSummary().requirements())
+                .extracting(requirement -> requirement.isStockInUnits())
+                .containsExactly(false);
 
         ResponseEntity<CurrentWeekMenuResponse> closedMenuDetail = getAuthorized(
                 menusUrl + "/" + newestMenu.getBody().id(),
@@ -4472,6 +4499,20 @@ class ProductRestIntegrationTest {
         assertThat(openMenuDetail.getBody().state()).isEqualTo(com.eliascanalesnieto.foodhelper.domain.CurrentWeekMenuState.ESTABLISHED);
         assertThat(openMenuDetail.getBody().isActive()).isTrue();
         assertThat(openMenuDetail.getBody().canClose()).isTrue();
+
+        jdbcTemplate.update(
+                "UPDATE current_week_menus SET snapshot_json = ? WHERE id = ?",
+                "{invalid closed snapshot}",
+                newestMenu.getBody().id()
+        );
+        ResponseEntity<MenuPageResponse> establishedMenusWithInvalidClosedSnapshot = getAuthorized(
+                menusUrl + "?page=0&size=100&state=ESTABLISHED", MenuPageResponse.class
+        );
+        assertThat(establishedMenusWithInvalidClosedSnapshot.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(establishedMenusWithInvalidClosedSnapshot.getBody()).isNotNull();
+        assertThat(establishedMenusWithInvalidClosedSnapshot.getBody().items())
+                .extracting(CurrentWeekMenuResponse::id)
+                .contains(oldestMenu.getBody().id());
     }
 
     @Test
@@ -4602,6 +4643,35 @@ class ProductRestIntegrationTest {
         assertThat(updatedChallenge.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(updatedChallenge.getBody().periodDays()).isEqualTo(10);
         assertThat(deleteAuthorized(baseUrl + "/challenges/" + challengeCode, String.class).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    }
+
+    @Test
+    void defaultColorChallengesShouldExposeTheirInstructionsAndRewards() {
+        String baseUrl = "http://localhost:" + port + "/api/v1/challenges?payerUserId=" + authenticatedUserId();
+
+        ResponseEntity<ChallengeResponse[]> response = getAuthorized(baseUrl, ChallengeResponse[].class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+
+        ChallengeResponse colorDay = findChallenge(response.getBody(), "COLOR_DAY");
+        assertThat(colorDay.name()).isEqualTo("Color day challenge");
+        assertThat(colorDay.description()).contains("every meal", "single color");
+        assertThat(colorDay.rewardAmount()).isEqualByComparingTo("20.00");
+        assertThat(colorDay.periodDays()).isEqualTo(30);
+
+        ChallengeResponse weekColor = findChallenge(response.getBody(), "WEEK_COLOR");
+        assertThat(weekColor.name()).isEqualTo("Week color challenge");
+        assertThat(weekColor.description()).contains("Monday to Friday", "different color", "five colors");
+        assertThat(weekColor.rewardAmount()).isEqualByComparingTo("100.00");
+        assertThat(weekColor.periodDays()).isEqualTo(30);
+    }
+
+    private ChallengeResponse findChallenge(ChallengeResponse[] challenges, String code) {
+        return Arrays.stream(challenges)
+                .filter(challenge -> challenge.code().equals(code))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Challenge not found: " + code));
     }
 
     private Long createProduct(String productsUrl, String name, String description, String calories, String carbohydrates, String proteins, String fats) {

@@ -404,7 +404,9 @@ INSERT INTO challenge_definitions (code, name, description, reward_amount, perio
     ('FIVE_EURO_DAYS', '5 euro per day challenge', 'Create a five-day menu for two people using only 25 euros. Only low-value staples such as rice may be reused, and no meal may repeat more than twice, except breakfasts.', 20.00, 30),
     ('LOW_CARB_DAY', 'Low carb day', 'For one full day, consume fewer than 50 grams of carbohydrates.', 8.00, 30),
     ('NO_CAFFEINE_DAY', 'No caffeine day', 'Go one full day without caffeine, theine, or carbonated drinks.', 8.00, 30),
-    ('CHEESE_DAY', 'Cheese day', 'For one full day, make cheese the main ingredient at breakfast, lunch, and dinner.', 10.00, 30)
+    ('CHEESE_DAY', 'Cheese day', 'For one full day, make cheese the main ingredient at breakfast, lunch, and dinner.', 10.00, 30),
+    ('COLOR_DAY', 'Color day challenge', 'For one full day, make every meal revolve around a single color.', 20.00, 30),
+    ('WEEK_COLOR', 'Week color challenge', 'From Monday to Friday, make every day revolve around a different color. Do not repeat any color, for a total of five colors.', 100.00, 30)
 ON CONFLICT (code) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS user_weight_entries (

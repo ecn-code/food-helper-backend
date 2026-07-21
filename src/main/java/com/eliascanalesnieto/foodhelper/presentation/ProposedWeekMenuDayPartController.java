@@ -71,6 +71,19 @@ public class ProposedWeekMenuDayPartController {
         return toResponse(service.update(id, request.name(), request.description(), request.sortOrder()));
     }
 
+    @PutMapping("/order")
+    @Operation(summary = "Reorder planning day parts", description = "Validates that the payload contains every current day-part identifier exactly once, then atomically assigns orders 10, 20, 30 and so on.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Day parts reordered"),
+            @ApiResponse(responseCode = "400", description = "Identifiers are invalid, duplicated, unknown, or incomplete",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
+    public List<ProposedWeekMenuDayPartResponse> reorder(
+            @Valid @RequestBody ReorderProposedWeekMenuDayPartsRequest request
+    ) {
+        return service.reorder(request.dayPartIds()).stream().map(this::toResponse).toList();
+    }
+
     private ProposedWeekMenuDayPartResponse toResponse(com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDayPart dayPart) {
         return new ProposedWeekMenuDayPartResponse(
                 dayPart.getId(),

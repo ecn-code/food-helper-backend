@@ -11,6 +11,8 @@ public record CurrentWeekMenuCloseSummaryResponse(
         Long menuId,
         @ArraySchema(schema = @Schema(implementation = CurrentWeekMenuStockItemResponse.class))
         List<CurrentWeekMenuStockItemResponse> transferableWeekStock,
+        @ArraySchema(schema = @Schema(implementation = PositiveStockProductResponse.class))
+        List<PositiveStockProductResponse> positiveStockProducts,
         @Schema(description = "Estimated value of the week stock that would be transferred to global stock", example = "12.30")
         BigDecimal transferableWeekStockValue,
         @ArraySchema(schema = @Schema(implementation = UserMoneyMovementResponse.class))
@@ -24,6 +26,14 @@ public record CurrentWeekMenuCloseSummaryResponse(
 ) {
     public CurrentWeekMenuCloseSummaryResponse {
         transferableWeekStock = transferableWeekStock == null ? List.of() : List.copyOf(transferableWeekStock);
+        positiveStockProducts = positiveStockProducts == null ? List.of() : List.copyOf(positiveStockProducts);
         moneyMovements = moneyMovements == null ? List.of() : List.copyOf(moneyMovements);
+    }
+
+    public CurrentWeekMenuCloseSummaryResponse(Long menuId, List<CurrentWeekMenuStockItemResponse> transferableWeekStock,
+            BigDecimal transferableWeekStockValue, List<UserMoneyMovementResponse> moneyMovements,
+            BigDecimal couponRewards, BigDecimal menuExpense, BigDecimal netMoneyImpact) {
+        this(menuId, transferableWeekStock, List.of(), transferableWeekStockValue, moneyMovements,
+                couponRewards, menuExpense, netMoneyImpact);
     }
 }

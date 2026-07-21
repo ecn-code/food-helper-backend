@@ -116,6 +116,17 @@ public class ProductService {
         return attachDerived(repository.findById(id));
     }
 
+    @Transactional(readOnly = true)
+    public List<Product> findByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        if (ids.size() > 100 || ids.stream().anyMatch(id -> id == null || id <= 0)) {
+            throw new IllegalArgumentException("ids must contain between one and 100 positive identifiers");
+        }
+        return repository.findByIds(ids).stream().map(this::attachDerived).toList();
+    }
+
     @Transactional
     public void delete(Long id) {
         Product existing = repository.findById(id);

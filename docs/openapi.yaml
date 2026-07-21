@@ -1910,6 +1910,16 @@ paths:
             type: string
             enum: [CLOSED, ESTABLISHED]
           description: Optional menu state filter
+        - name: from
+          in: query
+          required: false
+          schema: {type: string, format: date}
+          description: Optional inclusive start date. A menu is included when at least one planned day is in range.
+        - name: to
+          in: query
+          required: false
+          schema: {type: string, format: date}
+          description: Optional inclusive end date. A menu is included when at least one planned day is in range.
       responses:
         '200':
           description: Menus returned
@@ -2296,6 +2306,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /api/v1/menus/{id}/close/summary:
+    get:
+      tags: [Menus]
+      summary: Preview menu close
+      description: Returns per-product transferable quantities, legacy week-stock lines, and menu money movements without changing the menu.
+      operationId: getMenuCloseSummary
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: integer, format: int64}
+      responses:
+        '200':
+          description: Close summary returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloseMenuSummaryResponse'
+        '404':
+          description: Menu not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /api/v1/users:
     get:
       tags: [Users]
@@ -2670,6 +2704,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /api/v1/planning/day-parts/order:
+    put:
+      tags: [Planning]
+      summary: Reorder planning day parts
+      description: Atomically assigns orders 10, 20, 30 and so on after validating that the request contains the exact current catalog once.
+      operationId: reorderPlanningDayParts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderPlanningDayPartsRequest'
+      responses:
+        '200':
+          description: Day parts reordered
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/PlanningDayPartResponse'}
+        '400':
+          description: Identifiers are invalid, duplicated, unknown, or incomplete
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
   /api/v1/media/{id}:
     get:
       security: []
@@ -4382,6 +4441,37 @@ components:
             format: int64
             minimum: 1
           example: [10, 12]
+    CloseMenuSummaryResponse:
+      type: object
+      properties:
+        menuId: {type: integer, format: int64}
+        transferableWeekStock:
+          type: array
+          description: Legacy individual week-stock lines retained for compatibility
+          items: {$ref: '#/components/schemas/WeekStockItemResponse'}
+        positiveStockProducts:
+          type: array
+          items: {$ref: '#/components/schemas/PositiveStockProductResponse'}
+        transferableWeekStockValue: {type: number}
+        moneyMovements:
+          type: array
+          items: {$ref: '#/components/schemas/UserMoneyMovementResponse'}
+        couponRewards: {type: number}
+        menuExpense: {type: number}
+        netMoneyImpact: {type: number}
+    PositiveStockProductResponse:
+      type: object
+      properties:
+        productId: {type: integer, format: int64}
+        productName: {type: string}
+        quantityType: {type: string, enum: [GRAMS, UNITS]}
+        currentGlobalQuantity: {type: number}
+        historicalUsedQuantity: {type: number}
+        weekStockQuantity: {type: number}
+        pendingRecipeQuantity: {type: number}
+        transferableQuantity: {type: number}
+        finalGlobalQuantity: {type: number}
+        estimatedTransferValue: {type: number}
     UserResponse:
       type: object
       properties:
@@ -4509,6 +4599,10 @@ components:
           type: number
           description: Estimated cost of the menus included in the range
           example: 54.3
+        averageCaloriesPerPlannedDay:
+          type: number
+          description: Average calories for each planned day included in the range
+          example: 1535.75
         menuIds:
           type: array
           description: Identifiers of the menus contributing to the range
@@ -4662,6 +4756,8 @@ components:
             $ref: '#/components/schemas/PlanningRecipeProductionResponse'
         nutritionalValues:
           $ref: '#/components/schemas/NutritionalValuesResponse'
+        dailyNutritionalEvaluation:
+          $ref: '#/components/schemas/NutritionalRulesEvaluationPeriodResponse'
     PlanningSectionResponse:
       type: object
       properties:
@@ -4718,6 +4814,16 @@ components:
           minimum: 0
           description: Explicit display order among day parts
           example: 20
+    ReorderPlanningDayPartsRequest:
+      type: object
+      required: [dayPartIds]
+      properties:
+        dayPartIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          description: Every current day-part identifier exactly once, in desired order
+          items: {type: integer, format: int64, minimum: 1}
     PlanningDayPartResponse:
       type: object
       properties:

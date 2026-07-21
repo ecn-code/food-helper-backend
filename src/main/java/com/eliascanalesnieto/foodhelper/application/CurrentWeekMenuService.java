@@ -34,6 +34,7 @@ import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuApiMapper;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuRecipeProductionResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuRangeStatsResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuCloseSummaryResponse;
+import com.eliascanalesnieto.foodhelper.presentation.PositiveStockProductResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuShoppingListItemResponse;
 import com.eliascanalesnieto.foodhelper.presentation.CurrentWeekMenuStatsResponse;
@@ -209,12 +210,30 @@ public class CurrentWeekMenuService {
     }
 
     @Transactional(readOnly = true)
-    public PageResult<CurrentWeekMenuResponse> findPage(PaginationRequest pagination, CurrentWeekMenuState state) {
-        List<CurrentWeekMenuResponse> items = currentWeekMenuRepository.findPage(pagination.offset(), pagination.size(), state).stream()
+    public PageResult<CurrentWeekMenuResponse> findPage(PaginationRequest pagination, CurrentWeekMenuState state, LocalDate from, LocalDate to) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new IllegalArgumentException("Menu range start must not be after range end");
+        }
+        List<CurrentWeekMenuResponse> all = currentWeekMenuRepository.findAll(state).stream()
+                .filter(menu -> hasDayInside(menu, from, to))
                 .map(this::applyCurrentRules)
                 .map(this::withPersonIdsFromHistory)
                 .toList();
-        return new PageResult<>(items, pagination.page(), pagination.size(), currentWeekMenuRepository.count(state));
+        int start = Math.min(pagination.offset(), all.size());
+        int end = Math.min(start + pagination.size(), all.size());
+        return new PageResult<>(all.subList(start, end), pagination.page(), pagination.size(), all.size());
+    }
+
+    public PageResult<CurrentWeekMenuResponse> findPage(PaginationRequest pagination, CurrentWeekMenuState state) {
+        return findPage(pagination, state, null, null);
+    }
+
+    private boolean hasDayInside(CurrentWeekMenuResponse menu, LocalDate from, LocalDate to) {
+        if (from == null && to == null) {
+            return true;
+        }
+        return safeDays(menu).stream().anyMatch(day -> (from == null || !day.date().isBefore(from))
+                && (to == null || !day.date().isAfter(to)));
     }
 
     @Transactional(readOnly = true)
@@ -666,12 +685,46 @@ public class CurrentWeekMenuService {
         return new CurrentWeekMenuCloseSummaryResponse(
                 menu.id(),
                 transferableWeekStock,
+                positiveStockProducts(menu),
                 transferableWeekStockValue,
                 moneyMovements,
                 couponRewards,
                 menuExpense,
                 netMoneyImpact
         );
+    }
+
+    private List<PositiveStockProductResponse> positiveStockProducts(CurrentWeekMenuResponse menu) {
+        Map<Long, BigDecimal> global = stockRepository.findStock(null, List.of()).stream()
+                .collect(java.util.stream.Collectors.groupingBy(StockEntry::getProductId, LinkedHashMap::new,
+                        java.util.stream.Collectors.reducing(ZERO, StockEntry::getQuantity, BigDecimal::add)));
+        Map<Long, BigDecimal> historical = safeUsedStock(menu).stream().collect(java.util.stream.Collectors.groupingBy(
+                CurrentWeekMenuUsedStockResponse::productId, LinkedHashMap::new,
+                java.util.stream.Collectors.reducing(ZERO, CurrentWeekMenuUsedStockResponse::usedUnits, BigDecimal::add)));
+        Map<Long, BigDecimal> week = totalQuantityByProduct(safeWeekStock(menu));
+        Map<Long, BigDecimal> pending = safeRecipeProductions(menu).stream()
+                .filter(production -> !production.transferred())
+                .collect(java.util.stream.Collectors.groupingBy(CurrentWeekMenuRecipeProductionResponse::productId,
+                        LinkedHashMap::new, java.util.stream.Collectors.reducing(ZERO,
+                                CurrentWeekMenuRecipeProductionResponse::units, BigDecimal::add)));
+        Set<Long> ids = new java.util.TreeSet<>();
+        ids.addAll(week.keySet());
+        ids.addAll(pending.keySet());
+        return ids.stream().map(productId -> {
+            Product product = productRepository.findById(productId);
+            BigDecimal weekQuantity = scale(week.getOrDefault(productId, ZERO));
+            BigDecimal pendingQuantity = scale(pending.getOrDefault(productId, ZERO));
+            BigDecimal transferable = scale(weekQuantity.add(pendingQuantity));
+            BigDecimal value = safeWeekStock(menu).stream().filter(item -> productId.equals(item.productId()))
+                    .map(item -> scale(item.quantity().multiply(item.price() == null ? ZERO : item.price())))
+                    .reduce(ZERO, BigDecimal::add);
+            return new PositiveStockProductResponse(productId, product.getName(),
+                    product.isStockInUnits() ? com.eliascanalesnieto.foodhelper.domain.QuantityType.UNITS
+                            : com.eliascanalesnieto.foodhelper.domain.QuantityType.GRAMS,
+                    scale(global.getOrDefault(productId, ZERO)), scale(historical.getOrDefault(productId, ZERO)),
+                    weekQuantity, pendingQuantity, transferable,
+                    scale(global.getOrDefault(productId, ZERO).add(transferable)), scale(value));
+        }).toList();
     }
 
     private CurrentWeekMenuResponse applyRecipeProductionTransfer(
@@ -1348,6 +1401,10 @@ public class CurrentWeekMenuService {
 
     private List<CurrentWeekMenuStockItemResponse> safeWeekStock(CurrentWeekMenuResponse menu) {
         return menu.weekStock() == null ? List.of() : menu.weekStock();
+    }
+
+    private List<CurrentWeekMenuUsedStockResponse> safeUsedStock(CurrentWeekMenuResponse menu) {
+        return menu.usedStock() == null ? List.of() : menu.usedStock();
     }
 
     private List<CurrentWeekMenuShoppingListItemResponse> updateShoppingList(

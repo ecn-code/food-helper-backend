@@ -54,9 +54,13 @@ public class CurrentWeekMenuController {
             int size,
             @io.swagger.v3.oas.annotations.Parameter(description = "Optional menu state filter", schema = @Schema(allowableValues = {"CLOSED", "ESTABLISHED"}))
             @RequestParam(required = false)
-            CurrentWeekMenuState state
+            CurrentWeekMenuState state,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Optional inclusive start date; only menus with at least one planned day in range are returned", example = "2026-06-01")
+            @RequestParam(required = false) LocalDate from,
+            @io.swagger.v3.oas.annotations.Parameter(description = "Optional inclusive end date; only menus with at least one planned day in range are returned", example = "2026-06-30")
+            @RequestParam(required = false) LocalDate to
     ) {
-        PageResult<CurrentWeekMenuResponse> result = service.findPage(PaginationRequest.of(page, size), state);
+        PageResult<CurrentWeekMenuResponse> result = service.findPage(PaginationRequest.of(page, size), state, from, to);
         return new MenuPageResponse(result.items(), result.page(), result.size(), result.totalElements(), result.totalPages());
     }
 

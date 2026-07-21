@@ -1,5 +1,6 @@
 package com.eliascanalesnieto.foodhelper.presentation;
 
+import com.eliascanalesnieto.foodhelper.application.NutritionalRulesService;
 import com.eliascanalesnieto.foodhelper.domain.NutritionalValues;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuDay;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuProduct;
@@ -10,11 +11,14 @@ import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummary;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummaryCalories;
 import com.eliascanalesnieto.foodhelper.domain.ProposedWeekMenuStockSummaryDayCalories;
 import java.util.List;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /** Maps the planning snapshot shared by proposed and established menus. */
 @Component
+@RequiredArgsConstructor
 public class WeekMenuSnapshotMapper {
+    private final NutritionalRulesService nutritionalRulesService;
 
     public List<ProposedWeekMenuDayResponse> toResponseDays(List<ProposedWeekMenuDay> days) {
         return safe(days).stream().map(this::toResponse).toList();
@@ -26,7 +30,8 @@ public class WeekMenuSnapshotMapper {
                 day.getDate(),
                 safe(day.getSections()).stream().map(this::toResponse).toList(),
                 safe(day.getRecipeProductions()).stream().map(this::toResponse).toList(),
-                toResponse(day.getNutritionalValues())
+                toResponse(day.getNutritionalValues()),
+                nutritionalRulesService.evaluateDaily(toResponse(day.getNutritionalValues()))
         );
     }
 
